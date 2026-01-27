@@ -188,10 +188,12 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
     testImplementation(libs.hamcrest)
+    testImplementation(libs.truth)
     testImplementation(libs.coroutines.test)
     testImplementation(libs.androidx.arch.core.testing)
-    testImplementation(libs.robolectric)
     testImplementation(libs.androidx.test.core)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.room.testing)
 
     /*
      * Instrumented Tests
@@ -208,6 +210,7 @@ dependencies {
     androidTestImplementation(libs.androidx.test.rules)
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.ext.junit.ktx)
+    androidTestImplementation(libs.room.testing)
     androidTestImplementation(libs.screengrab)
 }
 
