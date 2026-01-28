@@ -101,6 +101,16 @@ android {
                 )
         }
     }
+    
+    sourceSets {
+        // Share test utilities between unit tests and instrumented tests
+        getByName("test") {
+            java.srcDir("src/testShared/java")
+        }
+        getByName("androidTest") {
+            java.srcDir("src/testShared/java")
+        }
+    }
 }
 
 // Play Publisher configuration
