@@ -48,7 +48,8 @@ class CurrentlyPlayingSingletonTest {
 
     private val testBook =
         Audiobook(
-            id = 1,
+            id = "plex:1",
+            libraryId = "plex:lib:1",
             source = 1L,
             title = "Test Audiobook",
             chapters =
@@ -59,8 +60,8 @@ class CurrentlyPlayingSingletonTest {
                         index = 0L,
                         startTimeOffset = 0L,
                         endTimeOffset = 3016290L,
-                        trackId = 1L,
-                        bookId = 1L,
+                        trackId = "plex:1",
+                        bookId = "plex:1",
                     ),
                     Chapter(
                         title = "Chapter 1",
@@ -68,8 +69,8 @@ class CurrentlyPlayingSingletonTest {
                         index = 1L,
                         startTimeOffset = 3016290L,
                         endTimeOffset = 7200000L,
-                        trackId = 1L,
-                        bookId = 1L,
+                        trackId = "plex:1",
+                        bookId = "plex:1",
                     ),
                     Chapter(
                         title = "Chapter 2",
@@ -77,8 +78,8 @@ class CurrentlyPlayingSingletonTest {
                         index = 2L,
                         startTimeOffset = 7200000L,
                         endTimeOffset = 10000000L,
-                        trackId = 1L,
-                        bookId = 1L,
+                        trackId = "plex:1",
+                        bookId = "plex:1",
                     ),
                 ),
         )
@@ -86,7 +87,8 @@ class CurrentlyPlayingSingletonTest {
     private val testTracks =
         listOf(
             MediaItemTrack(
-                id = 1,
+                id = "plex:1",
+                libraryId = "plex:lib:1",
                 title = "Test Track 1",
                 duration = 10000000L,
                 progress = 0L,

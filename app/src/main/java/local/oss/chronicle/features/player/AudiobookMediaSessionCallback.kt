@@ -676,17 +676,15 @@ class AudiobookMediaSessionCallback
                 Timber.e(e, "[AndroidAuto] Error in onPrepareFromMediaId for bookId=$bookId")
             }
         }
-private fun playBook(
-    bookId: String,
-    extras: Bundle,
-    playWhenReady: Boolean,
-) {
-    Timber.d("[VoiceCommandTrace] playBook ENTER - bookId: '$bookId'")
-    
-            
-            // The [MediaItemTrack.id] of the track to be played, either a unique non-negative ID from
+
+        private fun playBook(
+            bookId: String,
+            extras: Bundle,
+            playWhenReady: Boolean,
+        ) {
+            // The [MediaItemTrack.id] of the track to be played, either a unique ID from
             // the DB, or default to ACTIVE_TRACK, the most recently listened track in [bookId]
-            val startingTrackId = extras.getLong(KEY_SEEK_TO_TRACK_WITH_ID, ACTIVE_TRACK)
+            val startingTrackId = extras.getString(KEY_SEEK_TO_TRACK_WITH_ID, ACTIVE_TRACK)
 
             // [startTimeOffsetMillis] is an offset in milliseconds from start of the track where
             // [MediaItemTrack.id] == [startingTrackId] from the local repo
@@ -714,7 +712,7 @@ private fun playBook(
             serviceScope.launch {
                 val tracks =
                     withContext(Dispatchers.IO) {
-                        trackRepository.getTracksForAudiobookAsync(bookId.toInt())
+                        trackRepository.getTracksForAudiobookAsync(bookId)
                     }
                 if (tracks.isEmpty()) {
                     Timber.d("[VoiceCommandTrace] playBook - no tracks found, attempting to fetch from network")
@@ -742,25 +740,24 @@ private fun playBook(
 
                 val queueItems =
                     metadataList.zip(tracks).map { (metadata, track) ->
+                        val numericTrackId = track.id.removePrefix("plex:").toLongOrNull() ?: track.id.hashCode().toLong()
                         MediaSessionCompat.QueueItem(
                             metadata.fullDescription,
-                            track.id.toLong(),
+                            numericTrackId,
                         )
                     }
                 mediaSession.setQueue(queueItems)
 
+                // startingTrackId is already a String
                 check(
-                    startingTrackId != ACTIVE_TRACK || startingTrackId.toInt() !in
-                        tracks.map {
-                            it.id
-                        },
+                    startingTrackId == ACTIVE_TRACK || startingTrackId in tracks.map { it.id }
                 ) { "Track not found! " }
 
                 val startingTrack =
                     if (startingTrackId == ACTIVE_TRACK) {
                         tracks.getActiveTrack()
                     } else {
-                        tracks.find { it.id == startingTrackId.toInt() }
+                        tracks.find { it.id == startingTrackId }
                     }
 
                 checkNotNull(startingTrack) { "No starting track provided for $startingTrackId" }
@@ -783,7 +780,7 @@ private fun playBook(
 
                 val book =
                     withContext(Dispatchers.IO) {
-                        return@withContext bookRepository.getAudiobookAsync(bookId.toInt())
+                        return@withContext bookRepository.getAudiobookAsync(bookId)
                     }
                 if (book == null || book.id == NO_AUDIOBOOK_FOUND_ID) {
                     Timber.d("[VoiceCommandTrace] playBook early return - reason: no book found with id $bookId")
@@ -877,16 +874,16 @@ private fun playBook(
             // Tracks haven't been loaded by UI for this track, so load it here
             val networkTracks =
                 withContext(Dispatchers.IO) {
-                    trackRepository.loadTracksForAudiobook(bookId.toInt())
+                    trackRepository.loadTracksForAudiobook(bookId)
                 }
             if (networkTracks is Ok) {
                 bookRepository.updateTrackData(
-                    bookId.toInt(),
+                    bookId,
                     networkTracks.value.getProgress(),
                     networkTracks.value.getDuration(),
                     networkTracks.value.size,
                 )
-                val audiobook = bookRepository.getAudiobookAsync(bookId.toInt())
+                val audiobook = bookRepository.getAudiobookAsync(bookId)
                 if (audiobook != null) {
                     bookRepository.syncAudiobook(audiobook, tracks)
                 }
