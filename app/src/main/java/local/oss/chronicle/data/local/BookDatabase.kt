@@ -279,6 +279,9 @@ interface BookDao {
     @Query("SELECT COUNT(*) FROM Audiobook")
     suspend fun getBookCount(): Int
 
+    @Query("SELECT COUNT(*) FROM Audiobook WHERE libraryId = :libraryId")
+    suspend fun getBookCountForLibrary(libraryId: String): Int
+
     @Query("DELETE FROM Audiobook WHERE id IN (:booksToRemove)")
     fun removeAll(booksToRemove: List<String>): Int
 

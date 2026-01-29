@@ -230,6 +230,11 @@ class LibrarySyncRepository
                 Timber.d("syncLibrary: Updating sync timestamp...")
                 libraryRepository.updateSyncTimestamp(library.id, System.currentTimeMillis())
     
+                // Update audiobook count for this library
+                val bookCount = bookRepository.getBookCountForLibrary(library.id)
+                libraryRepository.updateItemCount(library.id, bookCount)
+                Timber.d("syncLibrary: Updated item count to $bookCount for library ${library.name}")
+    
                 // Sync collections for this library
                 Timber.d("syncLibrary: Refreshing collections...")
                 collectionsRepository.refreshCollectionsPaginated()

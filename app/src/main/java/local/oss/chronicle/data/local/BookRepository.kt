@@ -30,6 +30,9 @@ interface IBookRepository {
     /** Returns the number of books in the repository */
     suspend fun getBookCount(): Int
 
+    /** Returns the number of books in a specific library */
+    suspend fun getBookCountForLibrary(libraryId: String): Int
+
     /** Removes all books from the local database */
     suspend fun clear()
 
@@ -171,6 +174,12 @@ class BookRepository
         override suspend fun getBookCount(): Int {
             return withContext(Dispatchers.IO) {
                 bookDao.getBookCount()
+            }
+        }
+
+        override suspend fun getBookCountForLibrary(libraryId: String): Int {
+            return withContext(Dispatchers.IO) {
+                bookDao.getBookCountForLibrary(libraryId)
             }
         }
 
