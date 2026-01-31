@@ -363,4 +363,4 @@ Use the **Android Auto Desktop Head Unit (DHU)** simulator or a real vehicle to 
 - [Settings](settings.md) - Enabling Android Auto
 - [Architecture Patterns](../architecture/patterns.md) - MediaBrowserService pattern, PlaybackStateController
 - [Voice Command Error Handling Architecture](../architecture/voice-command-error-handling.md) - Detailed design and implementation
-- [Voice Command Async Test Issues](../testing/voice-command-async-test-issues.md) - Testing challenges and solutions
+- [Voice Command Testing Guide](../testing/android-auto-voice-command-testing.md) - Comprehensive testing guide for Android Auto and voice commands

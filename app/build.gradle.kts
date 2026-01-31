@@ -90,6 +90,15 @@ android {
         dataBinding = true
         buildConfig = true
     }
+    
+    packaging {
+        resources {
+            excludes += setOf(
+                "META-INF/LICENSE.md",
+                "META-INF/LICENSE-notice.md"
+            )
+        }
+    }
 }
 
 // Play Publisher configuration
@@ -189,7 +198,7 @@ dependencies {
     kspAndroidTest(libs.dagger.compiler)
 
     androidTestImplementation(libs.junit)
-    androidTestImplementation(libs.mockk)
+    androidTestImplementation(libs.mockk.android)
     androidTestImplementation(libs.coroutines.test)
     androidTestImplementation(libs.espresso.core)
     androidTestImplementation(libs.espresso.contrib)
@@ -200,6 +209,6 @@ dependencies {
     androidTestImplementation(libs.screengrab)
 }
 
-tasks.matching { it.name.contains("DebugAndroidTest") && !it.name.contains("Lint") }.configureEach {
-    enabled = false
-}
+// tasks.matching { it.name.contains("DebugAndroidTest") && !it.name.contains("Lint") }.configureEach {
+//     enabled = false
+// }

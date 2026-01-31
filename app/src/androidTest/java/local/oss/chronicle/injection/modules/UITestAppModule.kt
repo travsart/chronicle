@@ -29,6 +29,7 @@ import local.oss.chronicle.features.currentlyplaying.CurrentlyPlaying
 import local.oss.chronicle.features.currentlyplaying.CurrentlyPlayingSingleton
 import local.oss.chronicle.features.player.MediaPlayerService
 import local.oss.chronicle.features.player.MediaServiceConnection
+import local.oss.chronicle.features.player.PlaybackStateController
 import local.oss.chronicle.views.UrlQueryCacheKey
 import okhttp3.OkHttpClient
 import okhttp3.Protocol
@@ -224,7 +225,8 @@ class UITestAppModule(private val context: Context) {
 
     @Provides
     @Singleton
-    fun provideCurrentlyPlaying(): CurrentlyPlaying = CurrentlyPlayingSingleton()
+    fun provideCurrentlyPlaying(playbackStateController: PlaybackStateController): CurrentlyPlaying =
+        CurrentlyPlayingSingleton(playbackStateController)
 
     @Provides
     @Singleton

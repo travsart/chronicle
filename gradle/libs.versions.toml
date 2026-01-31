@@ -4,14 +4,14 @@
 agp = "8.13.2"
 androidxTest = "1.6.1" # 1.7.0 causes KSP/Dagger compatibility issues
 androidxTestCore = "1.5.0"
-androidxTestExt = "1.2.2"
+androidxTestExt = "1.3.0"
 annotation = "1.8.2" # 1.9.0 causes KSP/Dagger compatibility issues
 appcompat = "1.7.0"
 browserx = "1.8.0" # 1.9.0 causes KSP/Dagger compatibility issues
 coreTesting = "2.2.0"
 coroutines = "1.9.0" # 1.10.1 causes KSP/Dagger compatibility issues
 dagger = "2.52" # 2.54 causes KSP/Dagger compatibility issues
-espresso = "3.6.2"
+espresso = "3.7.0"
 screengrab = "2.1.1"
 fetch = "3.3.0"
 fresco = "3.4.0" # 3.5.0 causes KSP processing errors
@@ -73,6 +73,7 @@ media3-exoplayer = { group = "androidx.media3", name = "media3-exoplayer", versi
 media3-session = { group = "androidx.media3", name = "media3-session", version.ref = "media3" }
 media3-ui = { group = "androidx.media3", name = "media3-ui", version.ref = "media3" }
 mockk = { group = "io.mockk", name = "mockk", version.ref = "mockk" }
+mockk-android = { group = "io.mockk", name = "mockk-android", version.ref = "mockk" }
 moshi = { group = "com.squareup.moshi", name = "moshi-kotlin", version.ref = "moshi" }
 moshi-codegen = { group = "com.squareup.moshi", name = "moshi-kotlin-codegen", version.ref = "moshi" }
 okhttp3 = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp3" }
