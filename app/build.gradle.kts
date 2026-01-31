@@ -179,6 +179,8 @@ dependencies {
     testImplementation(libs.hamcrest)
     testImplementation(libs.coroutines.test)
     testImplementation(libs.androidx.arch.core.testing)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
 
     /*
      * Instrumented Tests
