@@ -67,6 +67,12 @@ class AudiobookMediaSessionCallback
         // Default to ExoPlayer to prevent having a nullable field
         var currentPlayer: Player = defaultPlayer
 
+        /**
+         * Timestamp (in milliseconds) when a voice command was received via onPlayFromSearch().
+         * Used to measure voice command latency. Null when no voice command is pending.
+         */
+        var voiceCommandStartTime: Long? = null
+
         companion object {
             const val ACTION_SEEK = "seek"
             const val OFFSET_MS = "offset"
@@ -153,10 +159,15 @@ class AudiobookMediaSessionCallback
             query: String?,
             extras: Bundle?,
         ) {
-            Timber.i("[AndroidAuto] Play from search: $query")
+            // Record timestamp for voice command latency measurement
+            voiceCommandStartTime = System.currentTimeMillis()
+            Timber.i("[AndroidAuto] Play from search: $query (voice command received at $voiceCommandStartTime)")
 
             // Pre-flight authentication check
-            if (!checkAuthenticationOrError()) return
+            if (!checkAuthenticationOrError()) {
+                voiceCommandStartTime = null // Clear on error
+                return
+            }
 
             serviceScope.launch(coroutineExceptionHandler) {
                 try {
@@ -747,5 +758,17 @@ class AudiobookMediaSessionCallback
 
             foregroundServiceController.stopForegroundService(true)
             serviceController.stopService()
+        }
+
+        /**
+         * Logs and clears the voice command latency if a voice command is pending.
+         * Should be called when playback actually starts.
+         */
+        fun logVoiceCommandLatencyIfPending() {
+            voiceCommandStartTime?.let { startTime ->
+                val latencyMs = System.currentTimeMillis() - startTime
+                Timber.i("[VoiceCommandLatency] Voice command latency: ${latencyMs}ms (from command received to playback started)")
+                voiceCommandStartTime = null // Clear after logging
+            }
         }
     }

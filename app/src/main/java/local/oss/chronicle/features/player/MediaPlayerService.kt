@@ -1003,6 +1003,11 @@ class MediaPlayerService :
                     playbackStateController.updatePlayingState(isPlaying)
                 }
                 updateSessionPlaybackState()
+
+                // Log voice command latency when playback starts
+                if (isPlaying) {
+                    mediaSessionCallback.logVoiceCommandLatencyIfPending()
+                }
             }
 
             override fun onMediaItemTransition(
