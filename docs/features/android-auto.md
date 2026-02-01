@@ -287,10 +287,19 @@ Chronicle implements intelligent fallback behavior for generic vs. specific comm
 
 **Voice command**: "Hey Google, play [specific book name] on Chronicle"
 
-**No fallback** - Show error with the search query so user knows their specific request wasn't found:
-- "No audiobooks found for '[query]'"
+**Fallback behavior (configurable)**:
 
-**Rationale**: Users need to know that their specific request failed, not just get random playback.
+When the **"Resume on failed voice search" setting is enabled** (default):
+1. Try to play the most recently listened audiobook
+2. If no recent history, play the first book in the library
+3. If library is empty, show error: "Your audiobook library is empty"
+
+When the **setting is disabled**:
+- Show error with the search query: "No audiobooks found for '[query]'"
+
+**Rationale**: Some users prefer to have something play (their recent book) rather than get an error when voice search finds nothing. Others prefer to know when their specific request failed. The setting provides flexibility for both preferences.
+
+**See Also**: [`AudiobookMediaSessionCallback.handleSearchSuspend()`](../../app/src/main/java/local/oss/chronicle/features/player/AudiobookMediaSessionCallback.kt) for implementation details.
 
 #### Direct Media ID
 
@@ -313,6 +322,66 @@ This prevents the Google Play violation where apps hang indefinitely without fee
 
 ---
 
+### Voice Search Fallback Setting
+
+Chronicle provides a user-configurable setting to control behavior when voice search returns no results.
+
+**Setting Details:**
+- **Name**: "Resume on failed voice search"
+- **Preference Key**: `key_voice_search_fallback_enabled`
+- **Default**: Enabled (ON)
+- **Location**: Settings → Android Auto section
+
+**Behavior when enabled:**
+
+When a user says "play something" or searches for a book that isn't found, instead of showing an error, Chronicle will:
+
+1. **Try most recently played book** - Resume the audiobook you were last listening to
+2. **Fallback to first in library** - If no playback history exists, play the first audiobook alphabetically
+3. **Show error only if library empty** - Only displays an error if there are no audiobooks at all
+
+**Behavior when disabled:**
+
+Voice searches that return no results will show an error message:
+- "No audiobooks found for '[query]'"
+
+**Implementation Flow:**
+
+```mermaid
+flowchart TD
+    A[Voice Search Command] --> B{Search finds<br/>results?}
+    B -->|Yes| C[Play matching audiobook]
+    B -->|No| D{Fallback setting<br/>enabled?}
+    D -->|No| E[Show Error:<br/>No audiobooks found]
+    D -->|Yes| F{Recent book<br/>exists?}
+    F -->|Yes| G[Resume recent book]
+    F -->|No| H{Library has<br/>books?}
+    H -->|Yes| I[Play first book]
+    H -->|No| J[Show Error:<br/>Library is empty]
+    
+    style C fill:#51cf66
+    style G fill:#51cf66
+    style I fill:#51cf66
+    style E fill:#ff6b6b
+    style J fill:#ff6b6b
+```
+
+**Use Cases:**
+
+| User Type | Preference | Setting |
+|-----------|-----------|---------|
+| Wants to always resume listening with minimal friction | "Just play something when I ask" | Enabled ✓ |
+| Wants explicit feedback when search fails | "Tell me when my request wasn't found" | Disabled ✗ |
+| Uses generic commands like "play on Chronicle" | "Resume my recent book" | Enabled ✓ |
+| Uses specific book titles in voice commands | "I want to know if that specific book wasn't found" | Disabled ✗ |
+
+**Code Reference:**
+- Implementation: [`AudiobookMediaSessionCallback.handleSearchSuspend()`](../../app/src/main/java/local/oss/chronicle/features/player/AudiobookMediaSessionCallback.kt)
+- Setting storage: [`SharedPreferencesPrefsRepo.voiceSearchFallbackEnabled`](../../app/src/main/java/local/oss/chronicle/data/local/SharedPreferencesPrefsRepo.kt)
+- Tests: [`VoiceSearchFallbackTest.kt`](../../app/src/test/java/local/oss/chronicle/features/player/VoiceSearchFallbackTest.kt)
+
+---
+
 ### Manual Testing Checklist
 
 Use the **Android Auto Desktop Head Unit (DHU)** simulator or a real vehicle to test:
@@ -323,12 +392,17 @@ Use the **Android Auto Desktop Head Unit (DHU)** simulator or a real vehicle to 
 - [ ] Verify error is shown on Android Auto screen
 - [ ] Verify error is spoken by Google Assistant
 
-#### Logged In Scenarios
-- [ ] "Hey Google, play on Chronicle" → Plays last played or random audiobook
+#### Logged In Scenarios (with fallback enabled)
+- [ ] "Hey Google, play on Chronicle" → Plays last played or first audiobook
 - [ ] "Hey Google, play [existing book] on Chronicle" → Plays matching audiobook
-- [ ] "Hey Google, play [nonexistent book] on Chronicle" → Shows "No audiobooks found for '[query]'" error
-- [ ] Generic play with no history → Plays random book
+- [ ] "Hey Google, play [nonexistent book] on Chronicle" → Fallback: Plays most recent or first book
+- [ ] Generic play with no history → Plays first book in library
 - [ ] Generic play with recent book → Resumes recent book
+
+#### Logged In Scenarios (with fallback disabled)
+- [ ] "Hey Google, play on Chronicle" → Plays last played or first audiobook
+- [ ] "Hey Google, play [nonexistent book] on Chronicle" → Shows "No audiobooks found for '[query]'" error
+- [ ] Search with no results → Shows error (no fallback to recent/first)
 
 #### Setup Incomplete Scenarios
 - [ ] Logged in, no server chosen → Shows "No server chosen" error
@@ -337,10 +411,12 @@ Use the **Android Auto Desktop Head Unit (DHU)** simulator or a real vehicle to 
 
 #### Edge Cases
 - [ ] Empty library + generic play → Shows "library is empty" error
-- [ ] Empty library + search → Shows "library is empty" error
+- [ ] Empty library + search (fallback enabled) → Shows "library is empty" error
+- [ ] Empty library + search (fallback disabled) → Shows "library is empty" error
 - [ ] Network disconnected → Shows timeout error after 10 seconds (not infinite wait)
 - [ ] Invalid media ID from browse → Shows "audiobook not available" error
 - [ ] Book with no tracks → Shows appropriate error
+- [ ] Toggle fallback setting → Behavior changes appropriately on next search
 
 #### Error Message Verification
 - [ ] All error messages appear on Android Auto screen

@@ -7,6 +7,7 @@ import local.oss.chronicle.data.local.PrefsRepo.Companion.KEY_ALLOW_AUTO
 import local.oss.chronicle.data.local.PrefsRepo.Companion.KEY_AUTO_REWIND_ENABLED
 import local.oss.chronicle.data.local.PrefsRepo.Companion.KEY_BOOK_COVER_STYLE
 import local.oss.chronicle.data.local.PrefsRepo.Companion.KEY_BOOK_SORT_BY
+import local.oss.chronicle.data.local.PrefsRepo.Companion.KEY_VOICE_SEARCH_FALLBACK
 import local.oss.chronicle.data.local.PrefsRepo.Companion.KEY_DEBUG_DISABLE_PROGRESS
 import local.oss.chronicle.data.local.PrefsRepo.Companion.KEY_HIDE_PLAYED_AUDIOBOOKS
 import local.oss.chronicle.data.local.PrefsRepo.Companion.KEY_IS_LIBRARY_SORT_DESCENDING
@@ -53,6 +54,9 @@ interface PrefsRepo {
 
     /** Whether the user has given access to Auto */
     var allowAuto: Boolean
+
+    /** Whether to resume on failed voice search in Android Auto */
+    var voiceSearchFallbackEnabled: Boolean
 
     /** Whether to fast-forward through silent bits of audio during playback */
     var skipSilence: Boolean
@@ -143,6 +147,7 @@ interface PrefsRepo {
         const val KEY_SKIP_SILENCE = "key_skip_silence"
         const val KEY_AUTO_REWIND_ENABLED = "key_auto_rewind_enabled"
         const val KEY_ALLOW_AUTO = "key_allow_auto"
+        const val KEY_VOICE_SEARCH_FALLBACK = "key_voice_search_fallback_enabled"
         const val KEY_SHAKE_TO_SNOOZE_ENABLED = "key_shake_to_snooze_enabled"
         const val KEY_PAUSE_ON_FOCUS_LOST = "key_pause_on_focus_lost"
         const val KEY_IS_PREMIUM = "key_is_premium"
@@ -258,6 +263,11 @@ class SharedPreferencesPrefsRepo
         override var allowAuto: Boolean
             get() = sharedPreferences.getBoolean(KEY_ALLOW_AUTO, defaultAllowAuto)
             set(value) = sharedPreferences.edit().putBoolean(KEY_ALLOW_AUTO, value).apply()
+
+        private val defaultVoiceSearchFallback = true
+        override var voiceSearchFallbackEnabled: Boolean
+            get() = sharedPreferences.getBoolean(KEY_VOICE_SEARCH_FALLBACK, defaultVoiceSearchFallback)
+            set(value) = sharedPreferences.edit().putBoolean(KEY_VOICE_SEARCH_FALLBACK, value).apply()
 
         private val defaultIsPremium = true
         override val isPremium: Boolean

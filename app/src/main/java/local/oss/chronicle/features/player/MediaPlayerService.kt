@@ -312,25 +312,29 @@ class MediaPlayerService :
      * @param errorCode PlaybackStateCompat error code (e.g., ERROR_CODE_AUTHENTICATION_EXPIRED)
      * @param errorMessage User-facing error message to display in Android Auto
      */
-    override fun setPlaybackStateError(errorCode: Int, errorMessage: String) {
+    override fun setPlaybackStateError(
+        errorCode: Int,
+        errorMessage: String,
+    ) {
         Timber.e("[AndroidAuto] Setting error state: code=$errorCode, message=$errorMessage")
-        
+
         // Stop current playback when entering error state
         currentPlayer?.playWhenReady = false
-        
+
         isErrorState = true
         sessionErrorMessage = errorMessage
-        
-        val errorState = PlaybackStateCompat.Builder()
-            .setActions(basePlaybackActions())
-            .setState(
-                PlaybackStateCompat.STATE_ERROR,
-                PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN,
-                0f
-            )
-            .setErrorMessage(errorCode, errorMessage)
-            .build()
-        
+
+        val errorState =
+            PlaybackStateCompat.Builder()
+                .setActions(basePlaybackActions())
+                .setState(
+                    PlaybackStateCompat.STATE_ERROR,
+                    PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN,
+                    0f,
+                )
+                .setErrorMessage(errorCode, errorMessage)
+                .build()
+
         mediaSession.setPlaybackState(errorState)
     }
 
@@ -468,7 +472,7 @@ class MediaPlayerService :
                     .setActions(basePlaybackActions())
                     .setState(PlaybackStateCompat.STATE_ERROR, 0L, 0f)
                     .setErrorMessage(PlaybackStateCompat.ERROR_CODE_APP_ERROR, sessionErrorMessage)
-            
+
             sessionCustomActions.forEach(builder::addCustomAction)
             return builder.build()
         }

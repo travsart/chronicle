@@ -83,7 +83,7 @@ class MediaBrowserTransportControlsTest {
         )
         assertTrue(
             "MediaBrowserService must be exported for Android Auto to connect",
-            resolveInfo?.serviceInfo?.exported ?: false
+            resolveInfo?.serviceInfo?.exported ?: false,
         )
     }
 

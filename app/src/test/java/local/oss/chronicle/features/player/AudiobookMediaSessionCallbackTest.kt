@@ -16,7 +16,6 @@ import io.mockk.every
 import io.mockk.impl.annotations.MockK
 import io.mockk.impl.annotations.RelaxedMockK
 import io.mockk.mockk
-import io.mockk.slot
 import io.mockk.verify
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
@@ -127,15 +126,16 @@ class AudiobookMediaSessionCallbackTest {
     fun setup() {
         MockKAnnotations.init(this)
         testScope = TestScope()
-        
+
         // Setup appContext string resource mocks
         every { appContext.getString(any()) } returns "Mock error message"
         every { appContext.getString(any(), any()) } returns "Mock error message with args"
 
         // Create test exception handler that logs but doesn't crash
-        testExceptionHandler = CoroutineExceptionHandler { _, throwable ->
-            Timber.e(throwable, "Test coroutine exception")
-        }
+        testExceptionHandler =
+            CoroutineExceptionHandler { _, throwable ->
+                Timber.e(throwable, "Test coroutine exception")
+            }
 
         callback =
             AudiobookMediaSessionCallback(
@@ -373,7 +373,7 @@ class AudiobookMediaSessionCallbackTest {
         val loginEvent = MutableLiveData<Event<LoginState>>()
         loginEvent.value = Event(LoginState.NOT_LOGGED_IN)
         every { plexLoginRepo.loginEvent } returns loginEvent
-        
+
         val playbackState = mockk<android.support.v4.media.session.PlaybackStateCompat>()
         every { playbackState.state } returns PlaybackStateCompat.STATE_NONE
         every { mediaController.playbackState } returns playbackState
@@ -385,7 +385,7 @@ class AudiobookMediaSessionCallbackTest {
         verify {
             errorReporter.setPlaybackStateError(
                 PlaybackStateCompat.ERROR_CODE_AUTHENTICATION_EXPIRED,
-                any()
+                any(),
             )
         }
     }
@@ -396,7 +396,7 @@ class AudiobookMediaSessionCallbackTest {
         val loginEvent = MutableLiveData<Event<LoginState>>()
         loginEvent.value = Event(LoginState.LOGGED_IN_NO_SERVER_CHOSEN)
         every { plexLoginRepo.loginEvent } returns loginEvent
-        
+
         val playbackState = mockk<android.support.v4.media.session.PlaybackStateCompat>()
         every { playbackState.state } returns PlaybackStateCompat.STATE_NONE
         every { mediaController.playbackState } returns playbackState
@@ -408,7 +408,7 @@ class AudiobookMediaSessionCallbackTest {
         verify {
             errorReporter.setPlaybackStateError(
                 PlaybackStateCompat.ERROR_CODE_NOT_SUPPORTED,
-                any()
+                any(),
             )
         }
     }
@@ -419,7 +419,7 @@ class AudiobookMediaSessionCallbackTest {
         val loginEvent = MutableLiveData<Event<LoginState>>()
         loginEvent.value = Event(LoginState.LOGGED_IN_NO_USER_CHOSEN)
         every { plexLoginRepo.loginEvent } returns loginEvent
-        
+
         val playbackState = mockk<android.support.v4.media.session.PlaybackStateCompat>()
         every { playbackState.state } returns PlaybackStateCompat.STATE_NONE
         every { mediaController.playbackState } returns playbackState
@@ -431,7 +431,7 @@ class AudiobookMediaSessionCallbackTest {
         verify {
             errorReporter.setPlaybackStateError(
                 PlaybackStateCompat.ERROR_CODE_NOT_SUPPORTED,
-                any()
+                any(),
             )
         }
     }
@@ -442,7 +442,7 @@ class AudiobookMediaSessionCallbackTest {
         val loginEvent = MutableLiveData<Event<LoginState>>()
         loginEvent.value = Event(LoginState.LOGGED_IN_NO_LIBRARY_CHOSEN)
         every { plexLoginRepo.loginEvent } returns loginEvent
-        
+
         val playbackState = mockk<android.support.v4.media.session.PlaybackStateCompat>()
         every { playbackState.state } returns PlaybackStateCompat.STATE_NONE
         every { mediaController.playbackState } returns playbackState
@@ -454,7 +454,7 @@ class AudiobookMediaSessionCallbackTest {
         verify {
             errorReporter.setPlaybackStateError(
                 PlaybackStateCompat.ERROR_CODE_NOT_SUPPORTED,
-                any()
+                any(),
             )
         }
     }
@@ -465,7 +465,7 @@ class AudiobookMediaSessionCallbackTest {
         val loginEvent = MutableLiveData<Event<LoginState>>()
         loginEvent.value = Event(LoginState.LOGGED_IN_FULLY)
         every { plexLoginRepo.loginEvent } returns loginEvent
-        
+
         val playbackState = mockk<android.support.v4.media.session.PlaybackStateCompat>()
         every { playbackState.state } returns PlaybackStateCompat.STATE_PAUSED
         every { mediaController.playbackState } returns playbackState
@@ -499,98 +499,102 @@ class AudiobookMediaSessionCallbackTest {
         verify {
             errorReporter.setPlaybackStateError(
                 PlaybackStateCompat.ERROR_CODE_AUTHENTICATION_EXPIRED,
-                any()
+                any(),
             )
         }
     }
 
     @Test
-    fun `onPlayFromSearch shows error when no results found for specific query`() = runTest {
-        // Given: User is fully logged in but no books match the query
-        val loginEvent = MutableLiveData<Event<LoginState>>()
-        loginEvent.value = Event(LoginState.LOGGED_IN_FULLY)
-        every { plexLoginRepo.loginEvent } returns loginEvent
-        coEvery { bookRepository.searchAsync("nonexistent book") } returns emptyList()
+    fun `onPlayFromSearch shows error when no results found for specific query`() =
+        runTest {
+            // Given: User is fully logged in but no books match the query
+            val loginEvent = MutableLiveData<Event<LoginState>>()
+            loginEvent.value = Event(LoginState.LOGGED_IN_FULLY)
+            every { plexLoginRepo.loginEvent } returns loginEvent
+            coEvery { bookRepository.searchAsync("nonexistent book") } returns emptyList()
 
-        // When: onPlayFromSearch is called with a specific query
-        callback.onPlayFromSearch("nonexistent book", null)
-        
-        // Advance time to allow coroutine to complete
-        testScope.testScheduler.advanceUntilIdle()
-        testScope.testScheduler.runCurrent()
+            // When: onPlayFromSearch is called with a specific query
+            callback.onPlayFromSearch("nonexistent book", null)
 
-        // Then: Error is set with content not available code
-        verify(timeout = 1000) {
-            errorReporter.setPlaybackStateError(
-                PlaybackStateCompat.ERROR_CODE_NOT_AVAILABLE_IN_REGION,
-                any()
-            )
+            // Advance time to allow coroutine to complete
+            testScope.testScheduler.advanceUntilIdle()
+            testScope.testScheduler.runCurrent()
+
+            // Then: Error is set with content not available code
+            verify(timeout = 1000) {
+                errorReporter.setPlaybackStateError(
+                    PlaybackStateCompat.ERROR_CODE_NOT_AVAILABLE_IN_REGION,
+                    any(),
+                )
+            }
         }
-    }
 
     @Test
-    fun `onPlayFromSearch shows library empty error on fallback failure`() = runTest {
-        // Given: User is fully logged in, empty query, no recently played, empty library
-        val loginEvent = MutableLiveData<Event<LoginState>>()
-        loginEvent.value = Event(LoginState.LOGGED_IN_FULLY)
-        every { plexLoginRepo.loginEvent } returns loginEvent
-        coEvery { bookRepository.getMostRecentlyPlayed() } returns EMPTY_AUDIOBOOK
-        coEvery { bookRepository.getRandomBookAsync() } returns EMPTY_AUDIOBOOK
+    fun `onPlayFromSearch shows library empty error on fallback failure`() =
+        runTest {
+            // Given: User is fully logged in, empty query, no recently played, empty library
+            val loginEvent = MutableLiveData<Event<LoginState>>()
+            loginEvent.value = Event(LoginState.LOGGED_IN_FULLY)
+            every { plexLoginRepo.loginEvent } returns loginEvent
+            coEvery { bookRepository.getMostRecentlyPlayed() } returns EMPTY_AUDIOBOOK
+            coEvery { bookRepository.getRandomBookAsync() } returns EMPTY_AUDIOBOOK
 
-        // When: onPlayFromSearch is called with empty/null query
-        callback.onPlayFromSearch(null, null)
-        
-        // Advance time to allow coroutine to complete
-        testScope.testScheduler.advanceUntilIdle()
-        testScope.testScheduler.runCurrent()
+            // When: onPlayFromSearch is called with empty/null query
+            callback.onPlayFromSearch(null, null)
 
-        // Then: Error is set with library empty message
-        verify(timeout = 1000) {
-            errorReporter.setPlaybackStateError(
-                PlaybackStateCompat.ERROR_CODE_NOT_AVAILABLE_IN_REGION,
-                any()
-            )
+            // Advance time to allow coroutine to complete
+            testScope.testScheduler.advanceUntilIdle()
+            testScope.testScheduler.runCurrent()
+
+            // Then: Error is set with library empty message
+            verify(timeout = 1000) {
+                errorReporter.setPlaybackStateError(
+                    PlaybackStateCompat.ERROR_CODE_NOT_AVAILABLE_IN_REGION,
+                    any(),
+                )
+            }
         }
-    }
 
     @Test
-    fun `onPlayFromSearch plays first result when results found`() = runTest {
-        // Given: User is fully logged in and search returns results
-        val loginEvent = MutableLiveData<Event<LoginState>>()
-        loginEvent.value = Event(LoginState.LOGGED_IN_FULLY)
-        every { plexLoginRepo.loginEvent } returns loginEvent
-        
-        val mockBook = Audiobook(
-            id = 123,
-            source = 1L, // Plex source
-            title = "Test Book",
-            author = "Author Name",
-            duration = 3600000
-        )
-        
-        coEvery { bookRepository.searchAsync("existing book") } returns listOf(mockBook)
-        coEvery { trackRepository.getTracksForAudiobookAsync(123) } returns emptyList()
-        coEvery { bookRepository.getAudiobookAsync(123) } returns mockBook
-        
-        val playbackState = mockk<android.support.v4.media.session.PlaybackStateCompat>()
-        every { playbackState.state } returns PlaybackStateCompat.STATE_NONE
-        every { mediaController.playbackState } returns playbackState
+    fun `onPlayFromSearch plays first result when results found`() =
+        runTest {
+            // Given: User is fully logged in and search returns results
+            val loginEvent = MutableLiveData<Event<LoginState>>()
+            loginEvent.value = Event(LoginState.LOGGED_IN_FULLY)
+            every { plexLoginRepo.loginEvent } returns loginEvent
 
-        // When: onPlayFromSearch is called with a query that has results
-        callback.onPlayFromSearch("existing book", null)
-        
-        // Advance time to allow coroutine to complete
-        advanceTimeBy(1000)
+            val mockBook =
+                Audiobook(
+                    id = 123,
+                    source = 1L, // Plex source
+                    title = "Test Book",
+                    author = "Author Name",
+                    duration = 3600000,
+                )
 
-        // Then: No error is set (playback would proceed)
-        // Note: We verify that the error handler is NOT called for successful search
-        verify(exactly = 0) {
-            errorReporter.setPlaybackStateError(
-                PlaybackStateCompat.ERROR_CODE_NOT_AVAILABLE_IN_REGION,
-                any()
-            )
+            coEvery { bookRepository.searchAsync("existing book") } returns listOf(mockBook)
+            coEvery { trackRepository.getTracksForAudiobookAsync(123) } returns emptyList()
+            coEvery { bookRepository.getAudiobookAsync(123) } returns mockBook
+
+            val playbackState = mockk<android.support.v4.media.session.PlaybackStateCompat>()
+            every { playbackState.state } returns PlaybackStateCompat.STATE_NONE
+            every { mediaController.playbackState } returns playbackState
+
+            // When: onPlayFromSearch is called with a query that has results
+            callback.onPlayFromSearch("existing book", null)
+
+            // Advance time to allow coroutine to complete
+            advanceTimeBy(1000)
+
+            // Then: No error is set (playback would proceed)
+            // Note: We verify that the error handler is NOT called for successful search
+            verify(exactly = 0) {
+                errorReporter.setPlaybackStateError(
+                    PlaybackStateCompat.ERROR_CODE_NOT_AVAILABLE_IN_REGION,
+                    any(),
+                )
+            }
         }
-    }
 
     // ========================================
     // onPlayFromMediaId Error Handling Tests
@@ -610,7 +614,7 @@ class AudiobookMediaSessionCallbackTest {
         verify {
             errorReporter.setPlaybackStateError(
                 PlaybackStateCompat.ERROR_CODE_AUTHENTICATION_EXPIRED,
-                any()
+                any(),
             )
         }
     }
@@ -629,7 +633,7 @@ class AudiobookMediaSessionCallbackTest {
         verify {
             errorReporter.setPlaybackStateError(
                 PlaybackStateCompat.ERROR_CODE_APP_ERROR,
-                any()
+                any(),
             )
         }
     }
@@ -648,123 +652,128 @@ class AudiobookMediaSessionCallbackTest {
         verify {
             errorReporter.setPlaybackStateError(
                 PlaybackStateCompat.ERROR_CODE_APP_ERROR,
-                any()
+                any(),
             )
         }
     }
 
     @Test
-    fun `onPlayFromMediaId proceeds when valid bookId provided`() = runTest {
-        // Given: User is fully logged in and valid bookId
-        val loginEvent = MutableLiveData<Event<LoginState>>()
-        loginEvent.value = Event(LoginState.LOGGED_IN_FULLY)
-        every { plexLoginRepo.loginEvent } returns loginEvent
-        
-        val mockBook = Audiobook(
-            id = 456,
-            source = 1L, // Plex source
-            title = "Valid Book",
-            author = "Author Name",
-            duration = 3600000
-        )
-        
-        coEvery { trackRepository.getTracksForAudiobookAsync(456) } returns emptyList()
-        coEvery { bookRepository.getAudiobookAsync(456) } returns mockBook
+    fun `onPlayFromMediaId proceeds when valid bookId provided`() =
+        runTest {
+            // Given: User is fully logged in and valid bookId
+            val loginEvent = MutableLiveData<Event<LoginState>>()
+            loginEvent.value = Event(LoginState.LOGGED_IN_FULLY)
+            every { plexLoginRepo.loginEvent } returns loginEvent
 
-        // When: onPlayFromMediaId is called with valid bookId
-        callback.onPlayFromMediaId("456", Bundle())
-        
-        // Advance time to allow coroutine to complete
-        advanceTimeBy(1000)
+            val mockBook =
+                Audiobook(
+                    id = 456,
+                    source = 1L, // Plex source
+                    title = "Valid Book",
+                    author = "Author Name",
+                    duration = 3600000,
+                )
 
-        // Then: No authentication error is set
-        verify(exactly = 0) {
-            errorReporter.setPlaybackStateError(
-                PlaybackStateCompat.ERROR_CODE_AUTHENTICATION_EXPIRED,
-                any()
-            )
+            coEvery { trackRepository.getTracksForAudiobookAsync(456) } returns emptyList()
+            coEvery { bookRepository.getAudiobookAsync(456) } returns mockBook
+
+            // When: onPlayFromMediaId is called with valid bookId
+            callback.onPlayFromMediaId("456", Bundle())
+
+            // Advance time to allow coroutine to complete
+            advanceTimeBy(1000)
+
+            // Then: No authentication error is set
+            verify(exactly = 0) {
+                errorReporter.setPlaybackStateError(
+                    PlaybackStateCompat.ERROR_CODE_AUTHENTICATION_EXPIRED,
+                    any(),
+                )
+            }
         }
-    }
 
     // ========================================
     // Timeout Tests
     // ========================================
 
     @Test
-    fun `resumePlayFromEmpty times out after 10 seconds and shows error`() = runTest {
-        // Given: plexConfig.isConnected never becomes true
-        val isConnectedLiveData = MutableLiveData<Boolean>()
-        isConnectedLiveData.value = false
-        every { plexConfig.isConnected } returns isConnectedLiveData
-        
-        val loginEvent = MutableLiveData<Event<LoginState>>()
-        loginEvent.value = Event(LoginState.LOGGED_IN_FULLY)
-        every { plexLoginRepo.loginEvent } returns loginEvent
-        
-        val playbackState = mockk<android.support.v4.media.session.PlaybackStateCompat>()
-        every { playbackState.state } returns PlaybackStateCompat.STATE_NONE
-        every { mediaController.playbackState } returns playbackState
+    fun `resumePlayFromEmpty times out after 10 seconds and shows error`() =
+        runTest {
+            // Given: plexConfig.isConnected never becomes true
+            val isConnectedLiveData = MutableLiveData<Boolean>()
+            isConnectedLiveData.value = false
+            every { plexConfig.isConnected } returns isConnectedLiveData
 
-        // When: onPlay triggers resumePlayFromEmpty
-        callback.onPlay()
-        
-        // Advance time past the timeout (10 seconds)
-        testScope.testScheduler.advanceTimeBy(11_000)
-        testScope.testScheduler.advanceUntilIdle()
+            val loginEvent = MutableLiveData<Event<LoginState>>()
+            loginEvent.value = Event(LoginState.LOGGED_IN_FULLY)
+            every { plexLoginRepo.loginEvent } returns loginEvent
 
-        // Then: Timeout error is set
-        verify {
-            errorReporter.setPlaybackStateError(
-                PlaybackStateCompat.ERROR_CODE_APP_ERROR,
-                any()
-            )
+            val playbackState = mockk<android.support.v4.media.session.PlaybackStateCompat>()
+            every { playbackState.state } returns PlaybackStateCompat.STATE_NONE
+            every { mediaController.playbackState } returns playbackState
+
+            // When: onPlay triggers resumePlayFromEmpty
+            callback.onPlay()
+
+            // Advance time past the timeout (10 seconds)
+            testScope.testScheduler.advanceTimeBy(11_000)
+            testScope.testScheduler.advanceUntilIdle()
+
+            // Then: Timeout error is set
+            verify {
+                errorReporter.setPlaybackStateError(
+                    PlaybackStateCompat.ERROR_CODE_APP_ERROR,
+                    any(),
+                )
+            }
         }
-    }
 
     @Test
-    fun `resumePlayFromEmpty succeeds when connection established`() = runTest {
-        // Given: plexConfig.isConnected becomes true
-        val isConnectedLiveData = MutableLiveData<Boolean>()
-        isConnectedLiveData.value = false
-        every { plexConfig.isConnected } returns isConnectedLiveData
-        
-        val loginEvent = MutableLiveData<Event<LoginState>>()
-        loginEvent.value = Event(LoginState.LOGGED_IN_FULLY)
-        every { plexLoginRepo.loginEvent } returns loginEvent
-        
-        val mockBook = Audiobook(
-            id = 789,
-            source = 1L, // Plex source
-            title = "Recent Book",
-            author = "Author Name",
-            duration = 3600000,
-            lastViewedAt = System.currentTimeMillis(),
-            viewCount = 1
-        )
-        
-        coEvery { bookRepository.getMostRecentlyPlayed() } returns mockBook
-        coEvery { trackRepository.getTracksForAudiobookAsync(789) } returns emptyList()
-        coEvery { bookRepository.getAudiobookAsync(789) } returns mockBook
-        
-        val playbackState = mockk<android.support.v4.media.session.PlaybackStateCompat>()
-        every { playbackState.state } returns PlaybackStateCompat.STATE_NONE
-        every { mediaController.playbackState } returns playbackState
+    fun `resumePlayFromEmpty succeeds when connection established`() =
+        runTest {
+            // Given: plexConfig.isConnected becomes true
+            val isConnectedLiveData = MutableLiveData<Boolean>()
+            isConnectedLiveData.value = false
+            every { plexConfig.isConnected } returns isConnectedLiveData
 
-        // When: onPlay triggers resumePlayFromEmpty and connection becomes available
-        callback.onPlay()
-        
-        // Simulate connection becoming available after 1 second
-        advanceTimeBy(1_000)
-        isConnectedLiveData.value = true
-        advanceTimeBy(1000)
+            val loginEvent = MutableLiveData<Event<LoginState>>()
+            loginEvent.value = Event(LoginState.LOGGED_IN_FULLY)
+            every { plexLoginRepo.loginEvent } returns loginEvent
 
-        // Then: Playback proceeds without timeout error
-        // The timeout error should NOT be called
-        verify(exactly = 0) {
-            errorReporter.setPlaybackStateError(
-                PlaybackStateCompat.ERROR_CODE_APP_ERROR,
-                match { it.contains("timeout") || it.contains("Connection timeout") }
-            )
+            val mockBook =
+                Audiobook(
+                    id = 789,
+                    source = 1L, // Plex source
+                    title = "Recent Book",
+                    author = "Author Name",
+                    duration = 3600000,
+                    lastViewedAt = System.currentTimeMillis(),
+                    viewCount = 1,
+                )
+
+            coEvery { bookRepository.getMostRecentlyPlayed() } returns mockBook
+            coEvery { trackRepository.getTracksForAudiobookAsync(789) } returns emptyList()
+            coEvery { bookRepository.getAudiobookAsync(789) } returns mockBook
+
+            val playbackState = mockk<android.support.v4.media.session.PlaybackStateCompat>()
+            every { playbackState.state } returns PlaybackStateCompat.STATE_NONE
+            every { mediaController.playbackState } returns playbackState
+
+            // When: onPlay triggers resumePlayFromEmpty and connection becomes available
+            callback.onPlay()
+
+            // Simulate connection becoming available after 1 second
+            advanceTimeBy(1_000)
+            isConnectedLiveData.value = true
+            advanceTimeBy(1000)
+
+            // Then: Playback proceeds without timeout error
+            // The timeout error should NOT be called
+            verify(exactly = 0) {
+                errorReporter.setPlaybackStateError(
+                    PlaybackStateCompat.ERROR_CODE_APP_ERROR,
+                    match { it.contains("timeout") || it.contains("Connection timeout") },
+                )
+            }
         }
-    }
 }

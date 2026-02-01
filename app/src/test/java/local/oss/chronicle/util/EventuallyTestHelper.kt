@@ -11,7 +11,7 @@ package local.oss.chronicle.util
 fun eventually(
     timeoutMs: Long = 2000,
     intervalMs: Long = 50,
-    block: () -> Unit
+    block: () -> Unit,
 ) {
     val start = System.currentTimeMillis()
     while (true) {
@@ -31,7 +31,7 @@ fun eventually(
 suspend fun eventuallySuspend(
     timeoutMs: Long = 2000,
     intervalMs: Long = 50,
-    block: suspend () -> Unit
+    block: suspend () -> Unit,
 ) {
     val start = System.currentTimeMillis()
     while (true) {

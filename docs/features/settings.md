@@ -20,6 +20,7 @@ Chronicle provides various settings to customize the listening experience.
 | **Shake to Snooze** | Extend sleep timer by shaking device | On |
 | **Offline Mode** | Show only downloaded content | Off |
 | **Allow Android Auto** | Enable Android Auto support | Off |
+| **Resume on failed voice search** | Fallback to recent book when voice search finds nothing | On |
 | **Download Location** | Choose storage location for downloads | Internal |
 
 ---
@@ -65,11 +66,42 @@ Control offline behavior:
 - **Offline Mode**: When enabled, only downloaded books appear
 - **Download Location**: Internal storage or SD card (if available)
 
-### Platform Settings
+### Android Auto Settings
 
-Control platform integrations:
+Control Android Auto behavior:
 
-- **Android Auto**: Toggle for in-car playback support
+- **Allow Android Auto**: Toggle for in-car playback support
+- **Resume on failed voice search**: Controls fallback behavior when voice search finds no results
+
+**Resume on Failed Voice Search Details:**
+
+| Setting | Key | Default |
+|---------|-----|---------|
+| Resume on failed voice search | `key_voice_search_fallback_enabled` | `true` (enabled) |
+
+When **enabled**, if a voice search in Android Auto returns no results (e.g., user says "play something" or searches for a non-existent book), Chronicle will:
+1. Try to resume the most recently played audiobook
+2. If no recent history, play the first book in the library
+3. Only show an error if the library is empty
+
+When **disabled**, voice searches that return no results will always show an error message.
+
+**Use Case Examples:**
+
+| Scenario | Fallback ON | Fallback OFF |
+|----------|-------------|--------------|
+| "Play something" with recent book | ✓ Resumes recent book | ✓ Resumes recent book |
+| "Play [nonexistent book]" with recent book | ✓ Resumes recent book | ✗ Shows error |
+| "Play something" with no history | ✓ Plays first book | ✓ Plays first book |
+| "Play [nonexistent book]" with no history | ✓ Plays first book | ✗ Shows error |
+| Empty library | ✗ Shows error | ✗ Shows error |
+
+**Implementation:**
+- Storage: [`SharedPreferencesPrefsRepo.voiceSearchFallbackEnabled`](../../app/src/main/java/local/oss/chronicle/data/local/SharedPreferencesPrefsRepo.kt)
+- Usage: [`AudiobookMediaSessionCallback.handleSearchSuspend()`](../../app/src/main/java/local/oss/chronicle/features/player/AudiobookMediaSessionCallback.kt)
+
+### Other Platform Settings
+
 - **Shake to Snooze**: Accelerometer-based sleep timer extension
 
 ---
@@ -88,6 +120,7 @@ classDiagram
         +shakeToSnooze: Boolean
         +offlineMode: Boolean
         +allowAndroidAuto: Boolean
+        +voiceSearchFallbackEnabled: Boolean
         +downloadLocation: String
     }
     
@@ -95,6 +128,7 @@ classDiagram
         -sharedPreferences: SharedPreferences
         +playbackSpeed: Float
         +skipSilence: Boolean
+        +voiceSearchFallbackEnabled: Boolean
         ...
     }
     

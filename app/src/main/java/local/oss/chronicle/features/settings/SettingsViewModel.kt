@@ -972,6 +972,16 @@ class SettingsViewModel(
                             defaultValue = prefsRepo.allowAuto,
                         ),
                     )
+                    list.add(
+                        insertIndex + 2,
+                        PreferenceModel(
+                            type = PreferenceType.BOOLEAN,
+                            title = FormattableString.from(R.string.settings_voice_search_fallback_title),
+                            explanation = FormattableString.from(R.string.settings_voice_search_fallback_explanation),
+                            key = PrefsRepo.KEY_VOICE_SEARCH_FALLBACK,
+                            defaultValue = prefsRepo.voiceSearchFallbackEnabled,
+                        ),
+                    )
                 }
             }
         }

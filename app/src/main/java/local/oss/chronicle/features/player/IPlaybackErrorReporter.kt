@@ -13,7 +13,10 @@ interface IPlaybackErrorReporter {
      * @param errorCode One of PlaybackStateCompat.ERROR_CODE_* constants
      * @param errorMessage User-facing error message to display
      */
-    fun setPlaybackStateError(errorCode: Int, errorMessage: String)
+    fun setPlaybackStateError(
+        errorCode: Int,
+        errorMessage: String,
+    )
 
     /**
      * Clears any existing error state when playback resumes.
