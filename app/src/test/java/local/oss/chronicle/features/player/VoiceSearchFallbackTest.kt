@@ -105,6 +105,9 @@ class VoiceSearchFallbackTest {
     private lateinit var playbackStateController: PlaybackStateController
 
     @RelaxedMockK
+    private lateinit var voiceCommandBridgeAudio: VoiceCommandBridgeAudio
+
+    @RelaxedMockK
     private lateinit var defaultPlayer: ExoPlayer
 
     private lateinit var testScope: TestScope
@@ -152,6 +155,7 @@ class VoiceSearchFallbackTest {
                 progressUpdater = progressUpdater,
                 playbackUrlResolver = playbackUrlResolver,
                 playbackStateController = playbackStateController,
+                voiceCommandBridgeAudio = voiceCommandBridgeAudio,
                 coroutineExceptionHandler = testExceptionHandler,
                 defaultPlayer = defaultPlayer,
             )

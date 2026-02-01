@@ -62,6 +62,7 @@ class AudiobookMediaSessionCallback
         private val playbackUrlResolver: local.oss.chronicle.data.sources.plex.PlaybackUrlResolver,
         private val playbackStateController: PlaybackStateController,
         private val coroutineExceptionHandler: CoroutineExceptionHandler,
+        private val voiceCommandBridgeAudio: VoiceCommandBridgeAudio,
         defaultPlayer: ExoPlayer,
     ) : MediaSessionCompat.Callback() {
         // Default to ExoPlayer to prevent having a nullable field
@@ -79,6 +80,28 @@ class AudiobookMediaSessionCallback
 
             // Timeout for resuming from empty state
             private const val RESUME_TIMEOUT_MILLIS = 10_000L // 10 seconds
+        }
+
+        /**
+         * Detects whether a command originates from an Android Auto voice command.
+         *
+         * This is critical for determining when to trigger bridge audio. We ONLY want to
+         * speak TTS for actual voice commands from Android Auto, not for:
+         * - Regular UI playback (taps in the app)
+         * - Resume from notification
+         * - Bluetooth media button presses
+         * - Android Auto UI taps (browsing and selecting from lists)
+         *
+         * The primary indicator is [voiceCommandStartTime] being non-null, which is set
+         * in [onPlayFromSearch] - the method that ONLY gets called for voice commands.
+         *
+         * @return true if this is an Android Auto voice command requiring bridge audio
+         */
+        private fun isAndroidAutoVoiceCommand(): Boolean {
+            // voiceCommandStartTime is ONLY set in onPlayFromSearch(), which is the
+            // MediaSession callback specifically for voice search commands.
+            // If it's null, this is NOT a voice command.
+            return voiceCommandStartTime != null
         }
 
         /**
@@ -156,36 +179,57 @@ class AudiobookMediaSessionCallback
         }
 
         override fun onPlayFromSearch(
-            query: String?,
-            extras: Bundle?,
-        ) {
-            // Record timestamp for voice command latency measurement
-            voiceCommandStartTime = System.currentTimeMillis()
-            Timber.i("[AndroidAuto] Play from search: $query (voice command received at $voiceCommandStartTime)")
-
-            // Pre-flight authentication check
-            if (!checkAuthenticationOrError()) {
-                voiceCommandStartTime = null // Clear on error
-                return
-            }
-
-            serviceScope.launch(coroutineExceptionHandler) {
-                try {
-                    handleSearchSuspend(query, true)
-                } catch (e: Exception) {
-                    Timber.e(e, "[AndroidAuto] Error in onPlayFromSearch")
-                    onSetPlaybackError(
-                        android.support.v4.media.session.PlaybackStateCompat.ERROR_CODE_APP_ERROR,
-                        appContext.getString(local.oss.chronicle.R.string.auto_error_playback_failed),
-                    )
+                query: String?,
+                extras: Bundle?,
+            ) {
+                Timber.d("[VoiceCommandTrace] onPlayFromSearch ENTER - query: '$query', extras: $extras")
+                
+                // Record timestamp for voice command latency measurement
+                voiceCommandStartTime = System.currentTimeMillis()
+                Timber.i("[AndroidAuto] Play from search: $query (voice command received at $voiceCommandStartTime)")
+    
+                // Check bridge audio eligibility
+                Timber.d("[VoiceCommandTrace] Checking bridge audio eligibility - voiceCommandStartTime: $voiceCommandStartTime")
+                
+                // IMMEDIATELY speak bridge message for Android Auto voice commands
+                // This provides instant audio feedback while the audiobook loads
+                val shouldPlayBridgeAudio = prefsRepo.bridgeAudioEnabled
+                Timber.d("[VoiceCommandTrace] Bridge audio check result - will play: $shouldPlayBridgeAudio")
+                
+                if (shouldPlayBridgeAudio) {
+                    voiceCommandBridgeAudio.speakBridgeMessage()
+                    Timber.i("[VoiceCommandBridge] Speaking bridge audio for voice command")
+                }
+    
+                // Pre-flight authentication check
+                if (!checkAuthenticationOrError()) {
+                    Timber.d("[VoiceCommandTrace] onPlayFromSearch early return - reason: authentication check failed")
+                    voiceCommandStartTime = null // Clear on error
+                    return
+                }
+    
+                serviceScope.launch(coroutineExceptionHandler) {
+                    try {
+                        handleSearchSuspend(query, true)
+                        Timber.d("[VoiceCommandTrace] onPlayFromSearch EXIT - success")
+                    } catch (e: Exception) {
+                        Timber.e(e, "[VoiceCommandTrace] Exception in onPlayFromSearch: ${e.message}")
+                        Timber.e(e, "[AndroidAuto] Error in onPlayFromSearch")
+                        onSetPlaybackError(
+                            android.support.v4.media.session.PlaybackStateCompat.ERROR_CODE_APP_ERROR,
+                            appContext.getString(local.oss.chronicle.R.string.auto_error_playback_failed),
+                        )
+                        voiceCommandStartTime = null // Clear on error to prevent stale state
+                    }
                 }
             }
-        }
 
         private suspend fun handleSearchSuspend(
             query: String?,
             playWhenReady: Boolean,
         ) {
+            Timber.d("[VoiceCommandTrace] Starting search for query: '$query'")
+            
             if (query.isNullOrEmpty()) {
                 // take most recently played book, start that
                 try {
@@ -207,11 +251,13 @@ class AudiobookMediaSessionCallback
                     }
 
                     if (playWhenReady) {
+                        Timber.d("[VoiceCommandTrace] Calling onPlayFromMediaId with bookId: ${bookToPlay.id}")
                         onPlayFromMediaId(bookToPlay.id.toString(), null)
                     } else {
                         onPrepareFromMediaId(bookToPlay.id.toString(), null)
                     }
                 } catch (e: Exception) {
+                    Timber.e(e, "[VoiceCommandTrace] Exception in handleSearchSuspend (empty query): ${e.message}")
                     Timber.e(e, "[AndroidAuto] Error handling empty search query")
                     onSetPlaybackError(
                         android.support.v4.media.session.PlaybackStateCompat.ERROR_CODE_APP_ERROR,
@@ -223,11 +269,13 @@ class AudiobookMediaSessionCallback
 
             try {
                 val matchingBooks = bookRepository.searchAsync(query)
+                Timber.d("[VoiceCommandTrace] Search results - found: ${matchingBooks.size} books, first: ${matchingBooks.firstOrNull()?.title}")
                 if (matchingBooks.isNotEmpty()) {
                     val result = matchingBooks.first().id.toString()
                     if (playWhenReady) {
+                        Timber.d("[VoiceCommandTrace] Calling onPlayFromMediaId with bookId: $result")
                         onPlayFromMediaId(result, null)
-                    } else {
+                    } else{
                         onPrepareFromMediaId(result, null)
                     }
                 } else {
@@ -256,11 +304,13 @@ class AudiobookMediaSessionCallback
 
                             Timber.i("[AndroidAuto] Fallback playing book: ${bookToPlay.title}")
                             if (playWhenReady) {
+                                Timber.d("[VoiceCommandTrace] Calling onPlayFromMediaId with bookId: ${bookToPlay.id} (fallback)")
                                 onPlayFromMediaId(bookToPlay.id.toString(), null)
                             } else {
                                 onPrepareFromMediaId(bookToPlay.id.toString(), null)
                             }
                         } catch (e: Exception) {
+                            Timber.e(e, "[VoiceCommandTrace] Exception in handleSearchSuspend (fallback): ${e.message}")
                             Timber.e(e, "[AndroidAuto] Error during voice search fallback")
                             onSetPlaybackError(
                                 android.support.v4.media.session.PlaybackStateCompat.ERROR_CODE_APP_ERROR,
@@ -275,6 +325,7 @@ class AudiobookMediaSessionCallback
                     }
                 }
             } catch (e: Exception) {
+                Timber.e(e, "[VoiceCommandTrace] Exception in handleSearchSuspend (search): ${e.message}")
                 Timber.e(e, "[AndroidAuto] Error searching for query: $query")
                 onSetPlaybackError(
                     android.support.v4.media.session.PlaybackStateCompat.ERROR_CODE_APP_ERROR,
@@ -422,31 +473,45 @@ class AudiobookMediaSessionCallback
          * extras bundle referring to the specific track at key [KEY_START_TIME_TRACK_OFFSET]
          */
         override fun onPlayFromMediaId(
-            bookId: String?,
-            extras: Bundle?,
-        ) {
-            try {
-                // Pre-flight authentication check
-                if (!checkAuthenticationOrError()) return
-
-                if (bookId.isNullOrEmpty()) {
-                    Timber.e("[AndroidAuto] onPlayFromMediaId called with null/empty bookId")
+                bookId: String?,
+                extras: Bundle?,
+            ) {
+                Timber.d("[VoiceCommandTrace] onPlayFromMediaId ENTER - bookId: '$bookId', extras: ${if (extras == null) "null" else "Bundle"}")
+                
+                try {
+                    // Bridge audio already spoken in onPlayFromSearch - don't speak again
+                    // This prevents double-speaking and audio focus conflicts
+                    // Clear voice command flag to prevent stale state
+                    voiceCommandStartTime = null
+    
+                    // Pre-flight authentication check
+                    if (!checkAuthenticationOrError()) {
+                        Timber.d("[VoiceCommandTrace] onPlayFromMediaId early return - reason: authentication check failed")
+                        return
+                    }
+    
+                    if (bookId.isNullOrEmpty()) {
+                        Timber.d("[VoiceCommandTrace] onPlayFromMediaId early return - reason: null/empty bookId")
+                        Timber.e("[AndroidAuto] onPlayFromMediaId called with null/empty bookId")
+                        onSetPlaybackError(
+                            android.support.v4.media.session.PlaybackStateCompat.ERROR_CODE_APP_ERROR,
+                            appContext.getString(local.oss.chronicle.R.string.auto_error_audiobook_not_available),
+                        )
+                        return
+                    }
+                    Timber.i("[AndroidAuto] Playing media from ID: $bookId")
+                    Timber.d("[VoiceCommandTrace] Calling playBook with bookId: $bookId")
+                    playBook(bookId, extras ?: Bundle(), true)
+                    Timber.d("[VoiceCommandTrace] onPlayFromMediaId EXIT - success")
+                } catch (e: Exception) {
+                    Timber.e(e, "[VoiceCommandTrace] Exception in onPlayFromMediaId: ${e.message}")
+                    Timber.e(e, "[AndroidAuto] Error in onPlayFromMediaId for bookId=$bookId")
                     onSetPlaybackError(
                         android.support.v4.media.session.PlaybackStateCompat.ERROR_CODE_APP_ERROR,
-                        appContext.getString(local.oss.chronicle.R.string.auto_error_audiobook_not_available),
+                        appContext.getString(local.oss.chronicle.R.string.auto_error_playback_failed),
                     )
-                    return
                 }
-                Timber.i("[AndroidAuto] Playing media from ID: $bookId")
-                playBook(bookId, extras ?: Bundle(), true)
-            } catch (e: Exception) {
-                Timber.e(e, "[AndroidAuto] Error in onPlayFromMediaId for bookId=$bookId")
-                onSetPlaybackError(
-                    android.support.v4.media.session.PlaybackStateCompat.ERROR_CODE_APP_ERROR,
-                    appContext.getString(local.oss.chronicle.R.string.auto_error_playback_failed),
-                )
             }
-        }
 
         override fun onPrepareFromMediaId(
             bookId: String?,
@@ -463,12 +528,14 @@ class AudiobookMediaSessionCallback
                 Timber.e(e, "[AndroidAuto] Error in onPrepareFromMediaId for bookId=$bookId")
             }
         }
-
-        private fun playBook(
-            bookId: String,
-            extras: Bundle,
-            playWhenReady: Boolean,
-        ) {
+private fun playBook(
+    bookId: String,
+    extras: Bundle,
+    playWhenReady: Boolean,
+) {
+    Timber.d("[VoiceCommandTrace] playBook ENTER - bookId: '$bookId'")
+    
+            
             // The [MediaItemTrack.id] of the track to be played, either a unique non-negative ID from
             // the DB, or default to ACTIVE_TRACK, the most recently listened track in [bookId]
             val startingTrackId = extras.getLong(KEY_SEEK_TO_TRACK_WITH_ID, ACTIVE_TRACK)
@@ -481,7 +548,10 @@ class AudiobookMediaSessionCallback
             val startTimeOffsetMillis =
                 extras.getLong(KEY_START_TIME_TRACK_OFFSET, USE_SAVED_TRACK_PROGRESS)
 
-            check(bookId != EMPTY_AUDIOBOOK.id.toString()) { "Attempted to play empty audiobook" }
+            if (bookId == EMPTY_AUDIOBOOK.id.toString()) {
+                Timber.d("[VoiceCommandTrace] playBook early return - reason: attempted to play empty audiobook")
+                throw IllegalStateException("Attempted to play empty audiobook")
+            }
 
             if (BuildConfig.DEBUG) {
                 val debugTrackIdString =
@@ -499,6 +569,7 @@ class AudiobookMediaSessionCallback
                         trackRepository.getTracksForAudiobookAsync(bookId.toInt())
                     }
                 if (tracks.isEmpty()) {
+                    Timber.d("[VoiceCommandTrace] playBook - no tracks found, attempting to fetch from network")
                     handlePlayBookWithNoTracks(bookId, tracks, extras, playWhenReady)
                     return@launch
                 }
@@ -567,6 +638,7 @@ class AudiobookMediaSessionCallback
                         return@withContext bookRepository.getAudiobookAsync(bookId.toInt())
                     }
                 if (book == null || book.id == NO_AUDIOBOOK_FOUND_ID) {
+                    Timber.d("[VoiceCommandTrace] playBook early return - reason: no book found with id $bookId")
                     // Return if no book found- no reason to setup playback if there's no book
                     return@launch
                 }
@@ -636,9 +708,12 @@ class AudiobookMediaSessionCallback
                             getMediaItemUri(serverId, bookId),
                         )
                     } catch (e: Throwable) {
+                        Timber.e(e, "[VoiceCommandTrace] Exception starting media session: ${e.message}")
                         Timber.e("Failed to start media session: $e")
                     }
                 }
+                
+                Timber.d("[VoiceCommandTrace] playBook EXIT - success")
             }
         }
 
@@ -648,6 +723,7 @@ class AudiobookMediaSessionCallback
             extras: Bundle,
             playWhenReady: Boolean,
         ) {
+            Timber.d("[VoiceCommandTrace] handlePlayBookWithNoTracks ENTER - bookId: $bookId")
             Timber.i("No known tracks for book: $bookId, attempting to fetch them")
             // Tracks haven't been loaded by UI for this track, so load it here
             val networkTracks =
@@ -666,6 +742,9 @@ class AudiobookMediaSessionCallback
                     bookRepository.syncAudiobook(audiobook, tracks)
                 }
                 playBook(bookId, extras, playWhenReady)
+                Timber.d("[VoiceCommandTrace] handlePlayBookWithNoTracks EXIT - success, retrying playBook")
+            } else {
+                Timber.d("[VoiceCommandTrace] handlePlayBookWithNoTracks EXIT - failed to fetch tracks")
             }
         }
 

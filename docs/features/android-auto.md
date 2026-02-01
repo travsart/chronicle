@@ -6,6 +6,8 @@ This document covers Chronicle's Android Auto integration for in-car audiobook p
 
 Chronicle supports Android Auto, allowing users to browse and play audiobooks directly from their car's infotainment system.
 
+**Voice Command Optimization**: Chronicle uses Text-to-Speech (TTS) bridge audio to provide instant feedback for voice commands, meeting Google's 2-3 second response requirement. See [Voice Command Latency Analysis](../architecture/voice-command-latency-analysis.md) for technical details.
+
 ---
 
 ## Media Browser Structure
@@ -322,6 +324,38 @@ This prevents the Google Play violation where apps hang indefinitely without fee
 
 ---
 
+### Instant Voice Response (Bridge Audio)
+
+Chronicle implements **TTS bridge audio** to provide instant feedback when users issue voice commands, solving the ~6.9 second latency problem.
+
+**How it works:**
+1. User says: "Hey Google, play [book] on Chronicle"
+2. **Within 300ms**: TTS speaks "Getting ready to play your audiobook..."
+3. Background: Chronicle searches database, fetches tracks, resolves URLs, buffers
+4. ~6 seconds later: Audio playback starts seamlessly
+
+**User Experience Benefits:**
+- Meets Google's 2-3 second response requirement ✓
+- Provides instant audio feedback (no silent waiting)
+- Works only for voice commands (not UI taps)
+- Automatically stops when audiobook starts
+
+**Configuration:**
+- **Setting**: "Instant voice response"
+- **Preference Key**: `key_bridge_audio_enabled`
+- **Default**: Enabled (ON)
+- **Location**: Settings → Android Auto section
+
+**Implementation Details:**
+- Uses Android's TextToSpeech API (no audio files needed)
+- Lifecycle managed by [`MediaPlayerService`](../../app/src/main/java/local/oss/chronicle/features/player/MediaPlayerService.kt)
+- Triggered only in [`onPlayFromSearch()`](../../app/src/main/java/local/oss/chronicle/features/player/AudiobookMediaSessionCallback.kt)
+- Component: [`VoiceCommandBridgeAudio`](../../app/src/main/java/local/oss/chronicle/features/player/VoiceCommandBridgeAudio.kt)
+
+**Technical Documentation**: [Voice Command Latency Analysis](../architecture/voice-command-latency-analysis.md)
+
+---
+
 ### Voice Search Fallback Setting
 
 Chronicle provides a user-configurable setting to control behavior when voice search returns no results.
@@ -425,10 +459,20 @@ Use the **Android Auto Desktop Head Unit (DHU)** simulator or a real vehicle to 
 - [ ] Error state clears when playback succeeds
 - [ ] No silent failures - every command produces visible feedback
 
+#### Bridge Audio (Instant Voice Response)
+- [ ] "Hey Google, play [book] on Chronicle" → TTS speaks within 300ms
+- [ ] Bridge audio message: "Getting ready to play your audiobook"
+- [ ] Bridge audio stops when actual playback starts
+- [ ] UI taps in Android Auto DO NOT trigger bridge audio
+- [ ] Regular app playback (not voice commands) DOES NOT trigger bridge audio
+- [ ] Toggle "Instant voice response" setting → Behavior changes appropriately
+- [ ] Bridge audio disabled → No TTS speaks (direct to loading)
+
 #### Performance
-- [ ] Commands respond within 2-3 seconds under normal conditions
+- [ ] Commands respond within 2-3 seconds under normal conditions (perceived response with bridge audio <300ms)
 - [ ] Timeout occurs at exactly 10 seconds (not sooner or later)
 - [ ] No memory leaks when triggering multiple errors
+- [ ] TTS resources properly released when service destroyed
 
 ---
 

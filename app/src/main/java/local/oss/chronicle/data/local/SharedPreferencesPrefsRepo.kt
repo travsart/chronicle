@@ -8,6 +8,7 @@ import local.oss.chronicle.data.local.PrefsRepo.Companion.KEY_AUTO_REWIND_ENABLE
 import local.oss.chronicle.data.local.PrefsRepo.Companion.KEY_BOOK_COVER_STYLE
 import local.oss.chronicle.data.local.PrefsRepo.Companion.KEY_BOOK_SORT_BY
 import local.oss.chronicle.data.local.PrefsRepo.Companion.KEY_VOICE_SEARCH_FALLBACK
+import local.oss.chronicle.data.local.PrefsRepo.Companion.KEY_BRIDGE_AUDIO_ENABLED
 import local.oss.chronicle.data.local.PrefsRepo.Companion.KEY_DEBUG_DISABLE_PROGRESS
 import local.oss.chronicle.data.local.PrefsRepo.Companion.KEY_HIDE_PLAYED_AUDIOBOOKS
 import local.oss.chronicle.data.local.PrefsRepo.Companion.KEY_IS_LIBRARY_SORT_DESCENDING
@@ -57,6 +58,9 @@ interface PrefsRepo {
 
     /** Whether to resume on failed voice search in Android Auto */
     var voiceSearchFallbackEnabled: Boolean
+
+    /** Whether to speak instant voice response for Android Auto voice commands */
+    var bridgeAudioEnabled: Boolean
 
     /** Whether to fast-forward through silent bits of audio during playback */
     var skipSilence: Boolean
@@ -148,6 +152,7 @@ interface PrefsRepo {
         const val KEY_AUTO_REWIND_ENABLED = "key_auto_rewind_enabled"
         const val KEY_ALLOW_AUTO = "key_allow_auto"
         const val KEY_VOICE_SEARCH_FALLBACK = "key_voice_search_fallback_enabled"
+        const val KEY_BRIDGE_AUDIO_ENABLED = "key_bridge_audio_enabled"
         const val KEY_SHAKE_TO_SNOOZE_ENABLED = "key_shake_to_snooze_enabled"
         const val KEY_PAUSE_ON_FOCUS_LOST = "key_pause_on_focus_lost"
         const val KEY_IS_PREMIUM = "key_is_premium"
@@ -268,6 +273,11 @@ class SharedPreferencesPrefsRepo
         override var voiceSearchFallbackEnabled: Boolean
             get() = sharedPreferences.getBoolean(KEY_VOICE_SEARCH_FALLBACK, defaultVoiceSearchFallback)
             set(value) = sharedPreferences.edit().putBoolean(KEY_VOICE_SEARCH_FALLBACK, value).apply()
+
+        private val defaultBridgeAudioEnabled = true
+        override var bridgeAudioEnabled: Boolean
+            get() = sharedPreferences.getBoolean(KEY_BRIDGE_AUDIO_ENABLED, defaultBridgeAudioEnabled)
+            set(value) = sharedPreferences.edit().putBoolean(KEY_BRIDGE_AUDIO_ENABLED, value).apply()
 
         private val defaultIsPremium = true
         override val isPremium: Boolean

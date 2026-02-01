@@ -112,6 +112,9 @@ class AudiobookMediaSessionCallbackTest {
     @RelaxedMockK
     private lateinit var playbackStateController: PlaybackStateController
 
+    @RelaxedMockK
+    private lateinit var voiceCommandBridgeAudio: VoiceCommandBridgeAudio
+
     @MockK
     private lateinit var mockPlayer: Player
 
@@ -158,6 +161,7 @@ class AudiobookMediaSessionCallbackTest {
                 progressUpdater = progressUpdater,
                 playbackUrlResolver = playbackUrlResolver,
                 playbackStateController = playbackStateController,
+                voiceCommandBridgeAudio = voiceCommandBridgeAudio,
                 coroutineExceptionHandler = testExceptionHandler,
                 defaultPlayer = defaultPlayer,
             )

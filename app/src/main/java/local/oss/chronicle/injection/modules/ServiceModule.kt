@@ -215,4 +215,9 @@ class ServiceModule(private val service: MediaPlayerService) {
         plexMediaService: PlexMediaService,
         plexConfig: PlexConfig,
     ): PlaybackUrlResolver = PlaybackUrlResolver(plexMediaService, plexConfig)
+
+    @Provides
+    @ServiceScope
+    fun voiceCommandBridgeAudio(): VoiceCommandBridgeAudio =
+        VoiceCommandBridgeAudio(service)
 }

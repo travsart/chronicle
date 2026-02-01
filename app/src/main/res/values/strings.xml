@@ -271,6 +271,9 @@
     <string name="settings_auto_enable_summary">Allow Chronicle to appear in Android Auto for hands-free audiobook playback while driving</string>
     <string name="settings_voice_search_fallback_title">Resume on failed voice search</string>
     <string name="settings_voice_search_fallback_explanation">When a voice search in Android Auto finds nothing, resume the most recently played audiobook instead of showing an error</string>
+    <string name="settings_bridge_audio_title">Instant voice response</string>
+    <string name="settings_bridge_audio_explanation">Speak confirmation immediately when using voice commands in Android Auto</string>
+    <string name="voice_bridge_preparing_audiobook">Getting ready to play your audiobook</string>
     <string name="not_logged_in">Not logged in</string>
     <string name="not_logged_in_explanation">Log in to Plex to see your library</string>
     <string name="no_server_chosen">No server chosen</string>

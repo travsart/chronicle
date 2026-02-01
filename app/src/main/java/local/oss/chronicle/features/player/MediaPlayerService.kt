@@ -124,6 +124,9 @@ class MediaPlayerService :
     @Inject
     lateinit var playbackStateController: PlaybackStateController
 
+    @Inject
+    lateinit var voiceCommandBridgeAudio: VoiceCommandBridgeAudio
+
     companion object {
         /** Strings used by plex to indicate playback state */
         const val PLEX_STATE_PLAYING = "playing"
@@ -227,6 +230,9 @@ class MediaPlayerService :
         ServiceUtils.notifyServiceStarted(this)
 
         Timber.i("Service created! $this")
+
+        // Initialize TTS early so it's ready for voice commands
+        voiceCommandBridgeAudio.initialize()
 
         updateAudioAttrs(exoPlayer)
 
@@ -626,6 +632,10 @@ class MediaPlayerService :
 
     override fun onDestroy() {
         Timber.i("Service destroyed")
+        
+        // Release TTS resources
+        voiceCommandBridgeAudio.release()
+        
         // Send one last update to local/remote servers that playback has stopped
         val metadata = mediaController.metadata
         val trackId = metadata?.id
@@ -1004,8 +1014,9 @@ class MediaPlayerService :
                 }
                 updateSessionPlaybackState()
 
-                // Log voice command latency when playback starts
+                // When playback actually starts, stop TTS bridge audio and log latency
                 if (isPlaying) {
+                    voiceCommandBridgeAudio.stop()
                     mediaSessionCallback.logVoiceCommandLatencyIfPending()
                 }
             }
