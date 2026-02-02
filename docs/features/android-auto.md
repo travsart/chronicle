@@ -14,13 +14,32 @@ Chronicle supports Android Auto, allowing users to browse and play audiobooks di
 
 ```
 Root
-├── Recently Listened
-├── Offline (Downloaded)
-├── Recently Added
-└── Library (All Books)
+├── Recently Listened (conditional)
+├── Offline (Downloaded) (conditional)
+├── Recently Added (always shown)
+└── Library (All Books) (always shown)
 ```
 
 The media browser hierarchy is designed for easy navigation while driving, with the most commonly accessed content at the top level.
+
+### Conditional Tab Visibility
+
+To provide a cleaner user interface, Chronicle conditionally shows browse tree tabs based on available content:
+
+| Tab | Visibility Condition | Repository Method |
+|-----|---------------------|-------------------|
+| **Recently Listened** | Only shown if user has playback history | [`bookRepository.getRecentlyListenedAsync()`](../../app/src/main/java/local/oss/chronicle/data/local/BookRepository.kt) returns non-empty results |
+| **Offline** | Only shown if user has downloaded audiobooks | [`bookRepository.getCachedAudiobooksAsync()`](../../app/src/main/java/local/oss/chronicle/data/local/BookRepository.kt) returns non-empty results |
+| **Recently Added** | Always visible | N/A |
+| **Library** | Always visible | N/A |
+
+**Benefits:**
+- Users who haven't listened to anything won't see an empty "Recently Listened" tab
+- Users without downloaded content won't see an empty "Offline" tab
+- Reduces visual clutter and improves first-time user experience
+- Android Auto UI remains focused on relevant actions
+
+**Implementation**: [`MediaPlayerService.kt:810-856`](../../app/src/main/java/local/oss/chronicle/features/player/MediaPlayerService.kt:810-856)
 
 ---
 

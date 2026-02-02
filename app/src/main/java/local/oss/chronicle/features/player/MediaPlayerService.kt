@@ -807,35 +807,52 @@ class MediaPlayerService :
                                 return@withContext
                             }
 
-                            Timber.d("[AndroidAuto] Loading root categories")
-                            result.sendResult(
-                                (
-                                    listOf(
-                                        makeBrowsable(
-                                            getString(R.string.auto_category_recently_listened),
-                                            R.drawable.ic_recent,
-                                        ),
-                                    ) +
-                                        listOf(
-                                            makeBrowsable(
-                                                getString(R.string.auto_category_offline),
-                                                R.drawable.ic_cloud_download_white,
-                                            ),
-                                        ) +
-                                        listOf(
-                                            makeBrowsable(
-                                                getString(R.string.auto_category_recently_added),
-                                                R.drawable.ic_add,
-                                            ),
-                                        ) +
-                                        listOf(
-                                            makeBrowsable(
-                                                getString(R.string.auto_category_library),
-                                                R.drawable.nav_library,
-                                            ),
-                                        )
-                                ).toMutableList(),
+                            // Query content to determine tab visibility
+                            val recentlyListened = bookRepository.getRecentlyListenedAsync()
+                            val cachedBooks = bookRepository.getCachedAudiobooksAsync()
+
+                            // Build tab list conditionally based on content
+                            val tabs = mutableListOf<MediaBrowserCompat.MediaItem>()
+
+                            if (recentlyListened.isNotEmpty()) {
+                                tabs.add(
+                                    makeBrowsable(
+                                        getString(R.string.auto_category_recently_listened),
+                                        R.drawable.ic_recent,
+                                    ),
+                                )
+                            }
+
+                            if (cachedBooks.isNotEmpty()) {
+                                tabs.add(
+                                    makeBrowsable(
+                                        getString(R.string.auto_category_offline),
+                                        R.drawable.ic_cloud_download_white,
+                                    ),
+                                )
+                            }
+
+                            tabs.add(
+                                makeBrowsable(
+                                    getString(R.string.auto_category_recently_added),
+                                    R.drawable.ic_add,
+                                ),
                             )
+
+                            tabs.add(
+                                makeBrowsable(
+                                    getString(R.string.auto_category_library),
+                                    R.drawable.nav_library,
+                                ),
+                            )
+
+                            Timber.d(
+                                "[AndroidAuto] Loading root categories: " +
+                                    "recentlyListened=${recentlyListened.size}, " +
+                                    "cachedBooks=${cachedBooks.size}, " +
+                                    "tabs=${tabs.size}",
+                            )
+                            result.sendResult(tabs)
                         }
                         getString(R.string.auto_category_recently_listened) -> {
                             Timber.d("[AndroidAuto] Loading recently listened")
