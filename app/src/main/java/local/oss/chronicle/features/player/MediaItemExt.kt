@@ -35,13 +35,13 @@ fun makeBrowsable(
 
 /**
  * Create a message item for Android Auto error/info display.
- * These items appear as playable items in the list so the subtitle is visible.
- * They cannot actually be played - attempting to play them does nothing.
+ * Uses FLAG_PLAYABLE so Android Auto displays the item (0 flags would be filtered out).
+ * When tapped, AudiobookMediaSessionCallback sets an error PlaybackState to show the message.
  *
  * @param title The main message to display
  * @param subtitle Optional subtitle/additional context (shown below title)
  * @param iconRes Icon resource to display
- * @param mediaId Unique identifier for this message item
+ * @param mediaId Unique identifier for this message item (must start with "__error" or "__message")
  */
 fun makeMessageItem(
     title: String,
@@ -63,6 +63,7 @@ fun makeMessageItem(
             .setMediaId(mediaId)
             .setExtras(extras)
             .build()
-    // FLAG_PLAYABLE so Android Auto displays it as a list item with visible subtitle
+    // FLAG_PLAYABLE ensures Android Auto displays the item (0 flags would be filtered out)
+    // When tapped, AudiobookMediaSessionCallback sets an error PlaybackState
     return MediaItem(mediaDescription, FLAG_PLAYABLE)
 }

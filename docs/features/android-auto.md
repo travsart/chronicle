@@ -151,6 +151,39 @@ When media loading fails:
 2. Return empty browser result (not crash)
 3. Display user-friendly message if possible
 
+### Message Item Handling
+
+Chronicle displays informational messages in the Android Auto browse tree for error states and user guidance (e.g., "Not logged in" messages). These message items require special handling to prevent unintended behavior.
+
+**Technical Implementation:**
+
+Message items use `FLAG_PLAYABLE` to ensure Android Auto displays them properly with subtitle text. Without this flag, Android Auto may not render the subtitle correctly.
+
+**Preventing Infinite Spinner:**
+
+When users click on message items in the Android Auto UI, the system would normally attempt playback, causing an infinite spinner. Chronicle prevents this by detecting and ignoring clicks on message items in [`AudiobookMediaSessionCallback.onPlayFromMediaId()`](../../app/src/main/java/local/oss/chronicle/features/player/AudiobookMediaSessionCallback.kt:475):
+
+```kotlin
+// Ignore clicks on error/message items
+if (mediaId.startsWith("__error") || mediaId.startsWith("__message")) {
+    Timber.d("[AndroidAuto] Ignoring click on message item: $mediaId")
+    return
+}
+```
+
+**Media ID Prefixes:**
+
+| Prefix | Usage | Example |
+|--------|-------|---------|
+| `__error` | Error state messages | Authentication failures, network errors |
+| `__message` | Informational messages | "Not logged in", empty library notices |
+
+**User Experience:**
+
+- Message items appear clickable in Android Auto UI (required for proper display)
+- Clicks are gracefully ignored (no spinner, no error feedback)
+- Users can navigate away without triggering playback attempts
+
 ---
 
 ## MediaSession State Synchronization
@@ -187,6 +220,80 @@ graph LR
 | Position | PlaybackStateController | Position updates (debounced) |
 | Track metadata | TrackListStateManager | Track change |
 | Error state | ChronicleError | Playback error |
+
+---
+
+## Browse Tree Refresh on Login State Changes
+
+Chronicle automatically refreshes the Android Auto browse tree when the user's login state changes, ensuring that the library content is immediately available after logging in without requiring the user to manually disconnect and reconnect.
+
+### Implementation
+
+[`MediaPlayerService`](../../app/src/main/java/local/oss/chronicle/features/player/MediaPlayerService.kt) observes [`plexLoginRepo.loginEvent`](../../app/src/main/java/local/oss/chronicle/data/sources/plex/PlexLoginRepo.kt) through a `loginStateObserver`:
+
+```kotlin
+private val loginStateObserver = Observer<PlexLoginEvent> { event ->
+    Timber.d("[AndroidAuto] Login state changed: $event")
+    notifyChildrenChanged(CHRONICLE_MEDIA_ROOT_ID)
+}
+```
+
+**When the observer is triggered:**
+1. User completes login flow in the phone app
+2. [`PlexLoginRepo`](../../app/src/main/java/local/oss/chronicle/data/sources/plex/PlexLoginRepo.kt) emits a login event
+3. [`MediaPlayerService`](../../app/src/main/java/local/oss/chronicle/features/player/MediaPlayerService.kt) receives the event
+4. Service calls `notifyChildrenChanged(CHRONICLE_MEDIA_ROOT_ID)`
+5. Android Auto invalidates its cache and fetches new browse tree content
+6. User sees the library automatically populated in Android Auto
+
+### Data Flow
+
+```mermaid
+sequenceDiagram
+    participant User as User (Phone App)
+    participant PLR as PlexLoginRepo
+    participant MPS as MediaPlayerService
+    participant Auto as Android Auto
+
+    User->>PLR: Complete login
+    PLR->>PLR: Emit loginEvent
+    PLR->>MPS: loginStateObserver triggered
+    MPS->>MPS: notifyChildrenChanged(ROOT)
+    MPS->>Auto: Browse tree invalidated
+    Auto->>MPS: onLoadChildren(ROOT)
+    MPS-->>Auto: Updated content (library)
+    Auto->>Auto: Display library
+```
+
+### User Experience
+
+**Before Fix:**
+- User logs in on phone app
+- Android Auto still shows "Not logged in" message
+- User must disconnect and reconnect Android Auto to see library
+
+**After Fix:**
+- User logs in on phone app
+- Android Auto **automatically refreshes** within seconds
+- Library content appears immediately (no reconnection needed)
+
+### Lifecycle Management
+
+The observer is registered when [`MediaPlayerService`](../../app/src/main/java/local/oss/chronicle/features/player/MediaPlayerService.kt) is created and unregistered when destroyed to prevent memory leaks:
+
+```kotlin
+override fun onCreate() {
+    super.onCreate()
+    plexLoginRepo.loginEvent.observeForever(loginStateObserver)
+}
+
+override fun onDestroy() {
+    plexLoginRepo.loginEvent.removeObserver(loginStateObserver)
+    super.onDestroy()
+}
+```
+
+---
 
 ## Safety Considerations
 

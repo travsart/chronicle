@@ -35,30 +35,30 @@ class LibrarySyncRepository
                     _isRefreshing.postValue(true)
                     bookRepository.refreshDataPaginated()
                     trackRepository.refreshDataPaginated()
+
+                    // TODO: Loading all data into memory :O
+                    val audiobooks = bookRepository.getAllBooksAsync()
+                    val tracks = trackRepository.getAllTracksAsync()
+                    audiobooks.forEach { book ->
+                        // TODO: O(n^2) so could be bad for big libs, grouping by tracks first would be O(n)
+
+                        // Not necessarily in the right order, but it doesn't matter for updateTrackData
+                        val tracksInAudiobook = tracks.filter { it.parentKey == book.id }
+                        bookRepository.updateTrackData(
+                            bookId = book.id,
+                            bookProgress = tracksInAudiobook.getProgress(),
+                            bookDuration = tracksInAudiobook.getDuration(),
+                            trackCount = tracksInAudiobook.size,
+                        )
+                    }
+
+                    collectionsRepository.refreshCollectionsPaginated()
                 } catch (e: Throwable) {
                     val msg = "Failed to refresh data: ${e.message}"
                     Toast.makeText(Injector.get().applicationContext(), msg, LENGTH_LONG).show()
                 } finally {
                     _isRefreshing.postValue(false)
                 }
-
-                // TODO: Loading all data into memory :O
-                val audiobooks = bookRepository.getAllBooksAsync()
-                val tracks = trackRepository.getAllTracksAsync()
-                audiobooks.forEach { book ->
-                    // TODO: O(n^2) so could be bad for big libs, grouping by tracks first would be O(n)
-
-                    // Not necessarily in the right order, but it doesn't matter for updateTrackData
-                    val tracksInAudiobook = tracks.filter { it.parentKey == book.id }
-                    bookRepository.updateTrackData(
-                        bookId = book.id,
-                        bookProgress = tracksInAudiobook.getProgress(),
-                        bookDuration = tracksInAudiobook.getDuration(),
-                        trackCount = tracksInAudiobook.size,
-                    )
-                }
-
-                collectionsRepository.refreshCollectionsPaginated()
             }
         }
     }

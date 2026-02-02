@@ -39,6 +39,7 @@ import local.oss.chronicle.application.Injector
 import local.oss.chronicle.data.local.IBookRepository
 import local.oss.chronicle.data.local.ITrackRepository
 import local.oss.chronicle.data.local.ITrackRepository.Companion.TRACK_NOT_FOUND
+import local.oss.chronicle.data.local.LibrarySyncRepository
 import local.oss.chronicle.data.local.PrefsRepo
 import local.oss.chronicle.data.model.MediaItemTrack
 import local.oss.chronicle.data.model.getActiveTrack
@@ -47,6 +48,7 @@ import local.oss.chronicle.data.model.toMediaItem
 import local.oss.chronicle.data.sources.plex.*
 import local.oss.chronicle.data.sources.plex.IPlexLoginRepo.LoginState.*
 import local.oss.chronicle.data.sources.plex.model.getDuration
+import local.oss.chronicle.util.Event
 import local.oss.chronicle.features.currentlyplaying.CurrentlyPlaying
 import local.oss.chronicle.features.player.SleepTimer.Companion.ARG_SLEEP_TIMER_ACTION
 import local.oss.chronicle.features.player.SleepTimer.Companion.ARG_SLEEP_TIMER_DURATION_MILLIS
@@ -126,6 +128,9 @@ class MediaPlayerService :
 
     @Inject
     lateinit var voiceCommandBridgeAudio: VoiceCommandBridgeAudio
+
+    @Inject
+    lateinit var librarySyncRepository: LibrarySyncRepository
 
     companion object {
         /** Strings used by plex to indicate playback state */
@@ -280,6 +285,8 @@ class MediaPlayerService :
         progressUpdater.startRegularProgressUpdates()
 
         plexConfig.connectionState.observeForever(serverChangedListener)
+        plexLoginRepo.loginEvent.observeForever(loginStateObserver)
+        librarySyncRepository.isRefreshing.observeForever(librarySyncObserver)
     }
 
     private fun updateAudioAttrs(exoPlayer: ExoPlayer) {
@@ -420,6 +427,20 @@ class MediaPlayerService :
                 onChangeConnection()
             }
         }
+
+    private val loginStateObserver = Observer<Event<IPlexLoginRepo.LoginState>> { event ->
+        event.peekContent().let { loginState ->
+            Timber.d("[AndroidAuto] Login state changed: $loginState")
+            notifyChildrenChanged(CHRONICLE_MEDIA_ROOT_ID)
+        }
+    }
+
+    private val librarySyncObserver = Observer<Boolean> { isRefreshing ->
+        if (!isRefreshing) {
+            Timber.d("[AndroidAuto] Library sync completed, refreshing browse tree")
+            notifyChildrenChanged(CHRONICLE_MEDIA_ROOT_ID)
+        }
+    }
 
     /**
      * Change the tracks in the player to refer to the new server url. Because [PlexConfig] is a
@@ -635,6 +656,9 @@ class MediaPlayerService :
         
         // Release TTS resources
         voiceCommandBridgeAudio.release()
+        
+        plexLoginRepo.loginEvent.removeObserver(loginStateObserver)
+        librarySyncRepository.isRefreshing.removeObserver(librarySyncObserver)
         
         // Send one last update to local/remote servers that playback has stopped
         val metadata = mediaController.metadata

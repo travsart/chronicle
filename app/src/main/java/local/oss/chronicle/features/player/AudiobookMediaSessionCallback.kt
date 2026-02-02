@@ -478,6 +478,19 @@ class AudiobookMediaSessionCallback
             ) {
                 Timber.d("[VoiceCommandTrace] onPlayFromMediaId ENTER - bookId: '$bookId', extras: ${if (extras == null) "null" else "Bundle"}")
                 
+                // Early return for non-playable message items (from Android Auto error/info display)
+                // These items use FLAG_PLAYABLE to ensure Android Auto displays them, but should not trigger playback
+                if (bookId?.startsWith("__error") == true || bookId?.startsWith("__message") == true) {
+                    Timber.d("[AndroidAuto] Ignoring click on message item: $bookId")
+                    // Set error state to dismiss Android Auto's "Now Playing" screen
+                    // This signals Android Auto to abort the playback attempt and return to browse view
+                    onSetPlaybackError(
+                        android.support.v4.media.session.PlaybackStateCompat.ERROR_CODE_NOT_SUPPORTED,
+                        "" // Empty message - we don't want to show a toast, just dismiss the UI
+                    )
+                    return
+                }
+                
                 try {
                     // Bridge audio already spoken in onPlayFromSearch - don't speak again
                     // This prevents double-speaking and audio focus conflicts
