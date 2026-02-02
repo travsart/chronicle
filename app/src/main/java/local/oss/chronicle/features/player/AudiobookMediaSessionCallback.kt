@@ -146,7 +146,7 @@ class AudiobookMediaSessionCallback
                 else -> {
                     onSetPlaybackError(
                         android.support.v4.media.session.PlaybackStateCompat.ERROR_CODE_APP_ERROR,
-                        "Please open Chronicle app to complete setup",
+                        "Please open Chronicle app on the phone to complete setup",
                     )
                     false
                 }

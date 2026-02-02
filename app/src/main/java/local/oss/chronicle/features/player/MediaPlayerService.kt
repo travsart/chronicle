@@ -797,7 +797,7 @@ class MediaPlayerService :
                                         }
                                         else -> {
                                             makeMessageItem(
-                                                title = "Please open Chronicle app to complete setup",
+                                                title = "Please open Chronicle app on the phone to complete setup",
                                                 iconRes = R.drawable.ic_error_outline_white,
                                                 mediaId = "__error_unknown__",
                                             )
