@@ -295,6 +295,7 @@
     <string name="auto_error_audiobook_not_available">This audiobook is not available</string>
     <string name="auto_error_playback_failed">Unable to play audiobook</string>
     <string name="auto_error_connection_timeout">Connection timeout - please check your network</string>
+    <string name="error_not_logged_in_voice">Please log in to Chronicle first</string>
     
     <string name="submit">Submit</string>
     <string name="enter_pin">Enter pin</string>

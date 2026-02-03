@@ -112,7 +112,7 @@ class AudiobookMediaSessionCallback
          */
         private fun checkAuthenticationOrError(): Boolean {
             val loginState = plexLoginRepo.loginEvent.value?.peekContent()
-
+    
             return when (loginState) {
                 NOT_LOGGED_IN -> {
                     onSetPlaybackError(
@@ -148,6 +148,80 @@ class AudiobookMediaSessionCallback
                         android.support.v4.media.session.PlaybackStateCompat.ERROR_CODE_APP_ERROR,
                         "Please open Chronicle app on the phone to complete setup",
                     )
+                    false
+                }
+            }
+        }
+    
+        /**
+         * Checks authentication for voice commands and provides TTS feedback on errors.
+         * This variant is used in onPlayFromSearch to provide immediate audio feedback
+         * when authentication fails during a voice command.
+         *
+         * @return true if authentication is valid, false otherwise
+         */
+        private fun checkAuthenticationOrErrorWithVoiceFeedback(): Boolean {
+            val loginState = plexLoginRepo.loginEvent.value?.peekContent()
+            val shouldPlayBridgeAudio = prefsRepo.bridgeAudioEnabled
+    
+            return when (loginState) {
+                NOT_LOGGED_IN -> {
+                    val errorMessage = appContext.getString(local.oss.chronicle.R.string.error_not_logged_in_voice)
+                    onSetPlaybackError(
+                        android.support.v4.media.session.PlaybackStateCompat.ERROR_CODE_AUTHENTICATION_EXPIRED,
+                        appContext.getString(local.oss.chronicle.R.string.auto_access_error_not_logged_in),
+                    )
+                    if (shouldPlayBridgeAudio) {
+                        voiceCommandBridgeAudio.speakErrorMessage(errorMessage)
+                    }
+                    false
+                }
+                LOGGED_IN_NO_SERVER_CHOSEN -> {
+                    onSetPlaybackError(
+                        android.support.v4.media.session.PlaybackStateCompat.ERROR_CODE_NOT_SUPPORTED,
+                        appContext.getString(local.oss.chronicle.R.string.auto_access_error_no_server_chosen),
+                    )
+                    if (shouldPlayBridgeAudio) {
+                        voiceCommandBridgeAudio.speakErrorMessage(
+                            appContext.getString(local.oss.chronicle.R.string.auto_access_error_no_server_chosen)
+                        )
+                    }
+                    false
+                }
+                LOGGED_IN_NO_USER_CHOSEN -> {
+                    onSetPlaybackError(
+                        android.support.v4.media.session.PlaybackStateCompat.ERROR_CODE_NOT_SUPPORTED,
+                        appContext.getString(local.oss.chronicle.R.string.auto_access_error_no_user_chosen),
+                    )
+                    if (shouldPlayBridgeAudio) {
+                        voiceCommandBridgeAudio.speakErrorMessage(
+                            appContext.getString(local.oss.chronicle.R.string.auto_access_error_no_user_chosen)
+                        )
+                    }
+                    false
+                }
+                LOGGED_IN_NO_LIBRARY_CHOSEN -> {
+                    onSetPlaybackError(
+                        android.support.v4.media.session.PlaybackStateCompat.ERROR_CODE_NOT_SUPPORTED,
+                        appContext.getString(local.oss.chronicle.R.string.auto_access_error_no_library_chosen),
+                    )
+                    if (shouldPlayBridgeAudio) {
+                        voiceCommandBridgeAudio.speakErrorMessage(
+                            appContext.getString(local.oss.chronicle.R.string.auto_access_error_no_library_chosen)
+                        )
+                    }
+                    false
+                }
+                LOGGED_IN_FULLY -> true
+                else -> {
+                    val errorMessage = "Please open Chronicle app on the phone to complete setup"
+                    onSetPlaybackError(
+                        android.support.v4.media.session.PlaybackStateCompat.ERROR_CODE_APP_ERROR,
+                        errorMessage,
+                    )
+                    if (shouldPlayBridgeAudio) {
+                        voiceCommandBridgeAudio.speakErrorMessage(errorMessage)
+                    }
                     false
                 }
             }
@@ -188,6 +262,14 @@ class AudiobookMediaSessionCallback
                 voiceCommandStartTime = System.currentTimeMillis()
                 Timber.i("[AndroidAuto] Play from search: $query (voice command received at $voiceCommandStartTime)")
     
+                // Pre-flight authentication check BEFORE speaking bridge audio
+                // This prevents speaking "Getting ready..." when user isn't logged in
+                if (!checkAuthenticationOrErrorWithVoiceFeedback()) {
+                    Timber.d("[VoiceCommandTrace] onPlayFromSearch early return - reason: authentication check failed")
+                    voiceCommandStartTime = null // Clear on error
+                    return
+                }
+    
                 // Check bridge audio eligibility
                 Timber.d("[VoiceCommandTrace] Checking bridge audio eligibility - voiceCommandStartTime: $voiceCommandStartTime")
                 
@@ -199,13 +281,6 @@ class AudiobookMediaSessionCallback
                 if (shouldPlayBridgeAudio) {
                     voiceCommandBridgeAudio.speakBridgeMessage()
                     Timber.i("[VoiceCommandBridge] Speaking bridge audio for voice command")
-                }
-    
-                // Pre-flight authentication check
-                if (!checkAuthenticationOrError()) {
-                    Timber.d("[VoiceCommandTrace] onPlayFromSearch early return - reason: authentication check failed")
-                    voiceCommandStartTime = null // Clear on error
-                    return
                 }
     
                 serviceScope.launch(coroutineExceptionHandler) {

@@ -8,6 +8,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import local.oss.chronicle.application.Injector
 import local.oss.chronicle.data.model.getProgress
 import local.oss.chronicle.data.sources.plex.model.getDuration
@@ -25,14 +26,16 @@ class LibrarySyncRepository
         private var repoJob = Job()
         private val repoScope = CoroutineScope(repoJob + Dispatchers.IO)
 
-        private var _isRefreshing = MutableLiveData<Boolean>()
+        private var _isRefreshing = MutableLiveData<Boolean>(false)
         val isRefreshing: LiveData<Boolean>
             get() = _isRefreshing
 
         fun refreshLibrary() {
             repoScope.launch {
                 try {
-                    _isRefreshing.postValue(true)
+                    withContext(Dispatchers.Main) {
+                        _isRefreshing.value = true
+                    }
                     bookRepository.refreshDataPaginated()
                     trackRepository.refreshDataPaginated()
 
@@ -57,7 +60,9 @@ class LibrarySyncRepository
                     val msg = "Failed to refresh data: ${e.message}"
                     Toast.makeText(Injector.get().applicationContext(), msg, LENGTH_LONG).show()
                 } finally {
-                    _isRefreshing.postValue(false)
+                    withContext(Dispatchers.Main) {
+                        _isRefreshing.value = false
+                    }
                 }
             }
         }

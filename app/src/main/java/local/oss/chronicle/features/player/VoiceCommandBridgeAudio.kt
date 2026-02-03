@@ -127,6 +127,18 @@ class VoiceCommandBridgeAudio @Inject constructor(
     }
 
     /**
+     * Speak an error message for Android Auto voice commands.
+     * Used to provide immediate audio feedback when a voice command fails
+     * (e.g., user not logged in, no results found, etc.).
+     *
+     * @param message The error message to speak via TTS
+     */
+    fun speakErrorMessage(message: String) {
+        Timber.i("[$TAG] Speaking error message: '$message'")
+        speak(message)
+    }
+
+    /**
      * Speak the given text using TTS with a 200ms silence prefix.
      * If TTS is not ready yet, the message will be queued and spoken when initialization completes.
      *
