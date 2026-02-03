@@ -16,6 +16,7 @@ This document provides a high-level overview of Chronicle's architecture. For de
 | [Dependency Injection](architecture/dependency-injection.md) | Dagger 2 component hierarchy, modules, and scopes |
 | [Architectural Patterns](architecture/patterns.md) | Key patterns: Repository, MVVM, MediaBrowserService, State Machines |
 | [Plex Integration](architecture/plex-integration.md) | Plex API integration, server connection selection, client profiles, bandwidth-aware playback |
+| [Lazy Token Injection](architecture/lazy-token-injection.md) | ExoPlayer HTTP DataSource lazy token injection pattern to prevent stale auth tokens |
 
 ---
 

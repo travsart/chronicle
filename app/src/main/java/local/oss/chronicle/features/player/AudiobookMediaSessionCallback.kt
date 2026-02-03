@@ -11,7 +11,7 @@ import androidx.core.content.IntentCompat
 import androidx.lifecycle.Observer
 import androidx.media3.common.Player
 import androidx.media3.datasource.DefaultDataSource
-import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import com.github.michaelbull.result.Ok
 import kotlinx.coroutines.*
@@ -47,7 +47,7 @@ class AudiobookMediaSessionCallback
         private val plexConfig: PlexConfig,
         private val plexLoginRepo: IPlexLoginRepo,
         private val mediaController: MediaControllerCompat,
-        private val dataSourceFactory: DefaultHttpDataSource.Factory,
+        private val dataSourceFactory: HttpDataSource.Factory,
         private val trackRepository: ITrackRepository,
         private val bookRepository: IBookRepository,
         private val serviceScope: CoroutineScope,
@@ -560,8 +560,10 @@ class AudiobookMediaSessionCallback
                     // Set error state to dismiss Android Auto's "Now Playing" screen
                     // This signals Android Auto to abort the playback attempt and return to browse view
                     onSetPlaybackError(
-                        android.support.v4.media.session.PlaybackStateCompat.ERROR_CODE_NOT_SUPPORTED,
-                        "" // Empty message - we don't want to show a toast, just dismiss the UI
+                        android.support.v4.media.session.PlaybackStateCompat.ERROR_CODE_AUTHENTICATION_EXPIRED,
+                        appContext.getString(local.oss.chronicle.R.string.auto_error_complete_required_steps_on_phone),
+
+                        //"" // Empty message - we don't want to show a toast, just dismiss the UI
                     )
                     return
                 }

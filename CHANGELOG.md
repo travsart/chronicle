@@ -61,6 +61,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CHANGELOG.md file to track all notable changes to the project
 
 ### Fixed
+- Fixed HTTP 401 error on Android Auto cold start due to stale auth tokens in ExoPlayer DataSource
 - Fixed server connections accumulating over time - server list now refreshes every 24 hours (every startup in debug builds) and replaces stale connections instead of merging
 
 ### Improved (Playback Robustness)

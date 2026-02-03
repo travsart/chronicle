@@ -15,6 +15,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.media3.common.util.Util
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import dagger.Module
@@ -26,9 +27,12 @@ import local.oss.chronicle.application.MainActivity
 import local.oss.chronicle.data.sources.plex.APP_NAME
 import local.oss.chronicle.data.sources.plex.PlaybackUrlResolver
 import local.oss.chronicle.data.sources.plex.PlexConfig
+import local.oss.chronicle.data.sources.plex.PlexHttpDataSourceFactory
 import local.oss.chronicle.data.sources.plex.PlexMediaService
 import local.oss.chronicle.data.sources.plex.PlexPrefsRepo
 import local.oss.chronicle.features.player.*
+import local.oss.chronicle.util.SecurityUtils
+import timber.log.Timber
 import local.oss.chronicle.features.player.MediaPlayerService.Companion.EXOPLAYER_BACK_BUFFER_DURATION_MILLIS
 import local.oss.chronicle.features.player.MediaPlayerService.Companion.EXOPLAYER_MAX_BUFFER_DURATION_MILLIS
 import local.oss.chronicle.features.player.MediaPlayerService.Companion.EXOPLAYER_MIN_BUFFER_DURATION_MILLIS
@@ -146,36 +150,23 @@ class ServiceModule(private val service: MediaPlayerService) {
 
     @Provides
     @ServiceScope
-    fun plexDataSourceFactory(plexPrefs: PlexPrefsRepo): DefaultHttpDataSource.Factory {
-        val dataSourceFactory = DefaultHttpDataSource.Factory()
-        dataSourceFactory.setUserAgent(Util.getUserAgent(service, APP_NAME))
-
-        dataSourceFactory.setDefaultRequestProperties(
-            mapOf(
-                "X-Plex-Platform" to "Android",
-                "X-Plex-Provides" to "player",
-                "X-Plex_Client-Name" to APP_NAME,
-                "X-Plex-Client-Identifier" to plexPrefs.uuid,
-                "X-Plex-Version" to BuildConfig.VERSION_NAME,
-                "X-Plex-Product" to APP_NAME,
-                "X-Plex-Platform-Version" to Build.VERSION.RELEASE,
-                "X-Plex-Device" to Build.MODEL,
-                "X-Plex-Device-Name" to Build.MODEL,
-                "X-Plex-Token" to (
-                    plexPrefs.server?.accessToken ?: plexPrefs.user?.authToken
-                        ?: plexPrefs.accountAuthToken
-                ),
-                // Adding X-Plex-Session-Identifier to help server track playback sessions
-                // This allows the Plex server to make transcoding decisions if needed
-                "X-Plex-Session-Identifier" to plexPrefs.uuid,
-                // Client profile declares what audio formats this app can directly play
-                // Generic profile already has transcode targets, so only adding direct play profile
-                "X-Plex-Client-Profile-Extra" to
-                    "add-direct-play-profile(type=musicProfile&container=mp4,m4a,m4b,mp3,flac,ogg,opus&audioCodec=aac,mp3,flac,vorbis,opus&videoCodec=*&subtitleCodec=*)",
-            ),
+    fun plexDataSourceFactory(plexPrefs: PlexPrefsRepo): HttpDataSource.Factory {
+        // Log token state at factory creation for race condition diagnosis
+        val serverTokenHash = SecurityUtils.hashToken(plexPrefs.server?.accessToken)
+        val userTokenHash = SecurityUtils.hashToken(plexPrefs.user?.authToken)
+        val accountTokenHash = SecurityUtils.hashToken(plexPrefs.accountAuthToken)
+        
+        Timber.d(
+            "[TokenInjection] plexDataSourceFactory provider called: " +
+                "serverToken=$serverTokenHash, userToken=$userTokenHash, " +
+                "accountToken=$accountTokenHash"
         )
-
-        return dataSourceFactory
+        
+        // Return custom factory that reads tokens lazily on each createDataSource() call
+        return PlexHttpDataSourceFactory(
+            context = service.applicationContext,
+            plexPrefsRepo = plexPrefs,
+        )
     }
 
     @Provides

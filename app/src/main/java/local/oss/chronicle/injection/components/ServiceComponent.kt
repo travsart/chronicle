@@ -5,7 +5,7 @@ import android.support.v4.media.session.MediaControllerCompat
 import android.support.v4.media.session.MediaSessionCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
-import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import dagger.Component
 import kotlinx.coroutines.CoroutineScope
@@ -46,7 +46,7 @@ interface ServiceComponent {
 
     fun serviceController(): ServiceController
 
-    fun plexDataSourceFactory(): DefaultHttpDataSource.Factory
+    fun plexDataSourceFactory(): HttpDataSource.Factory
 
     fun packageValidator(): PackageValidator
 

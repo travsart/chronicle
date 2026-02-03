@@ -193,6 +193,7 @@ The player uses **Media3 (ExoPlayer)** with:
 - [`SeekHandler`](app/src/main/java/local/oss/chronicle/features/player/SeekHandler.kt) - Atomic seek operations with timeout
 - [`ChapterValidator`](app/src/main/java/local/oss/chronicle/features/player/ChapterValidator.kt) - Validates positions against chapter bounds
 - [`PlaybackUrlResolver`](app/src/main/java/local/oss/chronicle/data/sources/plex/PlaybackUrlResolver.kt) - Resolves streaming URLs with retry logic and caching
+- [`PlexHttpDataSourceFactory`](app/src/main/java/local/oss/chronicle/data/sources/plex/PlexHttpDataSourceFactory.kt) - Custom DataSource.Factory for ExoPlayer that performs lazy token injection on each HTTP request, preventing stale auth tokens
 
 All media playback follows Android's MediaSession/MediaBrowser API.
 

@@ -2,7 +2,7 @@ package local.oss.chronicle.data.sources.plex
 
 import android.content.Context
 import androidx.media3.datasource.DefaultDataSource
-import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.HttpDataSource
 import com.github.michaelbull.result.Result
 import com.tonyodev.fetch2.Request
 import local.oss.chronicle.data.model.Audiobook
@@ -20,7 +20,7 @@ class PlexMediaSource
         private val plexMediaService: PlexMediaService,
         private val plexLoginRepo: IPlexLoginRepo,
         private val appContext: Context,
-        defaultDataSourceFactory: DefaultHttpDataSource.Factory,
+        defaultDataSourceFactory: HttpDataSource.Factory,
     ) : HttpMediaSource {
         override val id: Long = MEDIA_SOURCE_ID_PLEX
 

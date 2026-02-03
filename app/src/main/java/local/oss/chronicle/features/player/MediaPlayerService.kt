@@ -49,6 +49,7 @@ import local.oss.chronicle.data.sources.plex.*
 import local.oss.chronicle.data.sources.plex.IPlexLoginRepo.LoginState.*
 import local.oss.chronicle.data.sources.plex.model.getDuration
 import local.oss.chronicle.util.Event
+import local.oss.chronicle.util.SecurityUtils
 import local.oss.chronicle.features.currentlyplaying.CurrentlyPlaying
 import local.oss.chronicle.features.player.SleepTimer.Companion.ARG_SLEEP_TIMER_ACTION
 import local.oss.chronicle.features.player.SleepTimer.Companion.ARG_SLEEP_TIMER_DURATION_MILLIS
@@ -226,11 +227,24 @@ class MediaPlayerService :
     override fun onCreate() {
         super.onCreate()
 
+        Timber.d("[TokenInjection] MediaPlayerService.onCreate() starting - about to inject dependencies")
+
         DaggerServiceComponent.builder()
             .appComponent((application as ChronicleApplication).appComponent)
             .serviceModule(ServiceModule(this))
             .build()
             .inject(this)
+
+        Timber.d("[TokenInjection] MediaPlayerService.onCreate() - dependencies injected")
+
+        // Verify tokens after injection
+        val serverTokenHash = SecurityUtils.hashToken(plexPrefs.server?.accessToken)
+        val userTokenHash = SecurityUtils.hashToken(plexPrefs.user?.authToken)
+        val accountTokenHash = SecurityUtils.hashToken(plexPrefs.accountAuthToken)
+        Timber.d(
+            "[TokenInjection] Post-injection token check: " +
+                "serverToken=$serverTokenHash, userToken=$userTokenHash, accountToken=$accountTokenHash"
+        )
 
         ServiceUtils.notifyServiceStarted(this)
 
