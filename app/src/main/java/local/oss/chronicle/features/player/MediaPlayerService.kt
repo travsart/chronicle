@@ -439,6 +439,10 @@ class MediaPlayerService :
         if (!isRefreshing) {
             Timber.d("[AndroidAuto] Library sync completed, refreshing browse tree")
             notifyChildrenChanged(CHRONICLE_MEDIA_ROOT_ID)
+            notifyChildrenChanged(getString(R.string.auto_category_recently_added))
+            notifyChildrenChanged(getString(R.string.auto_category_library))
+            notifyChildrenChanged(getString(R.string.auto_category_recently_listened))
+            notifyChildrenChanged(getString(R.string.auto_category_offline))
         }
     }
 
