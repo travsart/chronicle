@@ -445,6 +445,24 @@ class MediaPlayerService :
     private val loginStateObserver = Observer<Event<IPlexLoginRepo.LoginState>> { event ->
         event.peekContent().let { loginState ->
             Timber.d("[AndroidAuto] Login state changed: $loginState")
+            
+            // Clear Android Auto error messages when login completes successfully
+            if (loginState == LOGGED_IN_FULLY && isErrorState) {
+                Timber.d("[AndroidAuto] Login successful - clearing error state")
+                // Set playback state to STOPPED to clear any displayed error messages
+                mediaSession.setPlaybackState(
+                    PlaybackStateCompat.Builder()
+                        .setState(
+                            PlaybackStateCompat.STATE_STOPPED,
+                            PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN,
+                            0f,
+                        )
+                        .build(),
+                )
+                isErrorState = false
+                sessionErrorMessage = null
+            }
+            
             notifyChildrenChanged(CHRONICLE_MEDIA_ROOT_ID)
         }
     }

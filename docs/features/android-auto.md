@@ -151,6 +151,40 @@ When media loading fails:
 2. Return empty browser result (not crash)
 3. Display user-friendly message if possible
 
+### Automatic Error Clearing After Login
+
+Chronicle automatically clears Android Auto error messages when the user successfully logs in, providing a seamless recovery experience.
+
+**Problem Solved:**
+When authentication errors occur in Android Auto (e.g., expired token, not logged in), error messages can persist even after the user successfully logs in on their phone, requiring manual intervention to clear the error state.
+
+**Solution:**
+The [`loginStateObserver`](../../app/src/main/java/local/oss/chronicle/features/player/MediaPlayerService.kt:445) in [`MediaPlayerService`](../../app/src/main/java/local/oss/chronicle/features/player/MediaPlayerService.kt) detects when login completes successfully and automatically clears any existing error state by setting the MediaSession playback state to `STATE_STOPPED`.
+
+**Implementation:**
+```kotlin
+if (loginState == LOGGED_IN_FULLY && isErrorState) {
+    Timber.d("[AndroidAuto] Login successful - clearing error state")
+    mediaSession.setPlaybackState(
+        PlaybackStateCompat.Builder()
+            .setState(
+                PlaybackStateCompat.STATE_STOPPED,
+                PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN,
+                0f,
+            )
+            .build(),
+    )
+    isErrorState = false
+    sessionErrorMessage = null
+}
+```
+
+**User Experience:**
+- User sees authentication error in Android Auto
+- User logs in on their phone
+- Android Auto error message **automatically clears** within seconds
+- User can immediately browse and play content (no manual error dismissal needed)
+
 ### Message Item Handling
 
 Chronicle displays informational messages in the Android Auto browse tree for error states and user guidance (e.g., "Not logged in" messages). These message items require special handling to prevent unintended behavior.
@@ -234,6 +268,24 @@ Chronicle automatically refreshes the Android Auto browse tree when the user's l
 ```kotlin
 private val loginStateObserver = Observer<PlexLoginEvent> { event ->
     Timber.d("[AndroidAuto] Login state changed: $event")
+    
+    // Clear Android Auto error messages when login completes successfully
+    if (loginState == LOGGED_IN_FULLY && isErrorState) {
+        Timber.d("[AndroidAuto] Login successful - clearing error state")
+        // Set playback state to STOPPED to clear any displayed error messages
+        mediaSession.setPlaybackState(
+            PlaybackStateCompat.Builder()
+                .setState(
+                    PlaybackStateCompat.STATE_STOPPED,
+                    PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN,
+                    0f,
+                )
+                .build(),
+        )
+        isErrorState = false
+        sessionErrorMessage = null
+    }
+    
     notifyChildrenChanged(CHRONICLE_MEDIA_ROOT_ID)
 }
 ```
@@ -242,9 +294,10 @@ private val loginStateObserver = Observer<PlexLoginEvent> { event ->
 1. User completes login flow in the phone app
 2. [`PlexLoginRepo`](../../app/src/main/java/local/oss/chronicle/data/sources/plex/PlexLoginRepo.kt) emits a login event
 3. [`MediaPlayerService`](../../app/src/main/java/local/oss/chronicle/features/player/MediaPlayerService.kt) receives the event
-4. Service calls `notifyChildrenChanged(CHRONICLE_MEDIA_ROOT_ID)`
-5. Android Auto invalidates its cache and fetches new browse tree content
-6. User sees the library automatically populated in Android Auto
+4. **If an error state exists**, the service sets the playback state to `STATE_STOPPED` to clear any displayed error messages
+5. Service calls `notifyChildrenChanged(CHRONICLE_MEDIA_ROOT_ID)`
+6. Android Auto invalidates its cache and fetches new browse tree content
+7. User sees the library automatically populated in Android Auto
 
 ### Data Flow
 
