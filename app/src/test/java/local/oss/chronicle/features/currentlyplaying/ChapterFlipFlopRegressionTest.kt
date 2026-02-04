@@ -1,5 +1,6 @@
 package local.oss.chronicle.features.currentlyplaying
 
+import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import io.mockk.Runs
 import io.mockk.coEvery
 import io.mockk.every
@@ -20,6 +21,7 @@ import org.hamcrest.MatcherAssert.assertThat
 import org.hamcrest.Matchers.`is`
 import org.junit.After
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 
 /**
@@ -44,6 +46,9 @@ import org.junit.Test
  */
 @ExperimentalCoroutinesApi
 class ChapterFlipFlopRegressionTest {
+    @get:Rule
+    val instantTaskExecutorRule = InstantTaskExecutorRule()
+
     private val testDispatcher = StandardTestDispatcher()
 
     private lateinit var playbackStateController: PlaybackStateController

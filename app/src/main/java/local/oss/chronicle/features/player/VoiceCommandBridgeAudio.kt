@@ -1,8 +1,17 @@
 package local.oss.chronicle.features.player
 
 import android.content.Context
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import local.oss.chronicle.R
 import local.oss.chronicle.injection.scopes.ServiceScope
 import timber.log.Timber
@@ -32,6 +41,7 @@ import javax.inject.Inject
 @ServiceScope
 class VoiceCommandBridgeAudio @Inject constructor(
     private val context: Context,
+    private val serviceScope: CoroutineScope,
 ) : TextToSpeech.OnInitListener {
 
 
@@ -39,10 +49,22 @@ class VoiceCommandBridgeAudio @Inject constructor(
     private var isReady = false
     private var pendingSpeak: String? = null
     private var isSpeaking = false
+    private var completionCallback: (() -> Unit)? = null
+    private var timeoutJob: kotlinx.coroutines.Job? = null
+    
+    private val audioManager: AudioManager by lazy {
+        context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    }
+    private var audioFocusRequest: AudioFocusRequest? = null
+    private var hasAudioFocus = false
+    
+    // Handler for dispatching callbacks to main thread (TTS callbacks run on binder thread)
+    private val mainHandler = Handler(Looper.getMainLooper())
     
     companion object {
         private const val TAG = "VoiceCommandBridgeAudio"
         private const val UTTERANCE_ID = "bridge_audio"
+        private const val TTS_TIMEOUT_MS = 3000L // 3 seconds timeout
     }
 
     /**
@@ -72,21 +94,47 @@ class VoiceCommandBridgeAudio @Inject constructor(
                 val result = tts?.setLanguage(Locale.getDefault())
                 Timber.d("[$TAG] setLanguage result: $result")
                 
+                // Configure TTS for Android Auto audio routing
+                configureTtsAudioAttributes()
+                
                 // Set up utterance progress listener to track speaking state
                 tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                     override fun onStart(utteranceId: String?) {
                         isSpeaking = true
                         Timber.d("[$TAG] TTS started speaking: $utteranceId")
+                        // Cancel timeout when TTS actually starts speaking
+                        // MUST run on main thread to avoid threading issues
+                        mainHandler.post {
+                            timeoutJob?.cancel()
+                            timeoutJob = null
+                        }
                     }
                     
                     override fun onDone(utteranceId: String?) {
                         isSpeaking = false
                         Timber.d("[$TAG] TTS finished speaking: $utteranceId")
+                        // CRITICAL: Dispatch to main thread - TTS callbacks run on binder thread
+                        // but completionCallback accesses ExoPlayer which requires main thread
+                        mainHandler.post {
+                            completionCallback?.invoke()
+                            completionCallback = null
+                            timeoutJob?.cancel()
+                            timeoutJob = null
+                            abandonAudioFocus()
+                        }
                     }
                     
                     override fun onError(utteranceId: String?) {
                         isSpeaking = false
                         Timber.e("[$TAG] TTS error: $utteranceId")
+                        // CRITICAL: Dispatch to main thread - TTS callbacks run on binder thread
+                        mainHandler.post {
+                            completionCallback?.invoke()
+                            completionCallback = null
+                            timeoutJob?.cancel()
+                            timeoutJob = null
+                            abandonAudioFocus()
+                        }
                     }
                 })
                 
@@ -115,14 +163,124 @@ class VoiceCommandBridgeAudio @Inject constructor(
         TextToSpeech.ERROR -> "ERROR"
         else -> "UNKNOWN($status)"
     }
+    
+    /**
+     * Configure TTS audio attributes for Android Auto compatibility.
+     * Sets the audio stream to USAGE_ASSISTANT for proper routing to Android Auto speakers.
+     */
+    private fun configureTtsAudioAttributes() {
+        try {
+            // Use USAGE_ASSISTANT for TTS - this is the appropriate usage for voice assistants
+            // and ensures proper routing in Android Auto
+            val audioAttributes = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_ASSISTANT)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                .build()
+            
+            tts?.setAudioAttributes(audioAttributes)
+            Timber.i("[$TAG] Configured TTS AudioAttributes: USAGE_ASSISTANT, CONTENT_TYPE_SPEECH")
+        } catch (e: Exception) {
+            Timber.e(e, "[$TAG] Failed to set TTS audio attributes")
+        }
+    }
+    
+    /**
+     * Request temporary audio focus for TTS playback.
+     * This ensures TTS is audible in Android Auto by ducking the main audiobook playback.
+     */
+    private fun requestAudioFocus(): Boolean {
+        if (hasAudioFocus) {
+            Timber.d("[$TAG] Already have audio focus")
+            return true
+        }
+        
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                // Android O and above - use AudioFocusRequest
+                val audioAttributes = AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ASSISTANT)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build()
+                
+                audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+                    .setAudioAttributes(audioAttributes)
+                    .setAcceptsDelayedFocusGain(false)
+                    .setWillPauseWhenDucked(false)
+                    .build()
+                
+                val result = audioManager.requestAudioFocus(audioFocusRequest!!)
+                hasAudioFocus = result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+                Timber.i("[$TAG] Audio focus request result (O+): ${if (hasAudioFocus) "GRANTED" else "FAILED"}")
+            } else {
+                // Pre-Android O - use deprecated API
+                @Suppress("DEPRECATION")
+                val result = audioManager.requestAudioFocus(
+                    null,
+                    AudioManager.STREAM_MUSIC,
+                    AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK
+                )
+                hasAudioFocus = result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+                Timber.i("[$TAG] Audio focus request result (legacy): ${if (hasAudioFocus) "GRANTED" else "FAILED"}")
+            }
+            
+            return hasAudioFocus
+        } catch (e: Exception) {
+            Timber.e(e, "[$TAG] Failed to request audio focus")
+            return false
+        }
+    }
+    
+    /**
+     * Abandon audio focus after TTS completes.
+     */
+    private fun abandonAudioFocus() {
+        if (!hasAudioFocus) {
+            return
+        }
+        
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                audioFocusRequest?.let {
+                    audioManager.abandonAudioFocusRequest(it)
+                    audioFocusRequest = null
+                }
+            } else {
+                @Suppress("DEPRECATION")
+                audioManager.abandonAudioFocus(null)
+            }
+            hasAudioFocus = false
+            Timber.d("[$TAG] Abandoned audio focus")
+        } catch (e: Exception) {
+            Timber.e(e, "[$TAG] Failed to abandon audio focus")
+        }
+    }
 
     /**
      * Speak the bridge message for Android Auto voice commands.
      * This provides immediate audio feedback while the actual audiobook loads.
+     *
+     * @param onComplete Optional callback to invoke after TTS completes or times out (3 seconds)
      */
-    fun speakBridgeMessage() {
+    fun speakBridgeMessage(onComplete: (() -> Unit)? = null) {
         val message = context.getString(R.string.voice_bridge_preparing_audiobook)
         Timber.i("[$TAG] Speaking bridge message: '$message'")
+        
+        // Store the completion callback if provided
+        if (onComplete != null) {
+            completionCallback = onComplete
+            
+            // Start timeout fallback in case TTS fails or takes too long
+            timeoutJob?.cancel() // Cancel any existing timeout
+            timeoutJob = serviceScope.launch {
+                delay(TTS_TIMEOUT_MS)
+                if (completionCallback != null) {
+                    Timber.w("[$TAG] TTS timeout reached (${TTS_TIMEOUT_MS}ms), invoking callback")
+                    completionCallback?.invoke()
+                    completionCallback = null
+                }
+            }
+        }
+        
         speak(message)
     }
 
@@ -139,6 +297,38 @@ class VoiceCommandBridgeAudio @Inject constructor(
     }
 
     /**
+     * Speak an error message for Android Auto voice commands with a completion callback.
+     * Used to provide immediate audio feedback when a voice command fails, then execute
+     * a callback after TTS completes (or after timeout).
+     *
+     * This variant allows setting error state AFTER TTS completes, preventing Android Auto
+     * from canceling the audio session before the message is heard.
+     *
+     * @param message The error message to speak via TTS
+     * @param onComplete Callback to invoke after TTS completes or times out (3 seconds)
+     */
+    fun speakErrorMessage(message: String, onComplete: () -> Unit) {
+        Timber.i("[$TAG] Speaking error message with callback: '$message'")
+        
+        // Store the completion callback
+        completionCallback = onComplete
+        
+        // Start timeout fallback in case TTS fails or takes too long
+        timeoutJob?.cancel() // Cancel any existing timeout
+        timeoutJob = serviceScope.launch {
+            delay(TTS_TIMEOUT_MS)
+            if (completionCallback != null) {
+                Timber.w("[$TAG] TTS timeout reached (${TTS_TIMEOUT_MS}ms), invoking callback")
+                completionCallback?.invoke()
+                completionCallback = null
+            }
+        }
+        
+        // Speak the message (UtteranceProgressListener will invoke callback when done)
+        speak(message)
+    }
+
+    /**
      * Speak the given text using TTS with a 200ms silence prefix.
      * If TTS is not ready yet, the message will be queued and spoken when initialization completes.
      *
@@ -146,6 +336,11 @@ class VoiceCommandBridgeAudio @Inject constructor(
      */
     private fun speak(text: String) {
         if (isReady) {
+            // Request audio focus before speaking
+            if (!requestAudioFocus()) {
+                Timber.w("[$TAG] Failed to get audio focus, speaking anyway")
+            }
+            
             // Add 200ms silence at beginning using SSML to prevent audio cutoff in Android Auto
             val ssmlMessage = "<speak><break time=\"200ms\"/>$text</speak>"
             tts?.speak(ssmlMessage, TextToSpeech.QUEUE_FLUSH, null, UTTERANCE_ID)
@@ -190,6 +385,10 @@ class VoiceCommandBridgeAudio @Inject constructor(
      */
     fun release() {
         Timber.i("[$TAG] Releasing TextToSpeech resources")
+        timeoutJob?.cancel()
+        timeoutJob = null
+        completionCallback = null
+        abandonAudioFocus()
         tts?.shutdown()
         tts = null
         isReady = false

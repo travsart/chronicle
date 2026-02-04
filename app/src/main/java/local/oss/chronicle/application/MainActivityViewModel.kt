@@ -16,6 +16,7 @@ import local.oss.chronicle.data.model.*
 import local.oss.chronicle.data.sources.plex.IPlexLoginRepo
 import local.oss.chronicle.data.sources.plex.IPlexLoginRepo.LoginState.LOGGED_IN_FULLY
 import local.oss.chronicle.features.currentlyplaying.CurrentlyPlaying
+import local.oss.chronicle.features.currentlyplaying.CurrentlyPlayingSingleton
 import local.oss.chronicle.features.player.MediaServiceConnection
 import local.oss.chronicle.features.player.id
 import local.oss.chronicle.features.player.isPlaying
@@ -87,6 +88,18 @@ class MainActivityViewModel(
             bookRepository.getAudiobookAsync(id) ?: EMPTY_AUDIOBOOK
         }
 
+    /**
+     * Observe CurrentlyPlayingSingleton.bookLiveData to immediately respond to
+     * playback state changes (e.g., from Android Auto voice commands).
+     * This ensures the mini player updates synchronously when PlaybackStateController
+     * loads an audiobook, without waiting for MediaSession metadata.
+     *
+     * Uses LiveData directly instead of StateFlow.asLiveData() for robust observation
+     * (avoids timing issues with asLiveData() conversion).
+     */
+    private val currentlyPlayingBookObserver: LiveData<Audiobook> =
+        (currentlyPlaying as CurrentlyPlayingSingleton).bookLiveData
+
     private var tracks =
         audiobookId.switchMap { id ->
             if (id != NO_AUDIOBOOK_FOUND_ID) {
@@ -122,20 +135,16 @@ class MainActivityViewModel(
         }
 
     val currentChapterTitle: LiveData<String> =
-        currentlyPlaying.chapter
-            .map { chapter ->
-                if (chapter == EMPTY_CHAPTER) {
-                    "No track playing"
-                } else {
-                    chapter.title
-                }
+        (currentlyPlaying as CurrentlyPlayingSingleton).chapterLiveData.map { chapter ->
+            if (chapter == EMPTY_CHAPTER) {
+                "No track playing"
+            } else {
+                chapter.title
             }
-            .asLiveData(viewModelScope.coroutineContext)
-
-    val isPlaying =
-        mediaServiceConnection.playbackState.map {
-            it.isPlaying
         }
+
+    val isPlaying: LiveData<Boolean> =
+        (currentlyPlaying as CurrentlyPlayingSingleton).isPlayingLiveData
 
     private val metadataObserver =
         Observer<MediaMetadataCompat> { metadata ->
@@ -162,6 +171,24 @@ class MainActivityViewModel(
         }
 
     init {
+        // Observe CurrentlyPlayingSingleton.book for immediate updates
+        currentlyPlayingBookObserver.observeForever { book ->
+            if (book != EMPTY_AUDIOBOOK && book.id != NO_AUDIOBOOK_FOUND_ID) {
+                val currentId = audiobookId.value ?: NO_AUDIOBOOK_FOUND_ID
+                if (currentId != book.id) {
+                    Timber.i("Mini player: Book changed in CurrentlyPlayingSingleton: ${book.title} (ID: ${book.id})")
+                    audiobookId.postValue(book.id)
+                    if (_currentlyPlayingLayoutState.value == HIDDEN) {
+                        _currentlyPlayingLayoutState.postValue(COLLAPSED)
+                    }
+                }
+            } else if (book == EMPTY_AUDIOBOOK) {
+                Timber.i("Mini player: Book cleared in CurrentlyPlayingSingleton")
+                audiobookId.postValue(NO_AUDIOBOOK_FOUND_ID)
+            }
+        }
+
+        // Keep MediaSession metadata observer as fallback for legacy code paths
         mediaServiceConnection.nowPlaying.observeForever(metadataObserver)
         mediaServiceConnection.playbackState.observeForever(playbackObserver)
     }
@@ -217,6 +244,7 @@ class MainActivityViewModel(
     }
 
     override fun onCleared() {
+        currentlyPlayingBookObserver.removeObserver { }
         mediaServiceConnection.nowPlaying.removeObserver(metadataObserver)
         mediaServiceConnection.playbackState.removeObserver(playbackObserver)
         super.onCleared()

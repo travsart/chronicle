@@ -1,5 +1,7 @@
 package local.oss.chronicle.features.currentlyplaying
 
+import androidx.lifecycle.LiveData
+import androidx.lifecycle.MutableLiveData
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -84,6 +86,24 @@ class CurrentlyPlayingSingleton
         private val _chapter = MutableStateFlow(EMPTY_CHAPTER)
         override val chapter: StateFlow<Chapter> = _chapter
 
+        // ========================
+        // LiveData Bridge for UI Observation
+        // ========================
+        // These LiveData fields provide a robust bridge to LiveData for UI observation
+        // (StateFlow.asLiveData() has timing issues with mini player updates)
+
+        private val _bookLiveData = MutableLiveData<Audiobook>(EMPTY_AUDIOBOOK)
+        val bookLiveData: LiveData<Audiobook> = _bookLiveData
+
+        private val _trackLiveData = MutableLiveData<MediaItemTrack>(EMPTY_TRACK)
+        val trackLiveData: LiveData<MediaItemTrack> = _trackLiveData
+
+        private val _chapterLiveData = MutableLiveData<Chapter>(EMPTY_CHAPTER)
+        val chapterLiveData: LiveData<Chapter> = _chapterLiveData
+    
+        private val _isPlayingLiveData = MutableLiveData<Boolean>(false)
+        val isPlayingLiveData: LiveData<Boolean> = _isPlayingLiveData
+    
         /**
          * Exposes the controller's StateFlow for reactive observation.
          * **Prefer this over individual book/track/chapter flows in new code.**
@@ -96,18 +116,30 @@ class CurrentlyPlayingSingleton
         init {
             // Bridge controller state to backward compatibility flows
             playbackStateController.state.onEach { state ->
-                _book.value = state.audiobook ?: EMPTY_AUDIOBOOK
+                val audiobook = state.audiobook ?: EMPTY_AUDIOBOOK
+                _book.value = audiobook
+                _bookLiveData.value = audiobook
 
                 // Update track with current position from state
                 val currentTrack = state.currentTrack
-                _track.value =
+                val track =
                     if (currentTrack != null) {
                         currentTrack.copy(progress = state.currentTrackPositionMs)
                     } else {
                         EMPTY_TRACK
                     }
+                _track.value = track
+                _trackLiveData.value = track
 
-                _chapter.value = state.currentChapter ?: EMPTY_CHAPTER
+                val chapter = state.currentChapter ?: EMPTY_CHAPTER
+                _chapter.value = chapter
+                _chapterLiveData.value = chapter
+
+                // Update isPlaying state for mini player
+                _isPlayingLiveData.value = state.isPlaying
+
+                // Debug logging
+                Timber.d("State bridged: isPlaying=${state.isPlaying}, book=${audiobook.title}")
             }.launchIn(scope)
 
             // Bridge chapter change events from controller to legacy listener

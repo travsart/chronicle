@@ -1,5 +1,6 @@
 package local.oss.chronicle.features.player
 
+import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import io.mockk.Runs
 import io.mockk.coEvery
 import io.mockk.every
@@ -21,6 +22,7 @@ import org.hamcrest.MatcherAssert.assertThat
 import org.hamcrest.Matchers.`is`
 import org.junit.After
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.JUnit4
@@ -39,6 +41,9 @@ import org.junit.runners.JUnit4
 @ExperimentalCoroutinesApi
 @RunWith(JUnit4::class)
 class ChapterSwitchingWorkflowTest {
+    @get:Rule
+    val instantTaskExecutorRule = InstantTaskExecutorRule()
+
     private val testDispatcher = StandardTestDispatcher()
 
     private lateinit var chapters: List<Chapter>

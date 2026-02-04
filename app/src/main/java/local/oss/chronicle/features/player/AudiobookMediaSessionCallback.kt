@@ -158,6 +158,10 @@ class AudiobookMediaSessionCallback
          * This variant is used in onPlayFromSearch to provide immediate audio feedback
          * when authentication fails during a voice command.
          *
+         * **CRITICAL FIX**: When bridge audio is enabled, TTS is spoken FIRST, and the error
+         * state is set AFTER TTS completes (or after 3 second timeout). This prevents Android Auto
+         * from canceling the audio session before the user hears the error message.
+         *
          * @return true if authentication is valid, false otherwise
          */
         private fun checkAuthenticationOrErrorWithVoiceFeedback(): Boolean {
@@ -167,47 +171,76 @@ class AudiobookMediaSessionCallback
             return when (loginState) {
                 NOT_LOGGED_IN -> {
                     val errorMessage = appContext.getString(local.oss.chronicle.R.string.error_not_logged_in_voice)
-                    onSetPlaybackError(
-                        android.support.v4.media.session.PlaybackStateCompat.ERROR_CODE_AUTHENTICATION_EXPIRED,
-                        appContext.getString(local.oss.chronicle.R.string.auto_access_error_not_logged_in),
-                    )
                     if (shouldPlayBridgeAudio) {
-                        voiceCommandBridgeAudio.speakErrorMessage(errorMessage)
+                        // Speak FIRST, then set error state AFTER TTS completes
+                        voiceCommandBridgeAudio.speakErrorMessage(errorMessage) {
+                            onSetPlaybackError(
+                                android.support.v4.media.session.PlaybackStateCompat.ERROR_CODE_AUTHENTICATION_EXPIRED,
+                                appContext.getString(local.oss.chronicle.R.string.auto_access_error_not_logged_in),
+                            )
+                        }
+                    } else {
+                        // No bridge audio - set error immediately
+                        onSetPlaybackError(
+                            android.support.v4.media.session.PlaybackStateCompat.ERROR_CODE_AUTHENTICATION_EXPIRED,
+                            appContext.getString(local.oss.chronicle.R.string.auto_access_error_not_logged_in),
+                        )
                     }
                     false
                 }
                 LOGGED_IN_NO_SERVER_CHOSEN -> {
-                    onSetPlaybackError(
-                        android.support.v4.media.session.PlaybackStateCompat.ERROR_CODE_NOT_SUPPORTED,
-                        appContext.getString(local.oss.chronicle.R.string.auto_access_error_no_server_chosen),
-                    )
+                    val errorMessage = appContext.getString(local.oss.chronicle.R.string.auto_access_error_no_server_chosen)
                     if (shouldPlayBridgeAudio) {
-                        voiceCommandBridgeAudio.speakErrorMessage(
-                            appContext.getString(local.oss.chronicle.R.string.auto_access_error_no_server_chosen)
+                        // Speak FIRST, then set error state AFTER TTS completes
+                        voiceCommandBridgeAudio.speakErrorMessage(errorMessage) {
+                            onSetPlaybackError(
+                                android.support.v4.media.session.PlaybackStateCompat.ERROR_CODE_NOT_SUPPORTED,
+                                errorMessage,
+                            )
+                        }
+                    } else {
+                        // No bridge audio - set error immediately
+                        onSetPlaybackError(
+                            android.support.v4.media.session.PlaybackStateCompat.ERROR_CODE_NOT_SUPPORTED,
+                            errorMessage,
                         )
                     }
                     false
                 }
                 LOGGED_IN_NO_USER_CHOSEN -> {
-                    onSetPlaybackError(
-                        android.support.v4.media.session.PlaybackStateCompat.ERROR_CODE_NOT_SUPPORTED,
-                        appContext.getString(local.oss.chronicle.R.string.auto_access_error_no_user_chosen),
-                    )
+                    val errorMessage = appContext.getString(local.oss.chronicle.R.string.auto_access_error_no_user_chosen)
                     if (shouldPlayBridgeAudio) {
-                        voiceCommandBridgeAudio.speakErrorMessage(
-                            appContext.getString(local.oss.chronicle.R.string.auto_access_error_no_user_chosen)
+                        // Speak FIRST, then set error state AFTER TTS completes
+                        voiceCommandBridgeAudio.speakErrorMessage(errorMessage) {
+                            onSetPlaybackError(
+                                android.support.v4.media.session.PlaybackStateCompat.ERROR_CODE_NOT_SUPPORTED,
+                                errorMessage,
+                            )
+                        }
+                    } else {
+                        // No bridge audio - set error immediately
+                        onSetPlaybackError(
+                            android.support.v4.media.session.PlaybackStateCompat.ERROR_CODE_NOT_SUPPORTED,
+                            errorMessage,
                         )
                     }
                     false
                 }
                 LOGGED_IN_NO_LIBRARY_CHOSEN -> {
-                    onSetPlaybackError(
-                        android.support.v4.media.session.PlaybackStateCompat.ERROR_CODE_NOT_SUPPORTED,
-                        appContext.getString(local.oss.chronicle.R.string.auto_access_error_no_library_chosen),
-                    )
+                    val errorMessage = appContext.getString(local.oss.chronicle.R.string.auto_access_error_no_library_chosen)
                     if (shouldPlayBridgeAudio) {
-                        voiceCommandBridgeAudio.speakErrorMessage(
-                            appContext.getString(local.oss.chronicle.R.string.auto_access_error_no_library_chosen)
+                        // Speak FIRST, then set error state AFTER TTS completes
+                        voiceCommandBridgeAudio.speakErrorMessage(errorMessage) {
+                            onSetPlaybackError(
+                                android.support.v4.media.session.PlaybackStateCompat.ERROR_CODE_NOT_SUPPORTED,
+                                errorMessage,
+                            )
+                        }
+                    } else {
+                        // No bridge audio - set error immediately
+                        onSetPlaybackError(
+                            android.support.v4.media.session.PlaybackStateCompat.ERROR_CODE_NOT_SUPPORTED,
+                            errorMessage,
                         )
                     }
                     false
@@ -215,12 +248,20 @@ class AudiobookMediaSessionCallback
                 LOGGED_IN_FULLY -> true
                 else -> {
                     val errorMessage = "Please open Chronicle app on the phone to complete setup"
-                    onSetPlaybackError(
-                        android.support.v4.media.session.PlaybackStateCompat.ERROR_CODE_APP_ERROR,
-                        errorMessage,
-                    )
                     if (shouldPlayBridgeAudio) {
-                        voiceCommandBridgeAudio.speakErrorMessage(errorMessage)
+                        // Speak FIRST, then set error state AFTER TTS completes
+                        voiceCommandBridgeAudio.speakErrorMessage(errorMessage) {
+                            onSetPlaybackError(
+                                android.support.v4.media.session.PlaybackStateCompat.ERROR_CODE_APP_ERROR,
+                                errorMessage,
+                            )
+                        }
+                    } else {
+                        // No bridge audio - set error immediately
+                        onSetPlaybackError(
+                            android.support.v4.media.session.PlaybackStateCompat.ERROR_CODE_APP_ERROR,
+                            errorMessage,
+                        )
                     }
                     false
                 }
@@ -279,7 +320,24 @@ class AudiobookMediaSessionCallback
                 Timber.d("[VoiceCommandTrace] Bridge audio check result - will play: $shouldPlayBridgeAudio")
                 
                 if (shouldPlayBridgeAudio) {
-                    voiceCommandBridgeAudio.speakBridgeMessage()
+                    // Pass a completion callback to resume playback after TTS completes
+                    voiceCommandBridgeAudio.speakBridgeMessage {
+                        // This callback runs after TTS completes (or after 3 second timeout)
+                        // CRITICAL: TTS audio focus causes ExoPlayer to set playWhenReady=false
+                        // We must restore it to true since the user commanded playback via voice
+                        Timber.d("[VoiceCommandBridge] TTS completed, player state: playWhenReady=${currentPlayer.playWhenReady}, isPlaying=${currentPlayer.isPlaying}")
+                        
+                        // Force playWhenReady=true since this was a voice command to play
+                        currentPlayer.playWhenReady = true
+                        Timber.i("[VoiceCommandBridge] Restored playWhenReady=true after TTS completion")
+                        
+                        // Ensure player actually starts playing
+                        if (!currentPlayer.isPlaying) {
+                            currentPlayer.play()
+                            Timber.i("[VoiceCommandBridge] Called play() to start playback")
+                        }
+                        
+                    }
                     Timber.i("[VoiceCommandBridge] Speaking bridge audio for voice command")
                 }
     
@@ -741,7 +799,6 @@ private fun playBook(
                 // Note: We do NOT seek forward when jumping to a specific chapter/position
                 // to avoid interfering with accurate chapter seeking
 
-                currentPlayer.playWhenReady = playWhenReady
                 val player = currentPlayer
 
                 // NOTE: We used to refresh the auth token here by calling setDefaultRequestProperties,
@@ -761,15 +818,13 @@ private fun playBook(
 
                 // Load the audiobook into PlaybackStateController
                 val chapters = book.chapters.ifEmpty { tracks.asChapterList() }
-                serviceScope.launch {
-                    playbackStateController.loadAudiobook(
-                        audiobook = book,
-                        tracks = tracks,
-                        chapters = chapters,
-                        startTrackIndex = startingTrackIndex,
-                        startPositionMs = trackListStateManager.currentTrackProgress,
-                    )
-                }
+                playbackStateController.loadAudiobook(
+                    audiobook = book,
+                    tracks = tracks,
+                    chapters = chapters,
+                    startTrackIndex = startingTrackIndex,
+                    startPositionMs = trackListStateManager.currentTrackProgress,
+                )
 
                 // Keep calling currentlyPlaying.update() for backward compatibility
                 currentlyPlaying.update(
@@ -785,6 +840,10 @@ private fun playBook(
                     trackListStateManager.currentTrackIndex,
                     trackListStateManager.currentTrackProgress,
                 )
+
+                // Set playWhenReady AFTER player is prepared and seeked
+                currentPlayer.playWhenReady = playWhenReady
+
 
                 // Inform plex server that audio playback session has started
                 val serverId = plexPrefsRepo.server?.serverId

@@ -209,6 +209,6 @@ class ServiceModule(private val service: MediaPlayerService) {
 
     @Provides
     @ServiceScope
-    fun voiceCommandBridgeAudio(): VoiceCommandBridgeAudio =
-        VoiceCommandBridgeAudio(service)
+    fun voiceCommandBridgeAudio(serviceScope: kotlinx.coroutines.CoroutineScope): VoiceCommandBridgeAudio =
+        VoiceCommandBridgeAudio(service, serviceScope)
 }
