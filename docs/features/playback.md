@@ -63,11 +63,57 @@ graph TB
 | [`ChapterValidator`](../../app/src/main/java/local/oss/chronicle/features/player/ChapterValidator.kt) | Validates positions against chapter bounds |
 | [`PlaybackUrlResolver`](../../app/src/main/java/local/oss/chronicle/data/sources/plex/PlaybackUrlResolver.kt) | Resolves streaming URLs with retry logic |
 | [`ProgressUpdater`](../../app/src/main/java/local/oss/chronicle/features/player/ProgressUpdater.kt) | Syncs progress to Plex server |
-| [`CurrentlyPlayingSingleton`](../../app/src/main/java/local/oss/chronicle/features/currentlyplaying/CurrentlyPlayingSingleton.kt) | Bridges StateFlow to LiveData for UI |
+| [`CurrentlyPlayingSingleton`](../../app/src/main/java/local/oss/chronicle/features/currentlyplaying/CurrentlyPlayingSingleton.kt) | Bridges StateFlow to LiveData for UI observation |
 
 ---
 
 ## State Management
+
+### State Flow from ExoPlayer to UI
+
+The playback state flows through a unidirectional data flow to ensure consistency:
+
+```
+ExoPlayer Listeners → PlaybackStateController (StateFlow)
+    → CurrentlyPlayingSingleton (LiveData Bridge) → UI Components
+```
+
+**Critical Design Principle**: State updates should **only** originate from ExoPlayer listeners. Manual state updates in callbacks (like [`AudiobookMediaSessionCallback`](../../app/src/main/java/local/oss/chronicle/features/player/AudiobookMediaSessionCallback.kt)) can cause desynchronization between Android Auto and the app's UI.
+
+#### State Propagation Flow
+
+```mermaid
+sequenceDiagram
+    participant EP as ExoPlayer
+    participant PSC as PlaybackStateController
+    participant CPS as CurrentlyPlayingSingleton
+    participant UI as UI Components
+    participant AA as Android Auto
+    
+    EP->>PSC: onIsPlayingChanged(true)
+    PSC->>PSC: Update StateFlow
+    PSC->>CPS: StateFlow emits new state
+    CPS->>CPS: Convert to LiveData
+    CPS->>UI: LiveData update (mini player)
+    CPS->>AA: MediaSession state update
+    
+    Note over EP,AA: All state updates originate from ExoPlayer
+```
+
+#### LiveData Bridge Fields
+
+[`CurrentlyPlayingSingleton`](../../app/src/main/java/local/oss/chronicle/features/currentlyplaying/CurrentlyPlayingSingleton.kt) provides these LiveData fields for UI observation:
+
+| LiveData Field | Source | Purpose |
+|----------------|--------|---------|
+| `isPlayingLiveData` | `PlaybackState.isPlaying` | Play/pause state for buttons |
+| `bookLiveData` | `PlaybackState.audiobook` | Currently playing audiobook |
+| `trackLiveData` | `PlaybackState.currentTrack` | Current audio track |
+| `chapterLiveData` | `PlaybackState.currentChapter` | Current chapter |
+| `bookPositionMs` | `PlaybackState.bookPositionMs` | Total playback position |
+
+**UI components should always observe LiveData from `CurrentlyPlayingSingleton`, never StateFlow directly.**
+
 
 ### PlaybackStateController
 

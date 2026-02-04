@@ -220,40 +220,99 @@ if (mediaId.startsWith("__error") || mediaId.startsWith("__message")) {
 
 ---
 
-## MediaSession State Synchronization
+## State Synchronization Between Android Auto and Mini Player
 
-Android Auto receives playback state through [`PlaybackStateController`](../../app/src/main/java/local/oss/chronicle/features/player/PlaybackStateController.kt):
+Chronicle uses a unidirectional data flow to ensure consistent state across Android Auto, the mini player, and all UI components.
+
+### State Flow Architecture
 
 ```mermaid
-graph LR
-    subgraph State Updates
-        PSC[PlaybackStateController]
+graph TB
+    subgraph Command Sources
+        AA_CMD[Android Auto Commands]
+        UI_CMD[UI Button Taps]
+    end
+    
+    subgraph Service Layer
+        MS[MediaSession]
+        CB[AudiobookMediaSessionCallback]
+        EP[ExoPlayer]
+    end
+    
+    subgraph State Management
+        PSC[PlaybackStateController<br/>Single Source of Truth]
         SF[StateFlow]
     end
     
-    subgraph MediaSession
-        MS[MediaSession]
-        PSB[PlaybackStateCompat.Builder]
+    subgraph UI Bridge
+        CPS[CurrentlyPlayingSingleton<br/>LiveData Bridge]
     end
     
-    subgraph Android Auto
-        AA[Android Auto UI]
+    subgraph UI Components
+        Mini[Mini Player]
+        Full[Full Player]
+        AA_UI[Android Auto UI]
     end
     
+    AA_CMD --> MS
+    UI_CMD --> MS
+    MS --> CB
+    CB --> EP
+    EP -->|Listener Events| PSC
     PSC --> SF
+    SF --> CPS
+    CPS -->|isPlayingLiveData| Mini
+    CPS -->|bookLiveData, trackLiveData| Full
     SF --> MS
-    MS --> PSB
-    PSB --> AA
+    MS --> AA_UI
 ```
 
-### State Synchronization
+### How State Synchronization Works
+
+1. **Commands flow through MediaSession**: Whether from Android Auto or UI buttons, all playback commands go through the MediaSession/MediaSessionCallback
+2. **ExoPlayer executes commands**: [`AudiobookMediaSessionCallback`](../../app/src/main/java/local/oss/chronicle/features/player/AudiobookMediaSessionCallback.kt) translates commands to ExoPlayer actions
+3. **ExoPlayer listeners update state**: ExoPlayer fires listener events (e.g., `onIsPlayingChanged()`) which update [`PlaybackStateController`](../../app/src/main/java/local/oss/chronicle/features/player/PlaybackStateController.kt)
+4. **StateFlow propagates to UI**: [`PlaybackStateController`](../../app/src/main/java/local/oss/chronicle/features/player/PlaybackStateController.kt) emits new state via StateFlow
+5. **LiveData bridge for UI**: [`CurrentlyPlayingSingleton`](../../app/src/main/java/local/oss/chronicle/features/currentlyplaying/CurrentlyPlayingSingleton.kt) converts StateFlow to LiveData
+6. **UI observes LiveData**: Mini player and other UI components observe LiveData fields like `isPlayingLiveData`
+
+### State Sources
 
 | State | Source | Update Trigger |
 |-------|--------|----------------|
-| Playing/Paused | ExoPlayer | Player state change |
+| Playing/Paused | ExoPlayer `onIsPlayingChanged()` | Player state change |
 | Position | PlaybackStateController | Position updates (debounced) |
 | Track metadata | TrackListStateManager | Track change |
+| Current book/track/chapter | PlaybackStateController | Media item change |
 | Error state | ChronicleError | Playback error |
+
+### Critical Implementation Detail
+
+**All state updates originate from ExoPlayer listeners.** The fix for Android Auto/mini player desynchronization involved:
+
+1. **Removed**: Manual state updates in [`AudiobookMediaSessionCallback`](../../app/src/main/java/local/oss/chronicle/features/player/AudiobookMediaSessionCallback.kt) (e.g., premature `isPlaying = true` before ExoPlayer confirmed)
+2. **Added**: LiveData bridge in [`CurrentlyPlayingSingleton`](../../app/src/main/java/local/oss/chronicle/features/currentlyplaying/CurrentlyPlayingSingleton.kt) for `book`, `track`, `chapter`, and `isPlaying` state
+3. **Updated**: [`MainActivityViewModel`](../../app/src/main/java/local/oss/chronicle/application/MainActivityViewModel.kt) to observe LiveData bridge directly
+
+This ensures that Android Auto commands and mini player UI always reflect the **actual** ExoPlayer state, preventing race conditions where UI shows "playing" while ExoPlayer is still buffering.
+
+### Mini Player State Observation
+
+The mini player observes state through [`MainActivityViewModel`](../../app/src/main/java/local/oss/chronicle/application/MainActivityViewModel.kt):
+
+```kotlin
+// ViewModel observes LiveData bridge
+val isPlaying: LiveData<Boolean> = currentlyPlayingSingleton.isPlayingLiveData
+val currentBook: LiveData<Audiobook?> = currentlyPlayingSingleton.bookLiveData
+val currentTrack: LiveData<MediaItemTrack?> = currentlyPlayingSingleton.trackLiveData
+
+// Fragment observes ViewModel
+viewModel.isPlaying.observe(viewLifecycleOwner) { isPlaying ->
+    updatePlayPauseButton(isPlaying)
+}
+```
+
+**Why LiveData instead of StateFlow?** LiveData is lifecycle-aware and automatically stops updates when the UI is not visible, preventing memory leaks and unnecessary work.
 
 ---
 

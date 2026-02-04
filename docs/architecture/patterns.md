@@ -348,14 +348,104 @@ class PlaybackStateController @Inject constructor(
 
 ### StateFlow → LiveData Bridge
 
-The [`CurrentlyPlayingSingleton`](../../app/src/main/java/local/oss/chronicle/features/currentlyplaying/CurrentlyPlayingSingleton.kt) bridges StateFlow to LiveData for UI consumption:
+The [`CurrentlyPlayingSingleton`](../../app/src/main/java/local/oss/chronicle/features/currentlyplaying/CurrentlyPlayingSingleton.kt) bridges StateFlow to LiveData for UI consumption, providing reliable state synchronization for UI components.
+
+#### Why This Pattern Exists
+
+[`PlaybackStateController`](../../app/src/main/java/local/oss/chronicle/features/player/PlaybackStateController.kt) uses `StateFlow` as the single source of truth for playback state. However, Android UI components (Fragments, Activities) traditionally observe `LiveData` which is lifecycle-aware and automatically stops updates when the UI is not visible.
+
+The bridge pattern solves state synchronization issues by:
+- Ensuring all UI components observe the same source of truth
+- Preventing duplicate state updates from multiple sources
+- Fixing desynchronization between Android Auto and mini player
+- Providing lifecycle-aware observation for UI
+
+#### LiveData Bridge Fields
+
+[`CurrentlyPlayingSingleton`](../../app/src/main/java/local/oss/chronicle/features/currentlyplaying/CurrentlyPlayingSingleton.kt) provides the following LiveData fields:
 
 ```kotlin
-// Convert StateFlow to LiveData for Fragments
+// Current playback state
+val isPlayingLiveData: LiveData<Boolean> = playbackStateController.state
+    .map { it.isPlaying }
+    .asLiveData()
+
+// Currently playing audiobook
+val bookLiveData: LiveData<Audiobook?> = playbackStateController.state
+    .map { it.audiobook }
+    .asLiveData()
+
+// Current track
+val trackLiveData: LiveData<MediaItemTrack?> = playbackStateController.state
+    .map { it.currentTrack }
+    .asLiveData()
+
+// Current chapter
+val chapterLiveData: LiveData<Chapter?> = playbackStateController.state
+    .map { it.currentChapter }
+    .asLiveData()
+
+// Playback position
 val bookPositionMs: LiveData<Long> = playbackStateController.state
     .map { it.bookPositionMs }
     .asLiveData()
 ```
+
+#### UI Observation Pattern
+
+UI components should **always observe LiveData from `CurrentlyPlayingSingleton`**, not StateFlow directly:
+
+```kotlin
+// ViewModel
+class MainActivityViewModel @Inject constructor(
+    private val currentlyPlayingSingleton: CurrentlyPlayingSingleton
+) : ViewModel() {
+    
+    // Observe LiveData bridge for UI updates
+    val isPlaying: LiveData<Boolean> = currentlyPlayingSingleton.isPlayingLiveData
+    val currentBook: LiveData<Audiobook?> = currentlyPlayingSingleton.bookLiveData
+}
+
+// Fragment
+override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+    viewModel.isPlaying.observe(viewLifecycleOwner) { isPlaying ->
+        updatePlayPauseButton(isPlaying)
+    }
+}
+```
+
+#### State Flow Diagram
+
+```mermaid
+graph TB
+    subgraph Service Layer
+        EP[ExoPlayer Events]
+        AA[Android Auto Commands]
+    end
+    
+    subgraph State Management
+        PSC[PlaybackStateController<br/>StateFlow - Single Source of Truth]
+    end
+    
+    subgraph UI Bridge
+        CPS[CurrentlyPlayingSingleton<br/>LiveData Bridge]
+    end
+    
+    subgraph UI Layer
+        Mini[Mini Player]
+        Full[Full Player Fragment]
+        VM[ViewModels]
+    end
+    
+    EP --> PSC
+    AA --> PSC
+    PSC --> CPS
+    CPS --> Mini
+    CPS --> Full
+    CPS --> VM
+```
+
+**Critical Note**: The fix for Android Auto/mini player desynchronization involved removing manual state updates from [`AudiobookMediaSessionCallback`](../../app/src/main/java/local/oss/chronicle/features/player/AudiobookMediaSessionCallback.kt) and ensuring all state changes flow through ExoPlayer listeners → PlaybackStateController → LiveData bridge → UI.
 
 ---
 
