@@ -569,7 +569,8 @@ class AudiobookMediaSessionCallbackTest {
 
             val mockBook =
                 Audiobook(
-                    id = 123,
+                    id = "plex:123",
+                    libraryId = "plex:library:1",
                     source = 1L, // Plex source
                     title = "Test Book",
                     author = "Author Name",
@@ -577,8 +578,8 @@ class AudiobookMediaSessionCallbackTest {
                 )
 
             coEvery { bookRepository.searchAsync("existing book") } returns listOf(mockBook)
-            coEvery { trackRepository.getTracksForAudiobookAsync(123) } returns emptyList()
-            coEvery { bookRepository.getAudiobookAsync(123) } returns mockBook
+            coEvery { trackRepository.getTracksForAudiobookAsync("plex:123") } returns emptyList()
+            coEvery { bookRepository.getAudiobookAsync("plex:123") } returns mockBook
 
             val playbackState = mockk<android.support.v4.media.session.PlaybackStateCompat>()
             every { playbackState.state } returns PlaybackStateCompat.STATE_NONE
@@ -671,18 +672,19 @@ class AudiobookMediaSessionCallbackTest {
 
             val mockBook =
                 Audiobook(
-                    id = 456,
+                    id = "plex:456",
+                    libraryId = "plex:library:1",
                     source = 1L, // Plex source
                     title = "Valid Book",
                     author = "Author Name",
                     duration = 3600000,
                 )
 
-            coEvery { trackRepository.getTracksForAudiobookAsync(456) } returns emptyList()
-            coEvery { bookRepository.getAudiobookAsync(456) } returns mockBook
+            coEvery { trackRepository.getTracksForAudiobookAsync("plex:456") } returns emptyList()
+            coEvery { bookRepository.getAudiobookAsync("plex:456") } returns mockBook
 
             // When: onPlayFromMediaId is called with valid bookId
-            callback.onPlayFromMediaId("456", Bundle())
+            callback.onPlayFromMediaId("plex:456", Bundle())
 
             // Advance time to allow coroutine to complete
             advanceTimeBy(1000)
@@ -746,7 +748,8 @@ class AudiobookMediaSessionCallbackTest {
 
             val mockBook =
                 Audiobook(
-                    id = 789,
+                    id = "plex:789",
+                    libraryId = "plex:library:1",
                     source = 1L, // Plex source
                     title = "Recent Book",
                     author = "Author Name",
@@ -756,8 +759,8 @@ class AudiobookMediaSessionCallbackTest {
                 )
 
             coEvery { bookRepository.getMostRecentlyPlayed() } returns mockBook
-            coEvery { trackRepository.getTracksForAudiobookAsync(789) } returns emptyList()
-            coEvery { bookRepository.getAudiobookAsync(789) } returns mockBook
+            coEvery { trackRepository.getTracksForAudiobookAsync("plex:789") } returns emptyList()
+            coEvery { bookRepository.getAudiobookAsync("plex:789") } returns mockBook
 
             val playbackState = mockk<android.support.v4.media.session.PlaybackStateCompat>()
             every { playbackState.state } returns PlaybackStateCompat.STATE_NONE

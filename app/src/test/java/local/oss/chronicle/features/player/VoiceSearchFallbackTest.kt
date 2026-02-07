@@ -180,7 +180,8 @@ class VoiceSearchFallbackTest {
             // Given: A recently played book exists
             val recentBook =
                 Audiobook(
-                    id = 42,
+                    id = "plex:42",
+                    libraryId = "plex:library:1",
                     source = 1L,
                     title = "Recently Played Book",
                     author = "Test Author",
@@ -189,8 +190,8 @@ class VoiceSearchFallbackTest {
                     viewCount = 5,
                 )
             coEvery { bookRepository.getMostRecentlyPlayed() } returns recentBook
-            coEvery { trackRepository.getTracksForAudiobookAsync(42) } returns emptyList()
-            coEvery { bookRepository.getAudiobookAsync(42) } returns recentBook
+            coEvery { trackRepository.getTracksForAudiobookAsync("plex:42") } returns emptyList()
+            coEvery { bookRepository.getAudiobookAsync("plex:42") } returns recentBook
 
             // When: Voice search is performed with no results
             callback.onPlayFromSearch("nonexistent query", null)
@@ -231,15 +232,16 @@ class VoiceSearchFallbackTest {
             // Given: A random book is available
             val randomBook =
                 Audiobook(
-                    id = 100,
+                    id = "plex:100",
+                    libraryId = "plex:library:1",
                     source = 1L,
                     title = "Random Book",
                     author = "Random Author",
                     duration = 5400000,
                 )
             coEvery { bookRepository.getRandomBookAsync() } returns randomBook
-            coEvery { trackRepository.getTracksForAudiobookAsync(100) } returns emptyList()
-            coEvery { bookRepository.getAudiobookAsync(100) } returns randomBook
+            coEvery { trackRepository.getTracksForAudiobookAsync("plex:100") } returns emptyList()
+            coEvery { bookRepository.getAudiobookAsync("plex:100") } returns randomBook
 
             // When: Voice search is performed with no results
             callback.onPlayFromSearch("nonexistent query", null)
@@ -342,15 +344,16 @@ class VoiceSearchFallbackTest {
             // Given: Search returns matching results
             val matchingBook =
                 Audiobook(
-                    id = 200,
+                    id = "plex:200",
+                    libraryId = "plex:library:1",
                     source = 1L,
                     title = "Matching Book Title",
                     author = "Matching Author",
                     duration = 7200000,
                 )
             coEvery { bookRepository.searchAsync("matching query") } returns listOf(matchingBook)
-            coEvery { trackRepository.getTracksForAudiobookAsync(200) } returns emptyList()
-            coEvery { bookRepository.getAudiobookAsync(200) } returns matchingBook
+            coEvery { trackRepository.getTracksForAudiobookAsync("plex:200") } returns emptyList()
+            coEvery { bookRepository.getAudiobookAsync("plex:200") } returns matchingBook
 
             // When: Voice search is performed with a successful query
             callback.onPlayFromSearch("matching query", null)
