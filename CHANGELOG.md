@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.60.20] - 2026-02-07
+
+- chore: bump version to 0.60.18-SNAPSHOT and update CHANGELOG.md (88441c2)
+- fix: review feedback where voice commands have issues (490b631)
+- test: roboelectric media tests (5a87f29)
+- test: jvm based tests for playback (ea82d0d)
+- test: instrumentation test for media playback (956d1a4)
+- test: improve failing tests (04a7491)
+- feat: make sure that something is played on voicecommand (0a9414f)
+- feat: add playback timing logs (d8bb527)
+- fix: TTS while waiting for buffer (ec26db9)
+- ci: bump (8b952c8)
+- fix: labels & descriptions (69519d4)
+- feat: hide empty views in android auto (97bbf50)
+- play: descriptions (67d19cf)
+- play: fix sync between auto and loginstate (a935b6a)
+- ci: bump (34d5151)
+- fit: attempt for regression bugs (9b0c695)
+- ci: bump (fca4e95)
+- play: more fixes (39df2e4)
+- play: fix refresh auto after login (daddf75)
+- play: more fixes for the auto play sync (880e63f)
+- ci: bump (4f41bf0)
+- docs: for the changes implemented (316e02c)
+
 ## [0.60.17] - 2026-01-29
 
 - fix: issue with android auto (2417131)
