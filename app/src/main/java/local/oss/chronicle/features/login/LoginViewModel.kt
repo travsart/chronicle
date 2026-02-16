@@ -2,10 +2,13 @@ package local.oss.chronicle.features.login
 
 import android.net.Uri
 import androidx.lifecycle.*
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import local.oss.chronicle.application.Injector
 import local.oss.chronicle.data.sources.plex.IPlexLoginRepo
 import local.oss.chronicle.data.sources.plex.model.OAuthResponse
+import local.oss.chronicle.features.auth.PlexAuthCoordinator
+import local.oss.chronicle.features.auth.PlexAuthState
 import local.oss.chronicle.util.Event
 import local.oss.chronicle.util.postEvent
 import javax.inject.Inject
@@ -24,6 +27,7 @@ class LoginViewModel(private val plexLoginRepo: IPlexLoginRepo) : ViewModel() {
             }
         }
 
+    // Legacy WebView-based OAuth flow (kept for reference, not used with Chrome Custom Tabs)
     private var _authEvent = MutableLiveData<Event<OAuthResponse?>>()
     val authEvent: LiveData<Event<OAuthResponse?>>
         get() = _authEvent
@@ -39,6 +43,40 @@ class LoginViewModel(private val plexLoginRepo: IPlexLoginRepo) : ViewModel() {
             return@map loginState.peekContent() == IPlexLoginRepo.LoginState.AWAITING_LOGIN_RESULTS
         }
 
+    // Chrome Custom Tabs OAuth coordinator
+    private var authCoordinator: PlexAuthCoordinator? = null
+
+    /**
+     * Starts the Chrome Custom Tabs OAuth flow using PlexAuthCoordinator.
+     *
+     * This replaces the WebView-based flow (loginWithOAuth).
+     * Returns a StateFlow that emits PlexAuthState updates.
+     */
+    suspend fun startChromeCustomTabsAuth(): StateFlow<PlexAuthState> {
+        // Create coordinator if not exists (use viewModelScope for lifecycle-aware coroutines)
+        if (authCoordinator == null) {
+            authCoordinator = PlexAuthCoordinator(plexLoginRepo, viewModelScope)
+        }
+
+        // Start authentication flow
+        return authCoordinator!!.startAuth()
+    }
+
+    /**
+     * Cancels the ongoing Chrome Custom Tabs authentication.
+     */
+    fun cancelAuth() {
+        authCoordinator?.cancelAuth()
+    }
+
+    /**
+     * Resets the coordinator to allow retry after failure/timeout.
+     */
+    fun resetAuth() {
+        authCoordinator?.reset()
+    }
+
+    // Legacy WebView-based OAuth flow (preserved but not used with new Chrome Custom Tabs flow)
     fun loginWithOAuth() {
         viewModelScope.launch(Injector.get().unhandledExceptionHandler()) {
             try {
@@ -75,5 +113,10 @@ class LoginViewModel(private val plexLoginRepo: IPlexLoginRepo) : ViewModel() {
                 plexLoginRepo.checkForOAuthAccessToken()
             }
         }
+    }
+
+    override fun onCleared() {
+        authCoordinator?.dispose()
+        super.onCleared()
     }
 }

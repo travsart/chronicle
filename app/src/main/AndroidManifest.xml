@@ -40,6 +40,35 @@
             </intent-filter>
         </activity>
 
+        <!-- OAuth deep link callback handler for Chrome Custom Tabs -->
+        <activity
+            android:name="local.oss.chronicle.features.auth.AuthReturnActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <!-- Primary: HTTPS App Link (auto-closes Chrome Custom Tab) -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="auth.chronicleapp.net"
+                    android:path="/callback" />
+            </intent-filter>
+            <!-- Fallback: Custom scheme (legacy support) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="chronicle"
+                    android:host="auth"
+                    android:path="/callback" />
+            </intent-filter>
+        </activity>
 
         <service
             android:name="local.oss.chronicle.features.player.MediaPlayerService"

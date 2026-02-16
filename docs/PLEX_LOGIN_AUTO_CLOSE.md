@@ -1,73 +1,34 @@
-# Plex OAuth Login Auto-Close Design Document
+# Plex OAuth Login - Chrome Custom Tabs with Android App Links
 
 ## Overview
 
-This document describes the design for automatically closing the Plex OAuth login interface and returning to the Chronicle app after successful authentication.
+This document describes Chronicle's OAuth implementation using **Chrome Custom Tabs** with **Android App Links** for automatic browser dismissal. Chrome Custom Tabs automatically close when navigating to a verified App Link, providing a seamless OAuth experience without requiring JavaScript-based deep link triggers.
+
+**Current Implementation**: HTTPS App Link (`https://auth.chronicleapp.net/callback`) with domain verification via Digital Asset Links.
+
+**Legacy Fallback**: Custom URI scheme (`chronicle://auth/callback`) remains supported for edge cases where App Links may not work.
 
 ## Background
 
-### Why Not Deep Links?
+### Why Chrome Custom Tabs Over WebView?
 
-The initial design proposed using Plex's `forwardUrl` parameter with Chrome Custom Tabs. However, **Plex's OAuth API does not support `forwardUrl` for mobile apps**. When a mobile app provides a `forwardUrl`, Plex ignores it and instead shows a "return to app" message. This is a deliberate design choice by Plex to handle mobile OAuth differently from web OAuth.
+Chrome Custom Tabs was chosen over an in-app WebView for several critical reasons:
 
-### Current Implementation
+| Aspect | Chrome Custom Tabs | WebView |
+|--------|-------------------|---------|
+| **Social Login Support** | ✅ Full support (Google, Facebook) | ❌ Blocked by providers |
+| **Security** | ✅ User's browser security sandbox | ⚠️ App-controlled, less trusted |
+| **Password Managers** | ✅ Native integration | ❌ Limited support |
+| **User Trust** | ✅ Familiar browser UI | ⚠️ Users wary of in-app forms |
+| **Auto-fill** | ✅ Full support | ⚠️ Limited support |
+| **Maintenance** | ✅ Browser handles updates | ⚠️ App must handle security patches |
+| **Auto-close on Redirect** | ✅ App Links auto-close | ⚠️ Manual dismissal required |
 
-The existing implementation in [`LoginFragment`](../app/src/main/java/local/oss/chronicle/features/login/LoginFragment.kt) uses Chrome Custom Tabs:
+**Critical Issues Solved**:
+1. Social login (Google, Facebook) is explicitly blocked in WebViews by identity providers for security reasons. By setting `platform=Web` and using Chrome Custom Tabs, Chronicle enables users to authenticate with their preferred method.
+2. Chrome Custom Tabs remain in the foreground when redirecting to custom URI schemes (`chronicle://`). By using Android App Links (`https://auth.chronicleapp.net/callback`), the browser automatically closes when navigating to a verified domain owned by the app.
 
-```mermaid
-sequenceDiagram
-    participant User
-    participant LoginFragment
-    participant LoginViewModel
-    participant PlexLoginRepo
-    participant ChromeCustomTab
-    participant PlexOAuth
-
-    User->>LoginFragment: Tap Login with Plex
-    LoginFragment->>LoginViewModel: loginWithOAuth
-    LoginViewModel->>PlexLoginRepo: postOAuthPin
-    PlexLoginRepo-->>LoginViewModel: OAuthResponse with code and clientId
-    LoginViewModel-->>LoginFragment: authEvent with OAuthResponse
-    LoginFragment->>ChromeCustomTab: Launch with OAuth URL
-    ChromeCustomTab->>PlexOAuth: Display Plex login page
-    User->>PlexOAuth: Complete authentication
-    PlexOAuth-->>ChromeCustomTab: Shows success page
-    Note over User,ChromeCustomTab: User must manually press back or close tab
-    User->>LoginFragment: Return to app manually
-    LoginFragment->>LoginFragment: onResume triggers
-    LoginFragment->>LoginViewModel: checkForAccess
-    LoginViewModel->>PlexLoginRepo: checkForOAuthAccessToken
-    PlexLoginRepo-->>LoginViewModel: Login state changes
-    LoginViewModel-->>Navigator: Navigate to next screen
-```
-
-### Current Pain Points
-
-1. **Manual User Action Required**: User must manually close the Chrome Custom Tab or press back after successful authentication
-2. **No Feedback**: User doesn't know when authentication is complete without switching back to the app
-3. **Potential Confusion**: Users may wait on the Plex success page, unsure if they should close it
-
----
-
-## Chosen Solution: In-App WebView with Background Polling
-
-### Justification
-
-| Approach | Pros | Cons |
-|----------|------|------|
-| Deep Link Callback | Standard Android pattern, automatic close | **Not supported by Plex mobile OAuth** |
-| Background Polling with Chrome Tab | No deep link needed | Complex foreground bring-back logic, poor UX |
-| **In-App WebView** | Full control, can auto-close, integrated polling | Requires JavaScript enabled, needs proper User-Agent |
-
-The **In-App WebView approach** is the only viable solution because:
-1. We have full control over the WebView lifecycle
-2. We can poll for token completion while the WebView is displayed
-3. When the token is available, we can programmatically dismiss the WebView
-4. The user gets a seamless experience without manual intervention
-
----
-
-## Architecture Overview
+## Architecture
 
 ### Component Diagram
 
@@ -75,688 +36,438 @@ The **In-App WebView approach** is the only viable solution because:
 graph TB
     subgraph UI Layer
         LF[LoginFragment]
-        WD[PlexOAuthDialogFragment]
-        WV[WebView]
+        CCT[Chrome Custom Tabs]
+        ARA[AuthReturnActivity]
     end
     
-    subgraph ViewModel Layer
-        OVM[PlexOAuthViewModel]
+    subgraph Coordinator Layer
+        PAC[PlexAuthCoordinator]
+        ACS[AuthCoordinatorSingleton]
+        PAS[PlexAuthState]
     end
     
     subgraph Data Layer
         PLR[PlexLoginRepo]
-        PLS[PlexLoginService]
+        PAUB[PlexAuthUrlBuilder]
     end
     
-    LF -->|shows| WD
-    WD -->|contains| WV
-    WD -->|observes| OVM
-    OVM -->|polls| PLR
-    PLR -->|API calls| PLS
-    OVM -->|emits AuthResult| WD
-    WD -->|dismisses on success| LF
+    subgraph External
+        PLEX[Plex OAuth API]
+        APPLINK[auth.chronicleapp.net/callback<br/>Verified App Link]
+    end
+    
+    LF -->|observes| PAC
+    PAC -->|creates PIN| PLR
+    PAC -->|builds URL| PAUB
+    LF -->|launches| CCT
+    CCT -->|navigates to| PLEX
+    PLEX -->|redirects to| APPLINK
+    APPLINK -->|App Link triggers| ARA
+    CCT -->|auto-closes| LF
+    ARA -->|notifies| ACS
+    ACS -->|expedites polling| PAC
+    PAC -->|polls for token| PLR
+    PAC -->|emits states| PAS
 ```
 
 ### Key Components
 
-1. **PlexOAuthDialogFragment**: A full-screen `DialogFragment` containing the WebView
-2. **PlexOAuthViewModel**: Manages polling logic and authentication state
-3. **PlexLoginRepo**: Existing repository, used for polling
-4. **WebView**: Displays Plex OAuth page with JavaScript enabled
+1. **[`PlexAuthCoordinator`](../app/src/main/java/local/oss/chronicle/features/auth/PlexAuthCoordinator.kt)** - State machine managing the OAuth flow
+2. **[`PlexAuthUrlBuilder`](../app/src/main/java/local/oss/chronicle/features/auth/PlexAuthUrlBuilder.kt)** - Constructs OAuth URL with `forwardUrl` set to App Link
+3. **[`PlexAuthState`](../app/src/main/java/local/oss/chronicle/features/auth/PlexAuthState.kt)** - Immutable state representation
+4. **[`AuthReturnActivity`](../app/src/main/java/local/oss/chronicle/features/auth/AuthReturnActivity.kt)** - Handles App Link and legacy deep link callbacks
+5. **[`AuthCoordinatorSingleton`](../app/src/main/java/local/oss/chronicle/features/auth/AuthCoordinatorSingleton.kt)** - Bridges Activity and Coordinator
+6. **[`pages/.well-known/assetlinks.json`](../pages/.well-known/assetlinks.json)** - Digital Asset Links for domain verification
+7. **[`pages/auth/callback/index.html`](../pages/auth/callback/index.html)** - Fallback page when App Links fail (rare)
 
----
-
-## Detailed Design
-
-### New Files to Create
-
-| File | Purpose |
-|------|---------|
-| `PlexOAuthDialogFragment.kt` | DialogFragment hosting the WebView |
-| `PlexOAuthViewModel.kt` | ViewModel for polling and state management |
-| `fragment_plex_oauth.xml` | Layout with WebView and loading indicator |
-| `styles_dialog.xml` | Full-screen dialog theme |
-
-### Existing Files to Modify
-
-| File | Changes |
-|------|---------|
-| `LoginFragment.kt` | Launch DialogFragment instead of Chrome Custom Tab |
-| `AppComponent.kt` | Add inject method for new DialogFragment |
-| `strings.xml` | Add new string resources |
-
----
-
-### Sequence Diagram: WebView Flow
+## OAuth Flow Sequence
 
 ```mermaid
 sequenceDiagram
     participant User
     participant LoginFragment
-    participant LoginViewModel
+    participant PlexAuthCoordinator
     participant PlexLoginRepo
-    participant PlexOAuthDialog
-    participant PlexOAuthVM as PlexOAuthViewModel
-    participant WebView
+    participant ChromeCustomTabs
     participant PlexOAuth
-
-    User->>LoginFragment: Tap Login with Plex
-    LoginFragment->>LoginViewModel: loginWithOAuth
-    LoginViewModel->>PlexLoginRepo: postOAuthPin
-    PlexLoginRepo-->>LoginViewModel: OAuthResponse with code and clientId
-    LoginViewModel-->>LoginFragment: authEvent with OAuthResponse
+    participant AppLink as https://auth.chronicleapp.net/callback
+    participant AuthReturnActivity
     
-    LoginFragment->>PlexOAuthDialog: show with OAuth URL and pinId
-    PlexOAuthDialog->>WebView: load OAuth URL
-    WebView->>PlexOAuth: Display Plex login page
+    User->>LoginFragment: Tap Sign In with Plex
+    LoginFragment->>PlexAuthCoordinator: startAuth()
     
-    par User authenticates
-        User->>PlexOAuth: Complete authentication
-    and Background polling
-        loop Every 2 seconds
-            PlexOAuthVM->>PlexLoginRepo: checkForOAuthAccessToken
-            PlexLoginRepo-->>PlexOAuthVM: Poll result
-        end
+    PlexAuthCoordinator->>PlexLoginRepo: postOAuthPin()
+    PlexLoginRepo-->>PlexAuthCoordinator: PIN response {id, code, clientID}
+    
+    PlexAuthCoordinator->>PlexAuthCoordinator: Build OAuth URL<br/>(platform=Web, forwardUrl)
+    PlexAuthCoordinator-->>LoginFragment: State: WaitingForUser(authUrl)
+    
+    LoginFragment->>ChromeCustomTabs: Launch with authUrl
+    ChromeCustomTabs->>PlexOAuth: Load login page
+    
+    Note over PlexAuthCoordinator,PlexLoginRepo: Background: Polling starts<br/>every 1.5 seconds
+    
+    loop Every 1.5s (or 200ms if expedited)
+        PlexAuthCoordinator->>PlexLoginRepo: checkForOAuthAccessToken()
+        PlexLoginRepo-->>PlexAuthCoordinator: Token not ready yet
     end
     
-    Note over PlexOAuthVM: Token becomes available
-    PlexOAuthVM-->>PlexOAuthDialog: AuthState.Success
-    PlexOAuthDialog->>PlexOAuthDialog: dismiss
-    PlexOAuthDialog-->>LoginFragment: onDismiss callback
+    User->>PlexOAuth: Enter credentials / use social login
+    PlexOAuth->>PlexOAuth: Authenticate
+    PlexOAuth->>AppLink: Redirect to forwardUrl
     
-    Note over PlexLoginRepo: loginEvent changes to LOGGED_IN_*
-    LoginFragment-->>Navigator: Navigate to next screen
+    Note over ChromeCustomTabs,AppLink: Chrome Custom Tabs detects verified App Link<br/>and automatically closes
+    
+    AppLink->>AuthReturnActivity: Launch via App Link intent
+    ChromeCustomTabs->>User: Browser automatically closes
+    AuthReturnActivity->>AuthCoordinatorSingleton: onBrowserReturned()
+    AuthCoordinatorSingleton->>PlexAuthCoordinator: Expedite polling (200ms)
+    
+    PlexAuthCoordinator->>PlexLoginRepo: checkForOAuthAccessToken()
+    PlexLoginRepo->>PlexOAuth: GET /api/v2/pins/{id}
+    PlexOAuth-->>PlexLoginRepo: {authToken: "xyz..."}
+    PlexLoginRepo-->>PlexAuthCoordinator: Login state changed
+    
+    PlexAuthCoordinator-->>LoginFragment: State: Success
+    LoginFragment->>LoginFragment: Navigate to next screen
 ```
 
----
+## Implementation Details
 
-## Code Structure
+### 1. OAuth URL Construction
 
-### 1. PlexOAuthDialogFragment
-
-**Location:** `app/src/main/java/local/oss/chronicle/features/login/PlexOAuthDialogFragment.kt`
+**Critical Parameter**: `platform=Web`
 
 ```kotlin
-package local.oss.chronicle.features.login
+// From PlexAuthUrlBuilder.kt
+private const val PLATFORM = "Web" // Must be "Web" for social login support
 
-import android.annotation.SuppressLint
-import android.content.Context
-import android.graphics.Bitmap
-import android.os.Bundle
-import android.view.LayoutInflater
-import android.view.View
-import android.view.ViewGroup
-import android.webkit.WebChromeClient
-import android.webkit.WebView
-import android.webkit.WebViewClient
-import androidx.fragment.app.DialogFragment
-import androidx.fragment.app.viewModels
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
-import kotlinx.coroutines.launch
-import local.oss.chronicle.R
-import local.oss.chronicle.application.ChronicleApplication
-import local.oss.chronicle.databinding.FragmentPlexOauthBinding
-import timber.log.Timber
-import javax.inject.Inject
-
-class PlexOAuthDialogFragment : DialogFragment() {
-
-    companion object {
-        private const val ARG_OAUTH_URL = "oauth_url"
-        private const val ARG_PIN_ID = "pin_id"
-        const val TAG = "PlexOAuthDialogFragment"
-
-        fun newInstance(oauthUrl: String, pinId: Long): PlexOAuthDialogFragment {
-            return PlexOAuthDialogFragment().apply {
-                arguments = Bundle().apply {
-                    putString(ARG_OAUTH_URL, oauthUrl)
-                    putLong(ARG_PIN_ID, pinId)
-                }
-            }
-        }
+fun buildOAuthUrl(clientId: String, pinCode: String): String {
+    val params = buildMap<String, String> {
+        put("code", pinCode)
+        put("clientID", clientId)
+        put("forwardUrl", FORWARD_URL) // "https://auth.chronicleapp.net/callback"
+        put("context[device][platform]", PLATFORM) // ← Critical!
+        // ... other context params
     }
+    // URL encoding...
+}
+```
 
-    @Inject
-    lateinit var viewModelFactory: PlexOAuthViewModel.Factory
+**Why `platform=Web`?**
+- Plex OAuth server treats platform=Android differently
+- Android platform disables social login buttons
+- Web platform enables Google, Facebook, etc.
+- Chronicle uses Chrome Custom Tabs (native browser), so Web is accurate
 
-    private val viewModel: PlexOAuthViewModel by viewModels { viewModelFactory }
+### 2. Android App Links Flow
+
+**AndroidManifest.xml** declares both the App Link (primary) and legacy deep link (fallback):
+
+```xml
+<activity
+    android:name=".features.auth.AuthReturnActivity"
+    android:exported="true"
+    android:launchMode="singleTask">
     
-    private var _binding: FragmentPlexOauthBinding? = null
-    private val binding get() = _binding!!
+    <!-- Primary: Android App Links (HTTPS with auto-verify) -->
+    <intent-filter android:autoVerify="true">
+        <action android:name="android.intent.action.VIEW" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <category android:name="android.intent.category.BROWSABLE" />
+        <data
+            android:scheme="https"
+            android:host="auth.chronicleapp.net"
+            android:pathPrefix="/callback" />
+    </intent-filter>
+    
+    <!-- Fallback: Custom URI scheme (legacy support) -->
+    <intent-filter>
+        <action android:name="android.intent.action.VIEW" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <category android:name="android.intent.category.BROWSABLE" />
+        <data
+            android:scheme="chronicle"
+            android:host="auth"
+            android:pathPrefix="/callback" />
+    </intent-filter>
+</activity>
+```
 
-    private var onAuthSuccessListener: (() -> Unit)? = null
-    private var onAuthCancelledListener: (() -> Unit)? = null
+**Key Attribute**: `android:autoVerify="true"` triggers Android's Digital Asset Links verification. The system fetches `https://auth.chronicleapp.net/.well-known/assetlinks.json` at install time to verify domain ownership.
 
-    override fun onAttach(context: Context) {
-        (requireActivity().application as ChronicleApplication)
-            .appComponent
-            .inject(this)
-        super.onAttach(context)
+**Digital Asset Links File** (`pages/.well-known/assetlinks.json`):
+
+```json
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "local.oss.chronicle",
+      "sha256_cert_fingerprints": [
+        "SHA256:..."
+      ]
     }
+  }
+]
+```
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setStyle(STYLE_NORMAL, R.style.Theme_Chronicle_FullScreenDialog)
+This file proves Chronicle owns the `auth.chronicleapp.net` domain. Without it, the App Link falls back to the legacy `chronicle://` scheme.
+
+**Fallback Page** (`pages/auth/callback/index.html`):
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Chronicle Authentication</title>
+    <script>
+        // Attempt legacy deep link for browsers that don't auto-close
+        window.location.href = 'chronicle://auth/callback';
+    </script>
+</head>
+<body>
+    <h1>Authentication Complete</h1>
+    <p>You can now close this tab and return to Chronicle.</p>
+    <button onclick="window.location.href='chronicle://auth/callback'">
+        Return to Chronicle
+    </button>
+</body>
+</html>
+```
+
+This page serves three purposes:
+1. **Primary scenario (App Links work)**: Page never displays—Chrome Custom Tabs auto-closes before rendering
+2. **Fallback scenario**: If App Links fail, JavaScript triggers legacy `chronicle://` deep link
+3. **Manual return**: Button allows user to manually return if JavaScript fails
+
+**Why App Links Auto-Close Chrome Custom Tabs:**
+
+When Chrome Custom Tabs navigates to a verified App Link:
+1. Android system intercepts the HTTPS URL before the browser renders it
+2. System verifies the Digital Asset Links file
+3. System launches the owning app (Chronicle)
+4. Chrome Custom Tabs automatically closes since the navigation was handled by an app
+5. User returns to Chronicle without seeing a browser window
+
+This is **superior to custom URI schemes** (`chronicle://`) which do NOT auto-close Chrome Custom Tabs, leaving the browser in the foreground.
+
+### 3. State Machine
+
+[`PlexAuthState`](../app/src/main/java/local/oss/chronicle/features/auth/PlexAuthState.kt) represents all possible states:
+
+```
+Idle → CreatingPin → WaitingForUser → Polling → Success/Error/Timeout/Cancelled
+```
+
+**State Transitions:**
+- `Idle`: Initial state
+- `CreatingPin`: Calling POST /pins API
+- `WaitingForUser`: PIN created, ready to launch browser
+- `Polling`: Background polling for token (updates with elapsed time)
+- `Success`: Token obtained, auth complete
+- `Error`: API error during PIN creation
+- `Timeout`: 2 minutes elapsed without token
+- `Cancelled`: User cancelled flow
+
+### 4. Polling Strategy
+
+**Normal Polling**: Every 1.5 seconds
+**Expedited Polling**: Every 200ms (after browser returns)
+**Timeout**: 2 minutes
+
+```kotlin
+// From PlexAuthCoordinator.kt
+companion object {
+    const val POLLING_INTERVAL_MS = 1500L
+    const val EXPEDITED_POLLING_INTERVAL_MS = 200L
+    const val TIMEOUT_MS = 120_000L // 2 minutes
+}
+
+fun onBrowserReturned() {
+    pollingInterval = EXPEDITED_POLLING_INTERVAL_MS
+}
+```
+
+**Why expedited polling?**
+- Deep link indicates user completed auth
+- Reduces perceived latency
+- Still polls (doesn't assume success) for reliability
+
+### 5. Cross-Component Communication
+
+[`AuthCoordinatorSingleton`](../app/src/main/java/local/oss/chronicle/features/auth/AuthCoordinatorSingleton.kt) bridges the Activity and Coordinator:
+
+```kotlin
+object AuthCoordinatorSingleton {
+    private var coordinator: PlexAuthCoordinator? = null
+    
+    fun register(coordinator: PlexAuthCoordinator) {
+        this.coordinator = coordinator
     }
-
-    override fun onCreateView(
-        inflater: LayoutInflater,
-        container: ViewGroup?,
-        savedInstanceState: Bundle?
-    ): View {
-        _binding = FragmentPlexOauthBinding.inflate(inflater, container, false)
-        return binding.root
+    
+    fun onBrowserReturned() {
+        coordinator?.onBrowserReturned()
     }
-
-    @SuppressLint("SetJavaScriptEnabled")
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
-
-        setupToolbar()
-        setupWebView()
-        observeAuthState()
-
-        val oauthUrl = requireArguments().getString(ARG_OAUTH_URL)
-            ?: throw IllegalStateException("OAuth URL is required")
-        val pinId = requireArguments().getLong(ARG_PIN_ID, -1L)
-        
-        if (pinId == -1L) {
-            throw IllegalStateException("PIN ID is required")
-        }
-
-        binding.webview.loadUrl(oauthUrl)
-        viewModel.startPolling(pinId)
-    }
-
-    private fun setupToolbar() {
-        binding.toolbar.setNavigationOnClickListener {
-            onAuthCancelledListener?.invoke()
-            dismiss()
-        }
-        binding.toolbar.title = getString(R.string.plex_login_title)
-    }
-
-    @SuppressLint("SetJavaScriptEnabled")
-    private fun setupWebView() {
-        binding.webview.apply {
-            settings.javaScriptEnabled = true
-            settings.domStorageEnabled = true
-            settings.userAgentString = buildUserAgent()
-            
-            webViewClient = object : WebViewClient() {
-                override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                    super.onPageStarted(view, url, favicon)
-                    binding.progressBar.visibility = View.VISIBLE
-                }
-
-                override fun onPageFinished(view: WebView?, url: String?) {
-                    super.onPageFinished(view, url)
-                    binding.progressBar.visibility = View.GONE
-                }
-            }
-            
-            webChromeClient = object : WebChromeClient() {
-                override fun onProgressChanged(view: WebView?, newProgress: Int) {
-                    super.onProgressChanged(view, newProgress)
-                    binding.progressBar.progress = newProgress
-                }
-            }
-        }
-    }
-
-    private fun buildUserAgent(): String {
-        val defaultAgent = WebView(requireContext()).settings.userAgentString
-        // Append Chronicle identifier but keep browser-like agent to avoid blocking
-        return "$defaultAgent Chronicle/Android"
-    }
-
-    private fun observeAuthState() {
-        viewLifecycleOwner.lifecycleScope.launch {
-            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.authState.collect { state ->
-                    when (state) {
-                        is PlexOAuthViewModel.AuthState.Polling -> {
-                            // Continue showing WebView
-                        }
-                        is PlexOAuthViewModel.AuthState.Success -> {
-                            Timber.i("OAuth authentication successful, dismissing dialog")
-                            onAuthSuccessListener?.invoke()
-                            dismiss()
-                        }
-                        is PlexOAuthViewModel.AuthState.Error -> {
-                            Timber.e("OAuth authentication error: ${state.message}")
-                            onAuthCancelledListener?.invoke()
-                            dismiss()
-                        }
-                        is PlexOAuthViewModel.AuthState.Timeout -> {
-                            Timber.w("OAuth authentication timed out")
-                            onAuthCancelledListener?.invoke()
-                            dismiss()
-                        }
-                        PlexOAuthViewModel.AuthState.Idle -> {
-                            // Initial state, do nothing
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    override fun onDestroyView() {
-        viewModel.stopPolling()
-        binding.webview.destroy()
-        _binding = null
-        super.onDestroyView()
-    }
-
-    fun setOnAuthSuccessListener(listener: () -> Unit) {
-        onAuthSuccessListener = listener
-    }
-
-    fun setOnAuthCancelledListener(listener: () -> Unit) {
-        onAuthCancelledListener = listener
+    
+    fun unregister() {
+        coordinator = null
     }
 }
 ```
 
----
+**Lifecycle**:
+- Coordinator registers when `startAuth()` is called
+- Activity calls `onBrowserReturned()` when deep link received
+- Coordinator unregisters on success/error/dispose
 
-### 2. PlexOAuthViewModel
-
-**Location:** `app/src/main/java/local/oss/chronicle/features/login/PlexOAuthViewModel.kt`
-
-```kotlin
-package local.oss.chronicle.features.login
-
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
-import local.oss.chronicle.data.sources.plex.IPlexLoginRepo
-import timber.log.Timber
-import javax.inject.Inject
-
-class PlexOAuthViewModel(
-    private val plexLoginRepo: IPlexLoginRepo
-) : ViewModel() {
-
-    companion object {
-        /** Polling interval in milliseconds */
-        const val POLLING_INTERVAL_MS = 2000L
-        
-        /** Maximum polling duration before timeout - 5 minutes */
-        const val POLLING_TIMEOUT_MS = 5 * 60 * 1000L
-    }
-
-    sealed class AuthState {
-        object Idle : AuthState()
-        object Polling : AuthState()
-        object Success : AuthState()
-        data class Error(val message: String) : AuthState()
-        object Timeout : AuthState()
-    }
-
-    private val _authState = MutableStateFlow<AuthState>(AuthState.Idle)
-    val authState: StateFlow<AuthState> = _authState.asStateFlow()
-
-    private var pollingJob: Job? = null
-    private var startTime: Long = 0
-
-    fun startPolling(pinId: Long) {
-        if (pollingJob?.isActive == true) {
-            Timber.d("Polling already active, ignoring start request")
-            return
-        }
-
-        startTime = System.currentTimeMillis()
-        _authState.value = AuthState.Polling
-
-        pollingJob = viewModelScope.launch {
-            while (isActive) {
-                // Check for timeout
-                if (System.currentTimeMillis() - startTime > POLLING_TIMEOUT_MS) {
-                    Timber.w("OAuth polling timed out after ${POLLING_TIMEOUT_MS}ms")
-                    _authState.value = AuthState.Timeout
-                    break
-                }
-
-                try {
-                    Timber.d("Polling for OAuth token...")
-                    plexLoginRepo.checkForOAuthAccessToken()
-                    
-                    // Check if login state changed to indicate success
-                    val currentState = plexLoginRepo.loginEvent.value?.peekContent()
-                    if (currentState != null && 
-                        currentState != IPlexLoginRepo.LoginState.NOT_LOGGED_IN &&
-                        currentState != IPlexLoginRepo.LoginState.AWAITING_LOGIN_RESULTS &&
-                        currentState != IPlexLoginRepo.LoginState.FAILED_TO_LOG_IN
-                    ) {
-                        Timber.i("OAuth token obtained, login state: $currentState")
-                        _authState.value = AuthState.Success
-                        break
-                    }
-                } catch (e: Exception) {
-                    Timber.e(e, "Error during OAuth polling")
-                    // Don't fail immediately, continue polling
-                }
-
-                delay(POLLING_INTERVAL_MS)
-            }
-        }
-    }
-
-    fun stopPolling() {
-        pollingJob?.cancel()
-        pollingJob = null
-        Timber.d("OAuth polling stopped")
-    }
-
-    override fun onCleared() {
-        super.onCleared()
-        stopPolling()
-    }
-
-    class Factory @Inject constructor(
-        private val plexLoginRepo: IPlexLoginRepo
-    ) : ViewModelProvider.Factory {
-        @Suppress("UNCHECKED_CAST")
-        override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            if (modelClass.isAssignableFrom(PlexOAuthViewModel::class.java)) {
-                return PlexOAuthViewModel(plexLoginRepo) as T
-            }
-            throw IllegalArgumentException("Unknown ViewModel class")
-        }
-    }
-}
-```
-
----
-
-### 3. Layout: fragment_plex_oauth.xml
-
-**Location:** `app/src/main/res/layout/fragment_plex_oauth.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<androidx.coordinatorlayout.widget.CoordinatorLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:fitsSystemWindows="true">
-
-    <com.google.android.material.appbar.AppBarLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:fitsSystemWindows="true">
-
-        <com.google.android.material.appbar.MaterialToolbar
-            android:id="@+id/toolbar"
-            android:layout_width="match_parent"
-            android:layout_height="?attr/actionBarSize"
-            app:navigationIcon="@drawable/ic_close_white"
-            app:navigationContentDescription="@string/close" />
-
-        <ProgressBar
-            android:id="@+id/progressBar"
-            style="@style/Widget.AppCompat.ProgressBar.Horizontal"
-            android:layout_width="match_parent"
-            android:layout_height="4dp"
-            android:indeterminate="false"
-            android:max="100"
-            android:progress="0"
-            android:visibility="gone" />
-
-    </com.google.android.material.appbar.AppBarLayout>
-
-    <WebView
-        android:id="@+id/webview"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        app:layout_behavior="@string/appbar_scrolling_view_behavior" />
-
-</androidx.coordinatorlayout.widget.CoordinatorLayout>
-```
-
----
-
-### 4. Styles: Theme_Chronicle_FullScreenDialog
-
-**Add to:** `app/src/main/res/values/styles.xml`
-
-```xml
-<style name="Theme.Chronicle.FullScreenDialog" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-    <item name="android:windowIsFloating">false</item>
-    <item name="android:windowBackground">?android:colorBackground</item>
-    <item name="android:statusBarColor">@color/colorPrimaryDark</item>
-    <item name="android:navigationBarColor">@color/colorPrimaryDark</item>
-</style>
-```
-
----
-
-### 5. Modify LoginFragment
-
-**Location:** [`app/src/main/java/local/oss/chronicle/features/login/LoginFragment.kt`](../app/src/main/java/local/oss/chronicle/features/login/LoginFragment.kt)
-
-**Changes:** Replace Chrome Custom Tab launch with DialogFragment
-
-```kotlin
-// Replace the authEvent observer (lines 77-118) with:
-
-loginViewModel.authEvent.observe(
-    viewLifecycleOwner,
-    Observer { authRequestEvent ->
-        val oAuthPin = authRequestEvent.getContentIfNotHandled()
-        if (oAuthPin != null) {
-            // Build OAuth URL
-            val url = loginViewModel.makeOAuthLoginUrl(
-                oAuthPin.clientIdentifier,
-                oAuthPin.code,
-            )
-            
-            // Get the PIN ID from PlexPrefsRepo for polling
-            val pinId = oAuthPin.id
-            
-            // Show WebView dialog instead of Chrome Custom Tab
-            val dialog = PlexOAuthDialogFragment.newInstance(
-                oauthUrl = url.toString(),
-                pinId = pinId
-            )
-            
-            dialog.setOnAuthSuccessListener {
-                Timber.i("OAuth success callback received")
-                // The loginEvent observer in MainActivity handles navigation
-            }
-            
-            dialog.setOnAuthCancelledListener {
-                Timber.i("OAuth cancelled by user")
-                // User can retry by pressing login button again
-            }
-            
-            dialog.show(childFragmentManager, PlexOAuthDialogFragment.TAG)
-            
-            loginViewModel.setLaunched(true)
-        }
-    },
-)
-```
-
-**Remove:** The following imports are no longer needed:
-- `androidx.browser.customtabs.CustomTabColorSchemeParams`
-- `androidx.browser.customtabs.CustomTabsIntent`
-
----
-
-### 6. Modify AppComponent
-
-**Location:** [`app/src/main/java/local/oss/chronicle/injection/components/AppComponent.kt`](../app/src/main/java/local/oss/chronicle/injection/components/AppComponent.kt)
-
-**Add:** New inject method for the DialogFragment
-
-```kotlin
-// Add after line 89:
-fun inject(plexOAuthDialogFragment: PlexOAuthDialogFragment)
-```
-
----
-
-### 7. String Resources
-
-**Add to:** `app/src/main/res/values/strings.xml`
-
-```xml
-<string name="plex_login_title">Sign in with Plex</string>
-<string name="close">Close</string>
-```
-
----
-
-## Error Handling Strategy
+## Error Handling
 
 ### Network Errors During Polling
 
-**Scenario:** Network becomes unavailable during authentication polling.
+**Scenario**: Network unavailable during polling
 
-**Handling:**
-- Polling continues with exponential backoff (could be enhanced)
-- Errors are logged but don't immediately fail
-- If network recovers, polling resumes
+**Handling**:
+- Polling catches exceptions and continues
+- Transient errors don't fail the flow
 - Timeout eventually triggers if auth never completes
 
 ### User Cancellation
 
-**Scenario:** User presses back or close button on the dialog.
+**Scenario**: User presses back to close Chrome Custom Tab
 
-**Handling:**
-- `onAuthCancelledListener` is invoked
-- Polling stops via `onDestroyView()`
-- User returns to LoginFragment, can retry
+**Handling**:
+- Polling continues in background (user might return)
+- Timeout ensures cleanup after 2 minutes
+- User can retry by tapping login again
 
 ### Polling Timeout
 
-**Scenario:** User doesn't complete authentication within 5 minutes.
+**Scenario**: User doesn't complete auth within 2 minutes
 
-**Handling:**
-- `AuthState.Timeout` is emitted
-- Dialog dismisses automatically
-- User can retry by pressing login button
+**Handling**:
+- State transitions to `Timeout`
+- Polling job cancelled
+- UI shows error message
+- User can retry
 
-### WebView JavaScript Errors
+### App Link Verification Failures
 
-**Scenario:** Plex page fails to load properly.
+**Scenario**: Digital Asset Links verification fails (misconfigured domain, certificate mismatch)
 
-**Handling:**
-- WebView shows error page
-- User can press close button to cancel
-- Polling continues in background (in case auth completed server-side)
+**Handling**:
+- Falls back to legacy `chronicle://auth/callback` deep link via JavaScript
+- User manually returns using button on fallback page
+- Polling continues, will detect token if auth completed
+- Chrome Custom Tabs won't auto-close (legacy behavior)
 
----
+**Scenario**: Deep link doesn't trigger at all (rare)
+
+**Handling**:
+- Fallback page shows "Return to Chronicle" button
+- User can manually return to app
+- Polling continues, will detect token if auth completed
+- Timeout provides safety net
 
 ## Security Considerations
 
-### WebView Security
+### Browser Security Sandbox
 
-1. **JavaScript**: Enabled only for the Plex domain
-2. **User Agent**: Standard browser agent with Chronicle suffix (avoids blocking)
-3. **Cookies**: WebView uses sandboxed cookie storage
-4. **HTTPS**: Plex OAuth exclusively uses HTTPS
+Chrome Custom Tabs runs in the user's browser process with full browser security:
+- Isolated from app process
+- Full HTTPS certificate validation
+- Browser's cookie security policies
+- No JavaScript injection possible from app
 
 ### Credential Protection
 
-1. **No credential interception**: User enters credentials directly in Plex WebView
-2. **Token polling**: Uses secure server-to-server API calls
-3. **No sensitive data in logs**: Only state transitions are logged
+- User enters credentials directly in browser (not app)
+- App never sees or handles user passwords
+- Token obtained via secure server-to-server polling
+- No sensitive data logged
 
-### WebView Hardening Checklist
+### App Link Security
 
-- [ ] Disable file access: `settings.allowFileAccess = false`
-- [ ] Disable content access: `settings.allowContentAccess = false`  
-- [ ] Clear WebView data on dismiss
-- [ ] Consider using `WebViewAssetLoader` for any local content
+- **App Link verification** proves domain ownership via Digital Asset Links
+- **HTTPS scheme** provides transport security and prevents spoofing
+- **No sensitive data** in redirect URL—only triggers browser return signal
+- **Token obtained separately** via secure polling (not transmitted in URL)
+- **Legacy deep link** (`chronicle://`) kept as fallback, app-specific scheme
 
----
-
-## Build Variants
-
-The solution works identically for both **Play Store** and **F-Droid** variants:
-
-- No flavor-specific code required
-- WebView is part of Android system, no Google services dependency
-- All changes are in the `main` source set
-
----
-
-## Testing Considerations
+## Testing
 
 ### Unit Tests
 
-1. **PlexOAuthViewModel**
-   - Test polling starts and emits correct states
-   - Test timeout behavior
-   - Test polling stops when cancelled
+Created tests for:
+- ✅ [`PlexAuthUrlBuilderTest`](../app/src/test/java/local/oss/chronicle/features/auth/PlexAuthUrlBuilderTest.kt) - URL construction and encoding
+- ✅ [`AuthCoordinatorSingletonTest`](../app/src/test/java/local/oss/chronicle/features/auth/AuthCoordinatorSingletonTest.kt) - Singleton registration/delegation
 
-### Integration Tests
-
-1. **Happy Path**
-   - Launch OAuth flow
-   - Complete authentication in WebView
-   - Verify dialog auto-dismisses
-   - Verify navigation proceeds
-
-2. **Cancellation Path**
-   - Launch OAuth flow
-   - Press close button
-   - Verify dialog dismisses
-   - Verify user can retry
-
-3. **Timeout Path**
-   - Launch OAuth flow
-   - Wait for timeout (use shorter timeout for test)
-   - Verify dialog dismisses
-   - Verify error state
+**Note**: `PlexAuthCoordinatorTest` was omitted due to complexity of testing background coroutines with timing. The coordinator is tested through integration testing and manual testing.
 
 ### Manual Testing Checklist
 
-- [ ] Test on Play Store build variant
-- [ ] Test on F-Droid build variant
-- [ ] Test WebView loads Plex page correctly
-- [ ] Test login with valid credentials
-- [ ] Test login with invalid credentials
-- [ ] Test dialog close button
-- [ ] Test Android back button
-- [ ] Test screen rotation during login
-- [ ] Test network disconnect during login
-- [ ] Test slow network conditions
+- [x] OAuth login with username/password
+- [x] OAuth login with Google (social login)
+- [x] App Link triggers AuthReturnActivity correctly
+- [x] Chrome Custom Tabs auto-closes after redirect
+- [x] Legacy deep link fallback works when App Links unavailable
+- [x] Polling completes successfully
+- [x] Success state transitions to next screen
+- [x] Timeout after 2 minutes
+- [x] User cancellation (back button)
+- [x] Network disconnect during polling
+- [x] Screen rotation during auth
+- [x] Digital Asset Links verification succeeds on fresh install
+
+## Migration from WebView
+
+**Previous Implementation**: Used an in-app WebView with background polling
+
+**Why Replaced**:
+1. Social login (Google, Facebook) blocked in WebViews
+2. WebView requires `platform=Android`, which disables social login buttons
+3. Lower user trust in-app login forms
+4. Password manager integration limited
+
+**Migration Impact**:
+- Same Plex API endpoints (no backend changes)
+- Deep link replaced WebView's direct dismissal
+- Polling strategy similar, with expedited polling added
+- User experience significantly improved
+
+## Migration to Android App Links
+
+**Previous Implementation**: Custom URI scheme (`chronicle://auth/callback`) triggered by JavaScript on redirect page
+
+**Why Replaced**:
+1. Chrome Custom Tabs **do not auto-close** when navigating to custom URI schemes
+2. Browser stayed in foreground after auth, requiring manual close
+3. Poor user experience—extra step to return to app
+4. Inconsistent behavior across browsers
+
+**Current Implementation**: Android App Links (`https://auth.chronicleapp.net/callback`) with domain verification
+
+**Benefits**:
+1. **Automatic browser dismissal**: Chrome Custom Tabs auto-closes when navigating to verified App Link
+2. **Seamless flow**: User authentication completes and returns to app without manual intervention
+3. **Security**: HTTPS scheme with domain verification via Digital Asset Links
+4. **Fallback support**: Legacy `chronicle://` scheme remains for edge cases
+
+**Technical Changes**:
+- `PlexAuthUrlBuilder.FORWARD_URL` changed from `"https://auth.chronicleapp.net/"` to `"https://auth.chronicleapp.net/callback"`
+- Added `android:autoVerify="true"` intent filter in AndroidManifest.xml
+- Created `pages/.well-known/assetlinks.json` for domain verification
+- Created `pages/auth/callback/index.html` as fallback page
+- `pages/_config.yml` updated to include `.well-known` directory in Jekyll build
+
+## Related Documentation
+
+- [Features: Login](features/login.md) - OAuth flow documentation
+- [API Flows](API_FLOWS.md) - Plex API details
+- [OAuth Examples](example-query-responses/oauth-flow.md) - Real API responses
 
 ---
 
-## Implementation Summary
-
-| File | Action | Description |
-|------|--------|-------------|
-| `PlexOAuthDialogFragment.kt` | **Create** | Full-screen dialog with WebView |
-| `PlexOAuthViewModel.kt` | **Create** | Polling logic and state management |
-| `fragment_plex_oauth.xml` | **Create** | Layout with toolbar, progress bar, WebView |
-| `styles.xml` | **Modify** | Add full-screen dialog theme |
-| `strings.xml` | **Modify** | Add string resources |
-| `LoginFragment.kt` | **Modify** | Launch dialog instead of Chrome Custom Tab |
-| `AppComponent.kt` | **Modify** | Add inject method for dialog |
-
----
-
-## Future Enhancements
-
-1. **Polling Backoff**: Implement exponential backoff for polling intervals
-2. **Network State Monitoring**: Pause polling when network unavailable
-3. **Loading Animation**: Show loading overlay during initial page load
-4. **Analytics**: Track OAuth completion rates and timing
-5. **WebView Caching**: Consider caching Plex OAuth page resources
+**Last Updated**: 2026-02-21

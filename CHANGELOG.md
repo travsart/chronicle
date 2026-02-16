@@ -65,6 +65,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CHANGELOG.md file to track all notable changes to the project
 
 ### Changed
+- **OAuth Login**: Replaced WebView with Chrome Custom Tabs for improved security and social login support
+  - Enables Google/Facebook login (blocked in WebViews)
+  - Platform set to "Web" instead of "Android" to enable social authentication
+  - Deep link redirect (`chronicle://auth/callback`) returns user to app automatically
+  - Expedited polling (200ms) after browser return for faster completion
+  - New auth components: `PlexAuthCoordinator`, `PlexAuthUrlBuilder`, `PlexAuthState`, `AuthReturnActivity`, `AuthCoordinatorSingleton`
+  - Hosted redirector page at `auth.chronicleapp.net` for seamless deep link integration
 - Library sync now automatically syncs ALL connected libraries
 - Playback progress syncs to the correct Plex server based on the audiobook's library
 - Removed library switching options from Settings (no longer needed with unified view)
@@ -80,6 +87,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed HTTP 401 error on Android Auto cold start due to stale auth tokens in ExoPlayer DataSource
 - Fixed server connections accumulating over time - server list now refreshes every 24 hours (every startup in debug builds) and replaces stale connections instead of merging
 - Added "Strict Auto client validation" toggle in Settings → ETC (defaults to off) to resolve Google Play Store rejection caused by review tools being blocked by client signature validation
+- Fixed `PlexAuthUrlBuilder` to use standard Java URL encoding instead of Android Uri.encode() for unit test compatibility
 
 ### Improved (Playback Robustness)
 
