@@ -288,6 +288,8 @@
     <string name="auto_access_error_no_library_chosen">No library chosen. Please return to Chronicle and choose a library</string>
     <string name="auto_access_error_auto_is_disabled">Auto is disabled in Chronicle. Please re-enable in app settings</string>
     <string name="auto_access_error_invalid_client">Illegal Auto client signature. Only Google Assistant, WearOS, and Android Auto can access Chronicle\'s content</string>
+    <string name="settings_strict_auto_validation_title">Strict Auto client validation</string>
+    <string name="settings_strict_auto_validation_explanation">Only allow known clients (Android Auto, Google Assistant, WearOS) to access content. Disable if you experience connection issues.</string>
     
     <!-- Android Auto Voice Command Errors -->
     <string name="auto_error_no_results_for_query">No audiobooks found for \"%1$s\"</string>

@@ -21,6 +21,7 @@ Chronicle provides various settings to customize the listening experience.
 | **Offline Mode** | Show only downloaded content | Off |
 | **Allow Android Auto** | Enable Android Auto support | Off |
 | **Resume on failed voice search** | Fallback to recent book when voice search finds nothing | On |
+| **Strict Auto client validation** | Restrict MediaBrowser access to whitelisted clients only | Off |
 | **Download Location** | Choose storage location for downloads | Internal |
 
 ---
@@ -99,6 +100,33 @@ When **disabled**, voice searches that return no results will always show an err
 **Implementation:**
 - Storage: [`SharedPreferencesPrefsRepo.voiceSearchFallbackEnabled`](../../app/src/main/java/local/oss/chronicle/data/local/SharedPreferencesPrefsRepo.kt)
 - Usage: [`AudiobookMediaSessionCallback.handleSearchSuspend()`](../../app/src/main/java/local/oss/chronicle/features/player/AudiobookMediaSessionCallback.kt)
+
+**Strict Auto Client Validation Details:**
+
+| Setting | Key | Default |
+|---------|-----|---------|
+| Strict Auto client validation | `key_strict_auto_validation` | `false` (disabled) |
+
+When **disabled** (default), all clients can connect to Chronicle's MediaBrowserService. This provides maximum compatibility and is required for Google Play Store review tools to test the app.
+
+When **enabled**, only whitelisted clients (Android Auto, Google Assistant, WearOS) can connect. This provides additional security by validating client package signatures, but may prevent some legitimate testing tools and custom Android Auto implementations from connecting.
+
+**Use Case Examples:**
+
+| Scenario | Validation OFF (Default) | Validation ON |
+|----------|--------------------------|---------------|
+| Android Auto in car | ✓ Connects | ✓ Connects |
+| Google Assistant | ✓ Connects | ✓ Connects |
+| WearOS | ✓ Connects | ✓ Connects |
+| Google Play review tools | ✓ Can test app | ✗ Blocked (causes rejection) |
+| Custom Auto implementations | ✓ Connects | ✗ May be blocked |
+
+**Important:** This setting should remain **OFF** for production builds to ensure Google Play Store compatibility. The default (off) still provides content gating through the `allowAndroidAuto` setting in the Android Auto Settings section.
+
+**Implementation:**
+- Storage: [`SharedPreferencesPrefsRepo.strictAutoValidation`](../../app/src/main/java/local/oss/chronicle/data/local/SharedPreferencesPrefsRepo.kt)
+- Usage: [`MediaPlayerService.onGetRoot()`](../../app/src/main/java/local/oss/chronicle/features/player/MediaPlayerService.kt)
+- Validation: [`PackageValidator`](../../app/src/main/java/local/oss/chronicle/util/PackageValidator.kt)
 
 ### Other Platform Settings
 

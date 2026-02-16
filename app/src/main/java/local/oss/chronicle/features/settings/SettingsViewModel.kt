@@ -743,6 +743,13 @@ class SettingsViewModel(
                     FormattableString.from(R.string.settings_category_etc),
                 ),
                 PreferenceModel(
+                    PreferenceType.BOOLEAN,
+                    FormattableString.from(R.string.settings_strict_auto_validation_title),
+                    explanation = FormattableString.from(R.string.settings_strict_auto_validation_explanation),
+                    key = PrefsRepo.KEY_STRICT_AUTO_VALIDATION,
+                    defaultValue = prefsRepo.strictAutoValidation,
+                ),
+                PreferenceModel(
                     type = PreferenceType.CLICKABLE,
                     title = FormattableString.from(R.string.settings_subreddit_title),
                     explanation = FormattableString.from(R.string.settings_subreddit_explanation),

@@ -25,6 +25,7 @@ import local.oss.chronicle.data.local.PrefsRepo.Companion.KEY_PREMIUM_TOKEN
 import local.oss.chronicle.data.local.PrefsRepo.Companion.KEY_REFRESH_RATE
 import local.oss.chronicle.data.local.PrefsRepo.Companion.KEY_SHAKE_TO_SNOOZE_ENABLED
 import local.oss.chronicle.data.local.PrefsRepo.Companion.KEY_SKIP_SILENCE
+import local.oss.chronicle.data.local.PrefsRepo.Companion.KEY_STRICT_AUTO_VALIDATION
 import local.oss.chronicle.data.local.PrefsRepo.Companion.KEY_SYNC_DIR_PATH
 import local.oss.chronicle.data.local.PrefsRepo.Companion.NO_PREMIUM_TOKEN
 import local.oss.chronicle.data.local.PrefsRepo.Companion.VIEW_STYLES
@@ -61,6 +62,9 @@ interface PrefsRepo {
 
     /** Whether to speak instant voice response for Android Auto voice commands */
     var bridgeAudioEnabled: Boolean
+
+    /** Whether to enforce strict Auto client signature validation */
+    var strictAutoValidation: Boolean
 
     /** Whether to fast-forward through silent bits of audio during playback */
     var skipSilence: Boolean
@@ -163,6 +167,7 @@ interface PrefsRepo {
         const val KEY_HIDE_PLAYED_AUDIOBOOKS = "key_hide_played_audiobooks"
         const val KEY_LIBRARY_MEDIA_TYPE = "key_media_type"
         const val KEY_LIBRARY_VIEW_STYLE = "key_library_view_style"
+        const val KEY_STRICT_AUTO_VALIDATION = "key_strict_auto_validation"
         const val VIEW_STYLE_COVER_GRID = "view_style_cover_grid"
         const val VIEW_STYLE_TEXT_LIST = "view_style_text_list"
         const val VIEW_STYLE_DETAILS_LIST = "view_style_details_list"
@@ -278,6 +283,11 @@ class SharedPreferencesPrefsRepo
         override var bridgeAudioEnabled: Boolean
             get() = sharedPreferences.getBoolean(KEY_BRIDGE_AUDIO_ENABLED, defaultBridgeAudioEnabled)
             set(value) = sharedPreferences.edit().putBoolean(KEY_BRIDGE_AUDIO_ENABLED, value).apply()
+
+        private val defaultStrictAutoValidation = false
+        override var strictAutoValidation: Boolean
+            get() = sharedPreferences.getBoolean(KEY_STRICT_AUTO_VALIDATION, defaultStrictAutoValidation)
+            set(value) = sharedPreferences.edit().putBoolean(KEY_STRICT_AUTO_VALIDATION, value).apply()
 
         private val defaultIsPremium = true
         override val isPremium: Boolean

@@ -1017,7 +1017,7 @@ class MediaPlayerService :
     ): BrowserRoot? {
         Timber.i("[AndroidAuto] onGetRoot: package=$clientPackageName, uid=$clientUid")
 
-        val isClientLegal = packageValidator.isKnownCaller(clientPackageName, clientUid) || BuildConfig.DEBUG
+        val isClientLegal = packageValidator.isKnownCaller(clientPackageName, clientUid) || BuildConfig.DEBUG || !prefsRepo.strictAutoValidation
 
         val extras =
             Bundle().apply {
