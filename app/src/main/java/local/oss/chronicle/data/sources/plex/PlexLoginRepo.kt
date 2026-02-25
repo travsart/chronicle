@@ -19,6 +19,7 @@ import local.oss.chronicle.data.sources.plex.model.UsersResponse
 import local.oss.chronicle.features.account.AccountManager
 import local.oss.chronicle.util.Event
 import local.oss.chronicle.util.postEvent
+import retrofit2.HttpException
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -133,7 +134,10 @@ class PlexLoginRepo
                 try {
                     plexLoginService.getAuthPin(plexPrefsRepo.oAuthTempId).authToken ?: ""
                 } catch (t: Throwable) {
-                    plexPrefsRepo.oAuthTempId = -1L
+                    // Only clear PIN ID if the PIN is truly expired (404), not on transient network errors
+                    if (t is HttpException && t.code() == 404) {
+                        plexPrefsRepo.oAuthTempId = -1L
+                    }
                     Timber.i("Failed to get OAuth access token: ${t.message}")
                     ""
                 }

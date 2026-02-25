@@ -47,7 +47,7 @@ class AudiobookMediaSessionCallback
         private val plexConfig: PlexConfig,
         private val plexLoginRepo: IPlexLoginRepo,
         private val mediaController: MediaControllerCompat,
-        private val dataSourceFactory: HttpDataSource.Factory,
+        private val dataSourceFactory: local.oss.chronicle.data.sources.plex.PlexHttpDataSourceFactory,
         private val trackRepository: ITrackRepository,
         private val bookRepository: IBookRepository,
         private val serviceScope: CoroutineScope,
@@ -788,6 +788,14 @@ class AudiobookMediaSessionCallback
                     return@launch
                 }
 
+                // Phase 3: Set library context on the HTTP data source factory for library-aware token injection
+                // This ensures ExoPlayer uses the correct auth token for this book's library
+                dataSourceFactory.currentLibraryId = book.libraryId
+                Timber.d(
+                    "[TokenInjection] Set PlexHttpDataSourceFactory.currentLibraryId = ${book.libraryId} " +
+                        "for book: ${book.title}"
+                )
+
                 // Auto-rewind depending on last listened time for the book. Don't rewind if we're
                 // starting a new chapter/track of a book
                 if (startTimeOffsetMillis == USE_SAVED_TRACK_PROGRESS) {
@@ -801,8 +809,8 @@ class AudiobookMediaSessionCallback
                 // NOTE: We used to refresh the auth token here by calling setDefaultRequestProperties,
                 // but that method REPLACES all headers (including X-Plex-Platform, X-Plex-Client-Identifier,
                 // X-Plex-Client-Profile-Extra, etc.) which causes 500 errors from Plex server.
-                // The token is already set correctly in ServiceModule.plexDataSourceFactory().
-                // If the server changes, the MediaPlayerService should be recreated with fresh config.
+                // Phase 3: The token is now library-aware via currentLibraryId set above.
+                // PlexHttpDataSourceFactory reads the library-specific token on each createDataSource() call.
                 val factory = DefaultDataSource.Factory(appContext, dataSourceFactory)
                 when (player) {
                     is ExoPlayer -> {

@@ -205,6 +205,15 @@ class LibrarySyncRepository
             }
             
             Timber.i("syncLibrary: Successfully configured PlexConfig - URL: ${plexConfig.url}")
+            
+            // Update library entity with server connection details for library-aware playback
+            // This allows ServerConnectionResolver to route playback requests to the correct server
+            val updatedLibrary = library.copy(
+                serverUrl = plexConfig.url,
+                authToken = authToken,
+            )
+            libraryRepository.updateLibrary(updatedLibrary)
+            Timber.d("syncLibrary: Updated library with serverUrl=${plexConfig.url} for library-aware playback")
     
             // CRITICAL: Set the library context for repositories to use
             // The repositories use plexPrefsRepo.library to determine which library to sync

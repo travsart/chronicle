@@ -24,10 +24,10 @@ class PlexSyncScrobbleWorker(
     val trackRepository = Injector.get().trackRepo()
     val bookRepository = Injector.get().bookRepo()
     val libraryRepository = Injector.get().libraryRepository()
-    val accountRepository = Injector.get().accountRepository()
     val plexConfig = Injector.get().plexConfig()
     val plexPrefs = Injector.get().plexPrefs()
     val plexMediaService = Injector.get().plexMediaService()
+    val serverConnectionResolver = Injector.get().serverConnectionResolver()
 
     private var workerJob = Job()
     private val workerScope = CoroutineScope(workerJob + Dispatchers.IO)
@@ -53,26 +53,28 @@ class PlexSyncScrobbleWorker(
                 check(trackId != TRACK_NOT_FOUND && track != null)
                 check(book != null) { "Book not found for ID: $bookId" }
 
-                // Derive library context from the audiobook being played
-                val library = libraryRepository.getLibraryById(book.libraryId)
-                if (library == null) {
-                    Timber.e("Library not found for book: ${book.title} (libraryId: ${book.libraryId})")
+                // Phase 3: Use ServerConnectionResolver to get library-specific server URL and auth token
+                // This ensures scrobble requests go to the correct server with the correct credentials
+                val connection = try {
+                    serverConnectionResolver.resolve(book.libraryId)
+                } catch (e: Exception) {
+                    Timber.e(e, "Failed to resolve server connection for library: ${book.libraryId}")
                     return@launch
                 }
 
-                // Get account for this library
-                val account = accountRepository.getAccountById(library.accountId)
-                if (account == null) {
-                    Timber.e("Account not found for library: ${library.name} (accountId: ${library.accountId})")
-                    return@launch
-                }
+                Timber.d(
+                    "Syncing progress for book: ${book.title} in library: ${book.libraryId} " +
+                        "using server: ${connection.serverUrl}"
+                )
 
-                // TODO: Phase 2 enhancement - Switch PlexConfig to use library's server URL and account's auth token
-                // For now, Phase 1 relies on global PlexConfig URL which works for single-server setups
-                // Future enhancement: plexConfig.url = library.serverUrl
-                // Future enhancement: Use account-specific auth token from CredentialManager
-
-                Timber.d("Syncing progress for book: ${book.title} in library: ${library.name} (${library.id})")
+                // Temporarily update PlexConfig to point to this library's server for the duration of this request
+                // This is necessary because PlexMediaService uses PlexConfig.url for API calls
+                val originalUrl = plexConfig.url
+                val originalAuthToken = plexPrefs.accountAuthToken
+                try {
+                    // Safely update config with non-null values from connection
+                    plexConfig.url = connection.serverUrl ?: originalUrl
+                    plexPrefs.accountAuthToken = connection.authToken ?: originalAuthToken
 
                 // Extract numeric IDs for Plex API calls
                 val numericTrackId =
@@ -82,52 +84,57 @@ class PlexSyncScrobbleWorker(
                     bookId.removePrefix("plex:").toIntOrNull()
                         ?: return@launch
 
-                try {
-                    Injector.get().plexMediaService().progress(
-                        ratingKey = numericTrackId.toString(),
-                        offset = trackProgress.toString(),
-                        playbackTime = trackProgress,
-                        playQueueItemId = track.playQueueItemID,
-                        key = "${MediaItemTrack.PARENT_KEY_PREFIX}$numericTrackId",
-                        // IMPORTANT: Plex normally marks as finished at 90% progress, but it
-                        // calculates progress with respect to duration provided if a duration is
-                        // provided, so passing duration = actualDuration * 2 causes Plex to never
-                        // automatically mark as finished
-                        duration = track.duration * 2,
-                        playState = playbackState,
-                        hasMde = 1,
-                    )
-                    Timber.i("Synced progress for ${book?.title}")
-                } catch (t: Throwable) {
-                    Timber.e("Failed to sync progress: ${t.message}")
-                }
-
-                // Consider track finished when it is within 1 second of it's end
-                val isTrackFinished = trackProgress > track.duration - 1
-                if (isTrackFinished) {
                     try {
-                        plexMediaService.watched(numericTrackId.toString())
-                        Timber.i("Updated watch status for: ${track.title}")
+                        Injector.get().plexMediaService().progress(
+                            ratingKey = numericTrackId.toString(),
+                            offset = trackProgress.toString(),
+                            playbackTime = trackProgress,
+                            playQueueItemId = track.playQueueItemID,
+                            key = "${MediaItemTrack.PARENT_KEY_PREFIX}$numericTrackId",
+                            // IMPORTANT: Plex normally marks as finished at 90% progress, but it
+                            // calculates progress with respect to duration provided if a duration is
+                            // provided, so passing duration = actualDuration * 2 causes Plex to never
+                            // automatically mark as finished
+                            duration = track.duration * 2,
+                            playState = playbackState,
+                            hasMde = 1,
+                        )
+                        Timber.i("Synced progress for ${book?.title}")
                     } catch (t: Throwable) {
-                        Timber.e("Failed to update track watched status: ${t.message}")
+                        Timber.e("Failed to sync progress: ${t.message}")
                     }
-                }
 
-                // Consider the book finished when playback pauses or stops the book with less than
-                // [BOOK_FINISHED_WINDOW] milliseconds remaining
-                val isBookAlmostEnded =
-                    tracks.getDuration() - bookProgress < BOOK_FINISHED_END_OFFSET_MILLIS
-                val hasUserEndedPlayback =
-                    playbackState == PLEX_STATE_STOPPED || playbackState == PLEX_STATE_PAUSED
-                val isBookFinished = isBookAlmostEnded && hasUserEndedPlayback
-
-                if (isBookFinished) {
-                    try {
-                        plexMediaService.watched(numericBookId.toString())
-                        Timber.i("Updated watch status for: ${book?.title}")
-                    } catch (t: Throwable) {
-                        Timber.e("Failed to update book watched status: ${t.message}")
+                    // Consider track finished when it is within 1 second of it's end
+                    val isTrackFinished = trackProgress > track.duration - 1
+                    if (isTrackFinished) {
+                        try {
+                            plexMediaService.watched(numericTrackId.toString())
+                            Timber.i("Updated watch status for: ${track.title}")
+                        } catch (t: Throwable) {
+                            Timber.e("Failed to update track watched status: ${t.message}")
+                        }
                     }
+
+                    // Consider the book finished when playback pauses or stops the book with less than
+                    // [BOOK_FINISHED_WINDOW] milliseconds remaining
+                    val isBookAlmostEnded =
+                        tracks.getDuration() - bookProgress < BOOK_FINISHED_END_OFFSET_MILLIS
+                    val hasUserEndedPlayback =
+                        playbackState == PLEX_STATE_STOPPED || playbackState == PLEX_STATE_PAUSED
+                    val isBookFinished = isBookAlmostEnded && hasUserEndedPlayback
+
+                    if (isBookFinished) {
+                        try {
+                            plexMediaService.watched(numericBookId.toString())
+                            Timber.i("Updated watch status for: ${book?.title}")
+                        } catch (t: Throwable) {
+                            Timber.e("Failed to update book watched status: ${t.message}")
+                        }
+                    }
+                } finally {
+                    // Restore original PlexConfig state
+                    plexConfig.url = originalUrl
+                    plexPrefs.accountAuthToken = originalAuthToken
                 }
             }
         } catch (e: Throwable) {

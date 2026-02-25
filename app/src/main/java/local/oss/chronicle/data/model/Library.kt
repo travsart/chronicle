@@ -1,5 +1,6 @@
 package local.oss.chronicle.data.model
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
@@ -45,4 +46,18 @@ data class Library(
      * Only one library should be active at a time.
      */
     val isActive: Boolean,
+    /**
+     * The Plex server URL for this library (e.g., "https://192.168.1.100:32400").
+     * Used for library-aware playback to route requests to the correct server.
+     * Populated during library sync.
+     */
+    @ColumnInfo(name = "serverUrl")
+    val serverUrl: String? = null,
+    /**
+     * The authentication token for this library's account.
+     * Used for library-aware playback to authenticate requests correctly.
+     * Populated during library sync.
+     */
+    @ColumnInfo(name = "authToken")
+    val authToken: String? = null,
 )

@@ -41,6 +41,7 @@ class PlaybackUrlResolver
     constructor(
         private val plexMediaService: PlexMediaService,
         private val plexConfig: PlexConfig,
+        private val serverConnectionResolver: ServerConnectionResolver,
     ) {
         /**
          * Cached URL with expiration tracking.
@@ -48,8 +49,9 @@ class PlaybackUrlResolver
         private data class CachedUrl(
             val url: String,
             val resolvedAt: Long = System.currentTimeMillis(),
-            // Track which server this was resolved for
+            // Track which server and library this was resolved for
             val serverUrl: String,
+            val libraryId: String,
         ) {
             fun isExpired(maxAgeMs: Long): Boolean = System.currentTimeMillis() - resolvedAt > maxAgeMs
         }
@@ -131,6 +133,7 @@ class PlaybackUrlResolver
             track: MediaItemTrack,
             forceRefresh: Boolean = false,
         ): String? {
+            val libraryId = track.libraryId
             val trackKey = track.key
 
             // Check cache first (unless force refresh)
@@ -138,14 +141,14 @@ class PlaybackUrlResolver
                 val cached = urlCache[trackKey]
                 if (cached != null &&
                     !cached.isExpired(URL_CACHE_MAX_AGE_MS) &&
-                    cached.serverUrl == plexConfig.url
+                    cached.libraryId == libraryId
                 ) {
-                    Timber.d("Using cached streaming URL for track ${track.id} (age: ${System.currentTimeMillis() - cached.resolvedAt}ms)")
+                    Timber.d("Using cached streaming URL for track ${track.id} from library $libraryId (age: ${System.currentTimeMillis() - cached.resolvedAt}ms)")
                     return cached.url
                 } else if (cached != null && cached.isExpired(URL_CACHE_MAX_AGE_MS)) {
                     Timber.d("Cached URL for track ${track.id} expired, refreshing")
-                } else if (cached != null && cached.serverUrl != plexConfig.url) {
-                    Timber.d("Cached URL for track ${track.id} was for different server, refreshing")
+                } else if (cached != null && cached.libraryId != libraryId) {
+                    Timber.d("Cached URL for track ${track.id} was for different library, refreshing")
                 }
             }
 
@@ -166,20 +169,23 @@ class PlaybackUrlResolver
                             Timber.w("URL resolution retry $attempt after ${delay}ms for track ${track.id}: ${error.message}")
                         },
                     ) { _ ->
-                        resolveUrlInternal(track)
+                        resolveUrlInternal(track, libraryId)
                     }
             ) {
                 is RetryResult.Success -> {
                     val resolvedUrl = result.value
+                    // Resolve connection to get serverUrl for caching
+                    val connection = serverConnectionResolver.resolve(libraryId)
                     // Cache the result
                     urlCache[trackKey] =
                         CachedUrl(
                             url = resolvedUrl,
-                            serverUrl = plexConfig.url,
+                            serverUrl = connection.serverUrl ?: plexConfig.url,
+                            libraryId = libraryId,
                         )
                     // Also update the static cache for backward compatibility
                     MediaItemTrack.streamingUrlCache[track.id] = resolvedUrl
-                    Timber.i("Successfully resolved streaming URL for track ${track.id} on attempt ${result.attemptNumber}")
+                    Timber.i("Successfully resolved streaming URL for track ${track.id} from library $libraryId on attempt ${result.attemptNumber}")
                     resolvedUrl
                 }
                 is RetryResult.Failure -> {
@@ -207,11 +213,18 @@ class PlaybackUrlResolver
          * Internal URL resolution - the actual HTTP call.
          * Throws on failure for retry mechanism.
          */
-        private suspend fun resolveUrlInternal(track: MediaItemTrack): String {
+        private suspend fun resolveUrlInternal(
+            track: MediaItemTrack,
+            libraryId: String,
+        ): String {
+            // Resolve library-specific server connection
+            val connection = serverConnectionResolver.resolve(libraryId)
+            val serverUrl = connection.serverUrl ?: plexConfig.url
+
             // Construct the metadata path for the decision endpoint
             val metadataPath = "/library/metadata/${track.id}"
 
-            Timber.d("Requesting playback decision for track ${track.id} (${track.title})")
+            Timber.d("Requesting playback decision for track ${track.id} (${track.title}) from library $libraryId")
 
             // Call the decision endpoint
             val decision =
@@ -249,12 +262,31 @@ class PlaybackUrlResolver
                 decisionContainer.getStreamUrl()
                     ?: throw IllegalStateException("Decision succeeded but no stream URL returned for track ${track.id}")
 
-            // Convert to full URL with server
-            Timber.d("URL_DEBUG: Resolving playback URL - server base: ${plexConfig.url}, relative path: $streamUrl")
-            val fullUrl = plexConfig.toServerString(streamUrl)
+            // Convert to full URL with library-specific server
+            Timber.d("URL_DEBUG: Resolving playback URL - library: $libraryId, server base: $serverUrl, relative path: $streamUrl")
+            val fullUrl = buildServerUrl(serverUrl, streamUrl)
             Timber.d("URL_DEBUG: Resolved playback URL - full URL: $fullUrl")
-            Timber.i("Resolved streaming URL for track ${track.id}: $streamUrl")
+            Timber.i("Resolved streaming URL for track ${track.id} from library $libraryId: $streamUrl")
             return fullUrl
+        }
+
+        /**
+         * Builds a full server URL from base and relative path.
+         * Accounts for trailing/leading slashes like PlexConfig.toServerString().
+         */
+        private fun buildServerUrl(
+            baseUrl: String,
+            relativePath: String,
+        ): String {
+            val baseEndsWith = baseUrl.endsWith('/')
+            val pathStartsWith = relativePath.startsWith('/')
+            return if (baseEndsWith && pathStartsWith) {
+                "$baseUrl${relativePath.substring(1)}"
+            } else if (!baseEndsWith && !pathStartsWith) {
+                "$baseUrl/$relativePath"
+            } else {
+                "$baseUrl$relativePath"
+            }
         }
 
         /**
@@ -288,6 +320,12 @@ class PlaybackUrlResolver
                         failedTracks = emptyList(),
                         totalTracks = 0,
                     )
+                }
+
+                // Validate all tracks are from the same library
+                val libraryIds = tracks.map { it.libraryId }.distinct()
+                if (libraryIds.size > 1) {
+                    Timber.w("Pre-resolving URLs for tracks from multiple libraries: $libraryIds")
                 }
 
                 Timber.d("Pre-resolving URLs for ${tracks.size} tracks with max concurrency $maxConcurrency")

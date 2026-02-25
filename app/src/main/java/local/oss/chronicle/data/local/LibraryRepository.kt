@@ -2,6 +2,7 @@ package local.oss.chronicle.data.local
 
 import kotlinx.coroutines.flow.Flow
 import local.oss.chronicle.data.model.Library
+import local.oss.chronicle.data.model.ServerConnection
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -48,4 +49,14 @@ class LibraryRepository
             libraryId: String,
             count: Int,
         ) = libraryDao.updateItemCount(libraryId, count)
+
+        // Server Connection Operations
+        /**
+         * Retrieves server connection details for a library.
+         * Used by ServerConnectionResolver for library-aware playback.
+         *
+         * @param libraryId The library ID (e.g., "plex:library:4")
+         * @return ServerConnection with URL and token, or null if library not found
+         */
+        suspend fun getServerConnection(libraryId: String): ServerConnection? = libraryDao.getServerConnection(libraryId)
     }

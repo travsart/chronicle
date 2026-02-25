@@ -4,6 +4,7 @@ import io.mockk.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import local.oss.chronicle.data.model.MediaItemTrack
+import local.oss.chronicle.data.model.ServerConnection
 import local.oss.chronicle.data.sources.plex.model.*
 import org.hamcrest.MatcherAssert.assertThat
 import org.hamcrest.Matchers.`is`
@@ -26,6 +27,7 @@ import java.net.UnknownHostException
 class PlaybackUrlResolverTest {
     private lateinit var mockPlexMediaService: PlexMediaService
     private lateinit var mockPlexConfig: PlexConfig
+    private lateinit var mockServerConnectionResolver: ServerConnectionResolver
     private lateinit var resolver: PlaybackUrlResolver
 
     private val testServerUrl = "http://test-server:32400"
@@ -42,6 +44,7 @@ class PlaybackUrlResolverTest {
     fun setup() {
         mockPlexMediaService = mockk()
         mockPlexConfig = mockk()
+        mockServerConnectionResolver = mockk()
 
         // Setup default mock behavior
         every { mockPlexConfig.url } returns testServerUrl
@@ -50,7 +53,13 @@ class PlaybackUrlResolverTest {
             "$testServerUrl$path"
         }
 
-        resolver = PlaybackUrlResolver(mockPlexMediaService, mockPlexConfig)
+        // Mock ServerConnectionResolver to return test server connection
+        coEvery { mockServerConnectionResolver.resolve(any()) } returns ServerConnection(
+            serverUrl = testServerUrl,
+            authToken = "test-token"
+        )
+
+        resolver = PlaybackUrlResolver(mockPlexMediaService, mockPlexConfig, mockServerConnectionResolver)
 
         // Clear the static cache before each test
         MediaItemTrack.streamingUrlCache.clear()

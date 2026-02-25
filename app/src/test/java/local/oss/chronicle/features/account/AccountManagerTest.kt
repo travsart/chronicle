@@ -11,6 +11,7 @@ import local.oss.chronicle.data.local.TrackRepository
 import local.oss.chronicle.data.model.Account
 import local.oss.chronicle.data.model.Library
 import local.oss.chronicle.data.model.ProviderType
+import local.oss.chronicle.data.sources.plex.ServerConnectionResolver
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
@@ -27,6 +28,7 @@ class AccountManagerTest {
     private lateinit var credentialManager: CredentialManager
     private lateinit var bookRepository: BookRepository
     private lateinit var trackRepository: TrackRepository
+    private lateinit var serverConnectionResolver: ServerConnectionResolver
     private lateinit var accountManager: AccountManager
 
     @Before
@@ -37,6 +39,7 @@ class AccountManagerTest {
         credentialManager = mock()
         bookRepository = mock()
         trackRepository = mock()
+        serverConnectionResolver = mock()
 
         accountManager =
             AccountManager(
@@ -46,6 +49,7 @@ class AccountManagerTest {
                 credentialManager,
                 bookRepository,
                 trackRepository,
+                serverConnectionResolver,
             )
     }
 

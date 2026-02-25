@@ -205,6 +205,7 @@ The player uses **Media3 (ExoPlayer)** with:
 - [`ChapterValidator`](app/src/main/java/local/oss/chronicle/features/player/ChapterValidator.kt) - Validates positions against chapter bounds
 - [`PlaybackUrlResolver`](app/src/main/java/local/oss/chronicle/data/sources/plex/PlaybackUrlResolver.kt) - Resolves streaming URLs with retry logic and caching
 - [`PlexHttpDataSourceFactory`](app/src/main/java/local/oss/chronicle/data/sources/plex/PlexHttpDataSourceFactory.kt) - Custom DataSource.Factory for ExoPlayer that performs lazy token injection on each HTTP request, preventing stale auth tokens
+- [`ServerConnectionResolver`](app/src/main/java/local/oss/chronicle/data/sources/plex/ServerConnectionResolver.kt) - Resolves library-specific server URLs and auth tokens for multi-library playback
 
 All media playback follows Android's MediaSession/MediaBrowser API.
 
@@ -271,6 +272,13 @@ Chronicle displays all libraries together in a unified view:
 - Library switching UI has been removed - users add/remove accounts via Settings → Manage Accounts
 - Home, Library, Collections, and Search screens aggregate content from all libraries
 
+#### Library-Aware Playback
+
+Each library stores its own `serverUrl` and `authToken` in the database. During playback,
+[`ServerConnectionResolver`](app/src/main/java/local/oss/chronicle/data/sources/plex/ServerConnectionResolver.kt)
+resolves the correct server connection for a track's library, ensuring multi-server setups work correctly.
+See [`docs/architecture/library-aware-playback.md`](docs/architecture/library-aware-playback.md) for architecture details.
+
 ## 7. Documentation Index
 
 ### Architecture & Design
@@ -279,6 +287,7 @@ Chronicle displays all libraries together in a unified view:
 - [`docs/architecture/dependency-injection.md`](docs/architecture/dependency-injection.md) - Dagger 2 DI component hierarchy and modules
 - [`docs/architecture/patterns.md`](docs/architecture/patterns.md) - Architectural patterns (Repository, MVVM, State Machines, etc.)
 - [`docs/architecture/plex-integration.md`](docs/architecture/plex-integration.md) - Plex API integration details (client profile, headers, OAuth)
+- [`docs/architecture/library-aware-playback.md`](docs/architecture/library-aware-playback.md) - Multi-library server resolution for playback
 
 ### Data Layer
 - [`docs/DATA_LAYER.md`](docs/DATA_LAYER.md) - Database and repository patterns
@@ -514,5 +523,5 @@ For reported and confirmed bugs a test recreating the scenario is required. The 
 
 ---
 
-**Last Updated:** 2026-01-28
+**Last Updated:** 2026-02-25
 **Project Version:** Check [`CHANGELOG.md`](CHANGELOG.md) for current version

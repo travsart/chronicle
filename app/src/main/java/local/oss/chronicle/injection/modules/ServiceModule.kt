@@ -150,7 +150,7 @@ class ServiceModule(private val service: MediaPlayerService) {
 
     @Provides
     @ServiceScope
-    fun plexDataSourceFactory(plexPrefs: PlexPrefsRepo): HttpDataSource.Factory {
+    fun plexDataSourceFactory(plexPrefs: PlexPrefsRepo): PlexHttpDataSourceFactory {
         // Log token state at factory creation for race condition diagnosis
         val serverTokenHash = SecurityUtils.hashToken(plexPrefs.server?.accessToken)
         val userTokenHash = SecurityUtils.hashToken(plexPrefs.user?.authToken)
@@ -163,10 +163,19 @@ class ServiceModule(private val service: MediaPlayerService) {
         )
         
         // Return custom factory that reads tokens lazily on each createDataSource() call
+        // Phase 3: Return concrete type to allow setting currentLibraryId for library-aware token injection
         return PlexHttpDataSourceFactory(
             context = service.applicationContext,
             plexPrefsRepo = plexPrefs,
         )
+    }
+
+    @Provides
+    @ServiceScope
+    fun httpDataSourceFactory(concreteFactory: PlexHttpDataSourceFactory): HttpDataSource.Factory {
+        // Provide interface type for dependencies that don't need library-aware functionality
+        // This delegates to the same instance as plexDataSourceFactory()
+        return concreteFactory
     }
 
     @Provides
@@ -205,7 +214,8 @@ class ServiceModule(private val service: MediaPlayerService) {
     fun playbackUrlResolver(
         plexMediaService: PlexMediaService,
         plexConfig: PlexConfig,
-    ): PlaybackUrlResolver = PlaybackUrlResolver(plexMediaService, plexConfig)
+        serverConnectionResolver: local.oss.chronicle.data.sources.plex.ServerConnectionResolver,
+    ): PlaybackUrlResolver = PlaybackUrlResolver(plexMediaService, plexConfig, serverConnectionResolver)
 
     @Provides
     @ServiceScope

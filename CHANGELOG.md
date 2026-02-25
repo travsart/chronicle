@@ -84,6 +84,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Library selector menu items
 
 ### Fixed
+- Fixed OAuth login getting stuck in infinite loop when transient network errors occur during PIN polling
+  - Network errors (DNS failures, timeouts, connection resets) no longer corrupt the OAuth PIN ID
+  - Only HTTP 404 errors (PIN expired/not found) now clear the PIN ID as intended
+  - Prevents infinite 404 loop that blocks users from completing login
+- Fixed playback failure for audiobooks from secondary libraries in multi-account setups
+  - Introduced `ServerConnectionResolver` for library-specific server URL and token resolution
+  - Updated `PlaybackUrlResolver` to route requests to the correct Plex server per library
+  - Updated `PlexHttpDataSourceFactory` to inject library-specific auth tokens
+  - Updated `PlexSyncScrobbleWorker` for library-aware progress scrobbling
+  - Added `serverUrl` and `authToken` fields to Library entity (database migration)
 - Fixed HTTP 401 error on Android Auto cold start due to stale auth tokens in ExoPlayer DataSource
 - Fixed server connections accumulating over time - server list now refreshes every 24 hours (every startup in debug builds) and replaces stale connections instead of merging
 - Added "Strict Auto client validation" toggle in Settings → ETC (defaults to off) to resolve Google Play Store rejection caused by review tools being blocked by client signature validation

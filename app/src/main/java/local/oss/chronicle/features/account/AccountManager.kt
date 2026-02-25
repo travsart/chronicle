@@ -29,6 +29,7 @@ class AccountManager
         private val credentialManager: CredentialManager,
         private val bookRepository: BookRepository,
         private val trackRepository: TrackRepository,
+        private val serverConnectionResolver: local.oss.chronicle.data.sources.plex.ServerConnectionResolver,
     ) {
         // ===== Account Operations =====
 
@@ -160,6 +161,9 @@ class AccountManager
             // Delete account (libraries cascade via FK)
             accountRepository.removeAccountById(accountId)
 
+            // Clear ServerConnectionResolver cache since account/library data changed
+            serverConnectionResolver.clearCache()
+
             // If active library was in this account, clear it
             if (activeLibraryProvider.currentLibrary.value?.accountId == accountId) {
                 activeLibraryProvider.clearLibrary()
@@ -196,6 +200,9 @@ class AccountManager
             libraries: List<Library>,
         ) {
             libraryRepository.addLibraries(libraries.map { it.copy(accountId = accountId) })
+            
+            // Clear ServerConnectionResolver cache when libraries are added
+            serverConnectionResolver.clearCache()
         }
 
         /**
@@ -253,6 +260,9 @@ class AccountManager
             discoveredLibraries.filter { it.id in existingIds }.forEach { library ->
                 libraryRepository.updateLibrary(library)
             }
+
+            // Clear ServerConnectionResolver cache since library data changed
+            serverConnectionResolver.clearCache()
         }
 
         // ===== Private Helpers =====

@@ -90,6 +90,8 @@ interface AppComponent {
 
     fun accountRepository(): AccountRepository
 
+    fun serverConnectionResolver(): ServerConnectionResolver
+
     // Inject
     fun inject(chronicleApplication: ChronicleApplication)
 

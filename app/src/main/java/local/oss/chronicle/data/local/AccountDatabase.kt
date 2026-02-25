@@ -5,13 +5,15 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import local.oss.chronicle.data.model.Account
 import local.oss.chronicle.data.model.AccountTypeConverters
 import local.oss.chronicle.data.model.Library
 
 @Database(
     entities = [Account::class, Library::class],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 @TypeConverters(AccountTypeConverters::class)
@@ -26,6 +28,17 @@ abstract class AccountDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: AccountDatabase? = null
 
+        /**
+         * Migration from version 1 to 2: Add serverUrl and authToken columns to libraries table.
+         * These fields enable library-aware playback by storing server connection details per library.
+         */
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE libraries ADD COLUMN serverUrl TEXT DEFAULT NULL")
+                database.execSQL("ALTER TABLE libraries ADD COLUMN authToken TEXT DEFAULT NULL")
+            }
+        }
+
         fun getInstance(context: Context): AccountDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: buildDatabase(context).also { INSTANCE = it }
@@ -37,7 +50,9 @@ abstract class AccountDatabase : RoomDatabase() {
                 context.applicationContext,
                 AccountDatabase::class.java,
                 DATABASE_NAME,
-            ).build()
+            )
+                .addMigrations(MIGRATION_1_2)
+                .build()
         }
 
         /**

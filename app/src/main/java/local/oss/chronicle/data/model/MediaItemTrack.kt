@@ -175,10 +175,41 @@ data class MediaItemTrack(
                 return resolvedUrl
             }
 
-            // Fall back to direct file URL
+            // Fall back to direct file URL with library-aware server resolution
             // Note: This may trigger bandwidth errors if server has limits
-            Timber.d("No pre-resolved URL for track $id, using direct file path")
-            Injector.get().plexConfig().toServerString(media)
+            Timber.d("No pre-resolved URL for track $id, using direct file path from library $libraryId")
+            
+            // Use library-specific server URL if available
+            val serverUrl = try {
+                kotlinx.coroutines.runBlocking {
+                    Injector.get().serverConnectionResolver().resolve(libraryId).serverUrl
+                }
+            } catch (e: Exception) {
+                Timber.w(e, "Failed to resolve server for library $libraryId, using global PlexConfig")
+                null
+            } ?: Injector.get().plexConfig().url
+            
+            // Build full URL with library-specific server
+            buildServerUrl(serverUrl, media)
+        }
+    }
+
+    /**
+     * Builds a full server URL from base and relative path.
+     * Accounts for trailing/leading slashes like PlexConfig.toServerString().
+     */
+    private fun buildServerUrl(
+        baseUrl: String,
+        relativePath: String,
+    ): String {
+        val baseEndsWith = baseUrl.endsWith('/')
+        val pathStartsWith = relativePath.startsWith('/')
+        return if (baseEndsWith && pathStartsWith) {
+            "$baseUrl${relativePath.substring(1)}"
+        } else if (!baseEndsWith && !pathStartsWith) {
+            "$baseUrl/$relativePath"
+        } else {
+            "$baseUrl$relativePath"
         }
     }
 

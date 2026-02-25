@@ -9,6 +9,7 @@ import androidx.room.Transaction
 import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 import local.oss.chronicle.data.model.Library
+import local.oss.chronicle.data.model.ServerConnection
 
 @Dao
 interface LibraryDao {
@@ -88,4 +89,16 @@ interface LibraryDao {
 
     @Query("UPDATE libraries SET isActive = 1 WHERE id = :libraryId")
     suspend fun activateLibrary(libraryId: String)
+
+    // ===== Server Connection Queries =====
+
+    /**
+     * Retrieves server connection details for a library.
+     * Used by ServerConnectionResolver to route playback requests to the correct server.
+     *
+     * @param libraryId The library ID (e.g., "plex:library:4")
+     * @return ServerConnection with URL and token, or null if library not found
+     */
+    @Query("SELECT serverUrl, authToken FROM libraries WHERE id = :libraryId")
+    suspend fun getServerConnection(libraryId: String): ServerConnection?
 }

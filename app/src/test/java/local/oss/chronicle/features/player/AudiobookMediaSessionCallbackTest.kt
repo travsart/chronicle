@@ -8,7 +8,6 @@ import android.support.v4.media.session.PlaybackStateCompat
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import androidx.lifecycle.MutableLiveData
 import androidx.media3.common.Player
-import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import io.mockk.MockKAnnotations
 import io.mockk.coEvery
@@ -35,6 +34,7 @@ import local.oss.chronicle.data.sources.plex.IPlexLoginRepo
 import local.oss.chronicle.data.sources.plex.IPlexLoginRepo.LoginState
 import local.oss.chronicle.data.sources.plex.PlaybackUrlResolver
 import local.oss.chronicle.data.sources.plex.PlexConfig
+import local.oss.chronicle.data.sources.plex.PlexHttpDataSourceFactory
 import local.oss.chronicle.data.sources.plex.PlexPrefsRepo
 import local.oss.chronicle.features.currentlyplaying.CurrentlyPlaying
 import local.oss.chronicle.util.Event
@@ -74,7 +74,7 @@ class AudiobookMediaSessionCallbackTest {
     private lateinit var mediaController: MediaControllerCompat
 
     @RelaxedMockK
-    private lateinit var dataSourceFactory: DefaultHttpDataSource.Factory
+    private lateinit var dataSourceFactory: PlexHttpDataSourceFactory
 
     @RelaxedMockK
     private lateinit var trackRepository: ITrackRepository
