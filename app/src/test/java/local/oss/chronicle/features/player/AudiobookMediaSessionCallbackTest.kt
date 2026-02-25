@@ -115,6 +115,9 @@ class AudiobookMediaSessionCallbackTest {
     @RelaxedMockK
     private lateinit var voiceCommandBridgeAudio: VoiceCommandBridgeAudio
 
+    @RelaxedMockK
+    private lateinit var plexProgressReporter: local.oss.chronicle.data.sources.plex.PlexProgressReporter
+
     @MockK
     private lateinit var mockPlayer: Player
 
@@ -163,6 +166,7 @@ class AudiobookMediaSessionCallbackTest {
                 playbackStateController = playbackStateController,
                 voiceCommandBridgeAudio = voiceCommandBridgeAudio,
                 coroutineExceptionHandler = testExceptionHandler,
+                plexProgressReporter = plexProgressReporter,
                 defaultPlayer = defaultPlayer,
             )
 

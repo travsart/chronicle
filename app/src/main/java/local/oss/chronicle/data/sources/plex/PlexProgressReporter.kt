@@ -2,6 +2,7 @@ package local.oss.chronicle.data.sources.plex
 
 import android.os.Build
 import local.oss.chronicle.BuildConfig
+import local.oss.chronicle.data.local.LibraryRepository
 import local.oss.chronicle.data.model.Audiobook
 import local.oss.chronicle.data.model.MediaItemTrack
 import local.oss.chronicle.data.model.ServerConnection
@@ -43,6 +44,8 @@ class PlexProgressReporter
     @Inject
     constructor(
         private val plexConfig: PlexConfig,
+        private val serverConnectionResolver: ServerConnectionResolver,
+        private val libraryRepository: LibraryRepository,
     ) {
         companion object {
             /**
@@ -165,6 +168,70 @@ class PlexProgressReporter
                         // Don't throw - this is not critical
                     }
                 }
+            }
+        }
+
+        /**
+         * Starts a media session on the Plex server for the given audiobook.
+         * Uses library-specific server connection to ensure the session is created
+         * on the correct server in multi-library setups.
+         *
+         * This call is non-critical - failure will be logged but will NOT prevent playback.
+         *
+         * @param bookId The audiobook's rating key (with "plex:" prefix)
+         * @param libraryId The library ID this audiobook belongs to
+         */
+        suspend fun startMediaSession(
+            bookId: String,
+            libraryId: String,
+        ) {
+            try {
+                // Extract numeric book ID
+                val numericBookId =
+                    bookId.removePrefix("plex:").toIntOrNull()
+                        ?: throw IllegalArgumentException("Invalid book ID: $bookId")
+
+                // Resolve library-specific server connection
+                val connection =
+                    try {
+                        serverConnectionResolver.resolve(libraryId)
+                    } catch (e: Exception) {
+                        Timber.e(e, "Failed to resolve server for library: $libraryId")
+                        return // Non-critical, don't prevent playback
+                    }
+
+                // Get library to retrieve serverId (machine identifier)
+                val library =
+                    try {
+                        libraryRepository.getLibraryById(libraryId)
+                    } catch (e: Exception) {
+                        Timber.e(e, "Failed to get library for id: $libraryId")
+                        return // Non-critical, don't prevent playback
+                    }
+
+                if (library == null) {
+                    Timber.w("Library not found for id: $libraryId. Cannot start media session.")
+                    return // Non-critical, don't prevent playback
+                }
+
+                val serverId = library.serverId
+                if (serverId.isEmpty()) {
+                    Timber.w("Server ID not set for library: $libraryId. Cannot start media session.")
+                    return // Non-critical, don't prevent playback
+                }
+
+                // Create library-scoped service
+                val service = createScopedService(connection)
+
+                // Build the media item URI
+                val uri = getMediaItemUri(serverId, numericBookId.toString())
+
+                // Start media session
+                service.startMediaSession(uri)
+                Timber.i("Started media session for book $bookId on server $serverId (library: $libraryId)")
+            } catch (e: Exception) {
+                // This is non-critical - log but never throw
+                Timber.e(e, "Failed to start media session for book $bookId: ${e.message}")
             }
         }
 

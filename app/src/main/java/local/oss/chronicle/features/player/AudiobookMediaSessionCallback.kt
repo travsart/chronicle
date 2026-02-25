@@ -63,6 +63,7 @@ class AudiobookMediaSessionCallback
         private val playbackStateController: PlaybackStateController,
         private val coroutineExceptionHandler: CoroutineExceptionHandler,
         private val voiceCommandBridgeAudio: VoiceCommandBridgeAudio,
+        private val plexProgressReporter: local.oss.chronicle.data.sources.plex.PlexProgressReporter,
         defaultPlayer: ExoPlayer,
     ) : MediaSessionCompat.Callback() {
         // Default to ExoPlayer to prevent having a nullable field
@@ -849,24 +850,13 @@ class AudiobookMediaSessionCallback
                 // Set playWhenReady AFTER player is prepared and seeked
                 currentPlayer.playWhenReady = playWhenReady
 
-
                 // Inform plex server that audio playback session has started
-                val serverId = plexPrefsRepo.server?.serverId
-                if (serverId == null) {
-                    Timber.w(
-                        "Unknown server id. Cannot start active session. Media playback may not be saved",
-                    )
-                } else {
-                    try {
-                        Injector.get().plexMediaService().startMediaSession(
-                            getMediaItemUri(serverId, bookId),
-                        )
-                    } catch (e: Throwable) {
-                        Timber.e(e, "[VoiceCommandTrace] Exception starting media session: ${e.message}")
-                        Timber.e("Failed to start media session: $e")
-                    }
-                }
-                
+                // Uses library-aware routing to send the session start to the correct server
+                plexProgressReporter.startMediaSession(
+                    bookId = book.id,
+                    libraryId = book.libraryId,
+                )
+
                 Timber.d("[VoiceCommandTrace] playBook EXIT - success")
             }
         }

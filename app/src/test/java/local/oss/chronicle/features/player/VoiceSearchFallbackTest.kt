@@ -108,6 +108,9 @@ class VoiceSearchFallbackTest {
     private lateinit var voiceCommandBridgeAudio: VoiceCommandBridgeAudio
 
     @RelaxedMockK
+    private lateinit var plexProgressReporter: local.oss.chronicle.data.sources.plex.PlexProgressReporter
+
+    @RelaxedMockK
     private lateinit var defaultPlayer: ExoPlayer
 
     private lateinit var testScope: TestScope
@@ -157,6 +160,7 @@ class VoiceSearchFallbackTest {
                 playbackStateController = playbackStateController,
                 voiceCommandBridgeAudio = voiceCommandBridgeAudio,
                 coroutineExceptionHandler = testExceptionHandler,
+                plexProgressReporter = plexProgressReporter,
                 defaultPlayer = defaultPlayer,
             )
     }
