@@ -224,6 +224,10 @@ class MediaPlayerService :
     private var sessionCustomActions: List<PlaybackStateCompat.CustomAction> = emptyList()
     private val timelineWindow = Timeline.Window()
 
+    /** Track last pause update time for debouncing */
+    private var lastPauseUpdateTime = 0L
+    private val PAUSE_UPDATE_DEBOUNCE_MS = 500L
+
     override fun onCreate() {
         super.onCreate()
 
@@ -1095,6 +1099,12 @@ class MediaPlayerService :
                 if (isPlaying) {
                     voiceCommandBridgeAudio.stop()
                     mediaSessionCallback.logVoiceCommandLatencyIfPending()
+                } else {
+                    // Playback paused - send immediate update to Plex
+                    // Only send if user explicitly paused (playWhenReady = false), not during buffering
+                    if (!exoPlayer.playWhenReady) {
+                        sendImmediatePauseUpdate()
+                    }
                 }
             }
 
@@ -1230,6 +1240,55 @@ class MediaPlayerService :
             @Suppress("DEPRECATION")
             stopForeground(removeNotification)
         }
+    }
+
+    /**
+     * Sends an immediate progress update to Plex when playback pauses.
+     * This ensures the Plex "Now Playing" dashboard shows the correct paused state
+     * without waiting for the next regular polling interval.
+     *
+     * Includes debouncing to prevent rapid play/pause toggles from flooding the server.
+     */
+    private fun sendImmediatePauseUpdate() {
+        val currentTime = System.currentTimeMillis()
+
+        // Debounce: skip if we just sent a pause update recently
+        if (currentTime - lastPauseUpdateTime < PAUSE_UPDATE_DEBOUNCE_MS) {
+            Timber.d("Skipping pause update - debounced (last update ${currentTime - lastPauseUpdateTime}ms ago)")
+            return
+        }
+
+        lastPauseUpdateTime = currentTime
+
+        val currentTrack = mediaController.metadata?.id
+        if (currentTrack == null || currentTrack == TRACK_NOT_FOUND) {
+            Timber.d("Skipping pause update - no valid track")
+            return
+        }
+
+        // Get current position (same logic as ProgressUpdater)
+        val absolutePositionFromExtras =
+            mediaController.playbackState?.extras
+                ?.getLong(EXTRA_ABSOLUTE_TRACK_POSITION) ?: 0L
+        val chapterRelativePosition = mediaController.playbackState?.currentPlayBackPosition ?: 0L
+        val chapter = currentlyPlaying.chapter.value
+
+        val playerPosition =
+            if (chapter != local.oss.chronicle.data.model.EMPTY_CHAPTER && chapterRelativePosition >= 0) {
+                chapter.startTimeOffset + chapterRelativePosition
+            } else {
+                absolutePositionFromExtras
+            }
+
+        // Force immediate network update (forceNetworkUpdate = true)
+        progressUpdater.updateProgress(
+            trackId = currentTrack,
+            playbackState = PLEX_STATE_PAUSED,
+            progress = playerPosition,
+            forceNetworkUpdate = true,
+        )
+
+        Timber.i("Sent immediate pause update to Plex: position=${playerPosition}ms")
     }
 
     override fun onChapterChange(chapter: local.oss.chronicle.data.model.Chapter) {
