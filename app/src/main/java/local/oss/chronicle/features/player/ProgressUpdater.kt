@@ -262,6 +262,7 @@ class SimpleProgressUpdater
                 // Update server once every [networkCallFrequency] calls, or when manual updates
                 // have been specifically requested
                 if (forceNetworkUpdate || tickCounter % NETWORK_CALL_FREQUENCY == 0L) {
+                    // updateNetworkProgress is now suspend so it can fetch libraryId
                     updateNetworkProgress(
                         trackId,
                         playbackState,
@@ -272,12 +273,22 @@ class SimpleProgressUpdater
             }
         }
 
-        private fun updateNetworkProgress(
+        private suspend fun updateNetworkProgress(
             trackId: String,
             playbackState: String,
             trackProgress: Long,
             bookProgress: Long,
         ) {
+            // Fetch book to get libraryId for library-aware progress reporting
+            val bookId = trackRepository.getBookIdForTrack(trackId)
+            val book = bookRepository.getAudiobookAsync(bookId)
+            val libraryId = book?.libraryId ?: ""
+
+            if (libraryId.isEmpty()) {
+                Timber.w("No libraryId found for book $bookId, skipping network update")
+                return
+            }
+
             val syncWorkerConstraints =
                 Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
             val inputData =
@@ -286,14 +297,15 @@ class SimpleProgressUpdater
                     playbackState = playbackState,
                     trackProgress = trackProgress,
                     bookProgress = bookProgress,
+                    libraryId = libraryId,
                 )
             val worker =
                 OneTimeWorkRequestBuilder<PlexSyncScrobbleWorker>()
                     .setInputData(inputData)
                     .setConstraints(syncWorkerConstraints)
                     .setBackoffCriteria(
-                        BackoffPolicy.LINEAR,
-                        WorkRequest.DEFAULT_BACKOFF_DELAY_MILLIS,
+                        BackoffPolicy.EXPONENTIAL,
+                        WorkRequest.MIN_BACKOFF_MILLIS,
                         TimeUnit.MILLISECONDS,
                     )
                     .build()

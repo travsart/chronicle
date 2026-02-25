@@ -1,189 +1,166 @@
 package local.oss.chronicle.data.sources.plex
 
 import android.content.Context
-import android.content.Context.MODE_PRIVATE
-import androidx.work.*
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
+import androidx.work.CoroutineWorker
+import androidx.work.Data
+import androidx.work.WorkerParameters
+import androidx.work.workDataOf
 import local.oss.chronicle.application.Injector
 import local.oss.chronicle.data.local.ITrackRepository.Companion.TRACK_NOT_FOUND
-import local.oss.chronicle.data.model.MediaItemTrack
 import local.oss.chronicle.data.model.NO_AUDIOBOOK_FOUND_ID
-import local.oss.chronicle.data.sources.plex.model.getDuration
-import local.oss.chronicle.features.player.MediaPlayerService.Companion.PLEX_STATE_PAUSED
-import local.oss.chronicle.features.player.MediaPlayerService.Companion.PLEX_STATE_STOPPED
-import local.oss.chronicle.features.player.ProgressUpdater.Companion.BOOK_FINISHED_END_OFFSET_MILLIS
 import timber.log.Timber
 
+/**
+ * Reports playback progress to Plex server using library-aware connections.
+ *
+ * Migrated from Worker to CoroutineWorker to properly handle suspend functions
+ * and return Result only after async work completes.
+ *
+ * This worker eliminates the race condition in multi-library setups by using
+ * [PlexProgressReporter] which creates request-scoped Retrofit instances instead
+ * of mutating global [PlexConfig.url].
+ *
+ * @see PlexProgressReporter
+ * @see docs/architecture/progress-reporting-overhaul.md
+ */
 class PlexSyncScrobbleWorker(
     context: Context,
     workerParameters: WorkerParameters,
-) : Worker(context, workerParameters) {
-    val trackRepository = Injector.get().trackRepo()
-    val bookRepository = Injector.get().bookRepo()
-    val libraryRepository = Injector.get().libraryRepository()
-    val plexConfig = Injector.get().plexConfig()
-    val plexPrefs = Injector.get().plexPrefs()
-    val plexMediaService = Injector.get().plexMediaService()
-    val serverConnectionResolver = Injector.get().serverConnectionResolver()
+) : CoroutineWorker(context, workerParameters) {
+    // Inject dependencies via Injector.get() (WorkManager doesn't support constructor injection easily)
+    private val trackRepository = Injector.get().trackRepo()
+    private val bookRepository = Injector.get().bookRepo()
+    private val serverConnectionResolver = Injector.get().serverConnectionResolver()
+    private val progressReporter = Injector.get().progressReporter()
+    private val plexPrefs = Injector.get().plexPrefs()
 
-    private var workerJob = Job()
-    private val workerScope = CoroutineScope(workerJob + Dispatchers.IO)
-
-    override fun doWork(): Result {
-        // Ensure user is logged in before trying to sync scrobble data
+    /**
+     * Executes progress reporting with proper async handling.
+     * Returns only after all API calls complete or fail.
+     *
+     * @return Result.success() if progress was reported successfully
+     *         Result.retry() if a transient error occurred (network timeout, etc.)
+     *         Result.failure() if a permanent error occurred (auth failure, etc.)
+     */
+    override suspend fun doWork(): Result {
+        // Early auth check
         val authToken = plexPrefs.user?.authToken ?: plexPrefs.accountAuthToken
         if (authToken.isEmpty()) {
+            Timber.e("No auth token available, cannot sync progress")
             return Result.failure()
         }
+
+        // Extract input data
         val trackId = inputData.requireString(TRACK_ID_ARG)
         val playbackState = inputData.requireString(TRACK_STATE_ARG)
         val trackProgress = inputData.requireLong(TRACK_POSITION_ARG)
-        val bookProgress = inputData.requireLong(BOOK_PROGRESS)
-        try {
-            workerScope.launch(Injector.get().unhandledExceptionHandler()) {
-                val track = trackRepository.getTrackAsync(trackId)
-                val bookId = track?.parentKey ?: NO_AUDIOBOOK_FOUND_ID
-                val book = bookRepository.getAudiobookAsync(bookId)
-                val tracks = trackRepository.getTracksForAudiobookAsync(bookId)
+        val bookProgress = inputData.requireLong(BOOK_PROGRESS_ARG)
 
-                check(bookId != NO_AUDIOBOOK_FOUND_ID)
-                check(trackId != TRACK_NOT_FOUND && track != null)
-                check(book != null) { "Book not found for ID: $bookId" }
-
-                // Phase 3: Use ServerConnectionResolver to get library-specific server URL and auth token
-                // This ensures scrobble requests go to the correct server with the correct credentials
-                val connection = try {
-                    serverConnectionResolver.resolve(book.libraryId)
-                } catch (e: Exception) {
-                    Timber.e(e, "Failed to resolve server connection for library: ${book.libraryId}")
-                    return@launch
-                }
-
-                Timber.d(
-                    "Syncing progress for book: ${book.title} in library: ${book.libraryId} " +
-                        "using server: ${connection.serverUrl}"
-                )
-
-                // Temporarily update PlexConfig to point to this library's server for the duration of this request
-                // This is necessary because PlexMediaService uses PlexConfig.url for API calls
-                val originalUrl = plexConfig.url
-                val originalAuthToken = plexPrefs.accountAuthToken
-                try {
-                    // Safely update config with non-null values from connection
-                    plexConfig.url = connection.serverUrl ?: originalUrl
-                    plexPrefs.accountAuthToken = connection.authToken ?: originalAuthToken
-
-                // Extract numeric IDs for Plex API calls
-                val numericTrackId =
-                    trackId.removePrefix("plex:").toIntOrNull()
-                        ?: return@launch
-                val numericBookId =
-                    bookId.removePrefix("plex:").toIntOrNull()
-                        ?: return@launch
-
-                    try {
-                        Injector.get().plexMediaService().progress(
-                            ratingKey = numericTrackId.toString(),
-                            offset = trackProgress.toString(),
-                            playbackTime = trackProgress,
-                            playQueueItemId = track.playQueueItemID,
-                            key = "${MediaItemTrack.PARENT_KEY_PREFIX}$numericTrackId",
-                            // IMPORTANT: Plex normally marks as finished at 90% progress, but it
-                            // calculates progress with respect to duration provided if a duration is
-                            // provided, so passing duration = actualDuration * 2 causes Plex to never
-                            // automatically mark as finished
-                            duration = track.duration * 2,
-                            playState = playbackState,
-                            hasMde = 1,
-                        )
-                        Timber.i("Synced progress for ${book?.title}")
-                    } catch (t: Throwable) {
-                        Timber.e("Failed to sync progress: ${t.message}")
-                    }
-
-                    // Consider track finished when it is within 1 second of it's end
-                    val isTrackFinished = trackProgress > track.duration - 1
-                    if (isTrackFinished) {
-                        try {
-                            plexMediaService.watched(numericTrackId.toString())
-                            Timber.i("Updated watch status for: ${track.title}")
-                        } catch (t: Throwable) {
-                            Timber.e("Failed to update track watched status: ${t.message}")
-                        }
-                    }
-
-                    // Consider the book finished when playback pauses or stops the book with less than
-                    // [BOOK_FINISHED_WINDOW] milliseconds remaining
-                    val isBookAlmostEnded =
-                        tracks.getDuration() - bookProgress < BOOK_FINISHED_END_OFFSET_MILLIS
-                    val hasUserEndedPlayback =
-                        playbackState == PLEX_STATE_STOPPED || playbackState == PLEX_STATE_PAUSED
-                    val isBookFinished = isBookAlmostEnded && hasUserEndedPlayback
-
-                    if (isBookFinished) {
-                        try {
-                            plexMediaService.watched(numericBookId.toString())
-                            Timber.i("Updated watch status for: ${book?.title}")
-                        } catch (t: Throwable) {
-                            Timber.e("Failed to update book watched status: ${t.message}")
-                        }
-                    }
-                } finally {
-                    // Restore original PlexConfig state
-                    plexConfig.url = originalUrl
-                    plexPrefs.accountAuthToken = originalAuthToken
-                }
-            }
-        } catch (e: Throwable) {
-            Timber.e("Error occurred while syncing watched status! $e")
+        // Fetch track and book data
+        val track = trackRepository.getTrackAsync(trackId)
+        if (track == null) {
+            Timber.e("Track not found: $trackId")
             return Result.failure()
         }
 
-        return Result.success()
-    }
+        val bookId = track.parentKey
+        if (bookId == NO_AUDIOBOOK_FOUND_ID) {
+            Timber.e("No audiobook found for track: $trackId")
+            return Result.failure()
+        }
 
-    override fun onStopped() {
-        workerJob.cancel()
-        super.onStopped()
+        val book = bookRepository.getAudiobookAsync(bookId)
+        if (book == null) {
+            Timber.e("Book not found: $bookId")
+            return Result.failure()
+        }
+
+        val tracks = trackRepository.getTracksForAudiobookAsync(bookId)
+
+        // Resolve library-specific server connection
+        val connection =
+            try {
+                serverConnectionResolver.resolve(book.libraryId)
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to resolve server for library: ${book.libraryId}")
+                return Result.retry() // Retry on transient errors
+            }
+
+        Timber.d(
+            "Reporting progress for book: ${book.title} in library: ${book.libraryId} " +
+                "to server: ${connection.serverUrl}, state: $playbackState",
+        )
+
+        // Report progress using library-specific connection
+        return try {
+            progressReporter.reportProgress(
+                connection = connection,
+                track = track,
+                book = book,
+                tracks = tracks,
+                trackProgress = trackProgress,
+                bookProgress = bookProgress,
+                playbackState = playbackState,
+            )
+
+            Result.success() // Only returns after API call completes
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to report progress")
+            Result.retry() // WorkManager will retry with backoff
+        }
     }
 
     companion object {
         const val TRACK_ID_ARG = "Track ID"
         const val TRACK_STATE_ARG = "State"
         const val TRACK_POSITION_ARG = "Track position"
-        const val BOOK_PROGRESS = "Book progress"
+        const val BOOK_PROGRESS_ARG = "Book progress"
+        const val LIBRARY_ID_ARG = "Library ID"
 
+        /**
+         * Creates input data for the worker.
+         *
+         * @param trackId The track ID (e.g., "plex:12345")
+         * @param playbackState Plex state: "playing", "paused", or "stopped"
+         * @param trackProgress Current position in track (ms)
+         * @param bookProgress Current position in book (ms)
+         * @param libraryId The library ID (e.g., "plex:library:1")
+         * @return Data for WorkManager
+         */
         fun makeWorkerData(
             trackId: String,
             playbackState: String,
             trackProgress: Long,
             bookProgress: Long,
+            libraryId: String,
         ): Data {
-            require(trackId != TRACK_NOT_FOUND)
+            require(trackId != TRACK_NOT_FOUND) { "Invalid track ID: $trackId" }
+            require(libraryId.isNotEmpty()) { "libraryId cannot be empty" }
             return workDataOf(
                 TRACK_ID_ARG to trackId,
                 TRACK_POSITION_ARG to trackProgress,
                 TRACK_STATE_ARG to playbackState,
-                BOOK_PROGRESS to bookProgress,
+                BOOK_PROGRESS_ARG to bookProgress,
+                LIBRARY_ID_ARG to libraryId,
             )
         }
     }
 
     private fun Data.requireInt(key: String): Int {
-        require(hasKeyWithValueOfType<Int>(key))
-        return getInt(key, -1)
+        val value = getInt(key, Int.MIN_VALUE)
+        require(value != Int.MIN_VALUE) { "Missing required Int key: $key" }
+        return value
     }
 
     private fun Data.requireLong(key: String): Long {
-        require(hasKeyWithValueOfType<Long>(key))
-        return getLong(key, -1L)
+        val value = getLong(key, Long.MIN_VALUE)
+        require(value != Long.MIN_VALUE) { "Missing required Long key: $key" }
+        return value
     }
 
     private fun Data.requireString(key: String): String {
-        require(hasKeyWithValueOfType<String>(key))
-        return getString(key) ?: ""
+        val value = getString(key)
+        require(!value.isNullOrEmpty()) { "Missing required String key: $key" }
+        return value
     }
 }

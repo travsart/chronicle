@@ -92,6 +92,8 @@ interface AppComponent {
 
     fun serverConnectionResolver(): ServerConnectionResolver
 
+    fun progressReporter(): PlexProgressReporter
+
     // Inject
     fun inject(chronicleApplication: ChronicleApplication)
 

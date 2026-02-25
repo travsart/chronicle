@@ -30,6 +30,7 @@ class PlexSyncScrobbleWorkerTest {
         val playbackState = "playing"
         val trackProgress = 1800L
         val bookProgress = 1800L
+        val libraryId = "plex:library:1"
 
         // When: Worker data is created
         val data = PlexSyncScrobbleWorker.makeWorkerData(
@@ -37,13 +38,15 @@ class PlexSyncScrobbleWorkerTest {
             playbackState = playbackState,
             trackProgress = trackProgress,
             bookProgress = bookProgress,
+            libraryId = libraryId,
         )
 
         // Then: Data object contains all required fields
         assertThat(data.getString(PlexSyncScrobbleWorker.TRACK_ID_ARG)).isEqualTo(trackId)
         assertThat(data.getString(PlexSyncScrobbleWorker.TRACK_STATE_ARG)).isEqualTo(playbackState)
         assertThat(data.getLong(PlexSyncScrobbleWorker.TRACK_POSITION_ARG, -1)).isEqualTo(trackProgress)
-        assertThat(data.getLong(PlexSyncScrobbleWorker.BOOK_PROGRESS, -1)).isEqualTo(bookProgress)
+        assertThat(data.getLong(PlexSyncScrobbleWorker.BOOK_PROGRESS_ARG, -1)).isEqualTo(bookProgress)
+        assertThat(data.getString(PlexSyncScrobbleWorker.LIBRARY_ID_ARG)).isEqualTo(libraryId)
     }
 
     @Test
