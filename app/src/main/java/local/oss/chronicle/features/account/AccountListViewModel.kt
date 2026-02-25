@@ -11,8 +11,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import local.oss.chronicle.data.local.BookRepository
+import local.oss.chronicle.data.local.LibraryRepository
 import local.oss.chronicle.navigation.Navigator
 import local.oss.chronicle.util.Event
+import timber.log.Timber
 import javax.inject.Inject
 import kotlinx.coroutines.flow.map as mapFlow
 
@@ -26,7 +29,14 @@ class AccountListViewModel(
     private val accountManager: AccountManager,
     private val activeLibraryProvider: ActiveLibraryProvider,
     private val navigator: Navigator,
+    private val bookRepository: BookRepository,
+    private val libraryRepository: LibraryRepository,
 ) : ViewModel() {
+    init {
+        // Refresh library item counts when the ViewModel is created
+        refreshLibraryItemCounts()
+    }
+
     // ===== Private State =====
 
     /**
@@ -137,6 +147,25 @@ class AccountListViewModel(
         }
     }
 
+    /**
+     * Refresh library item counts from the database.
+     * This ensures counts are accurate when the Accounts & Libraries screen is displayed.
+     */
+    private fun refreshLibraryItemCounts() {
+        viewModelScope.launch {
+            try {
+                val allLibraries = libraryRepository.getAllLibraries().first()
+                allLibraries.forEach { library ->
+                    val bookCount = bookRepository.getBookCountForLibrary(library.id)
+                    libraryRepository.updateItemCount(library.id, bookCount)
+                    Timber.d("Updated item count to $bookCount for library ${library.name}")
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to refresh library item counts")
+            }
+        }
+    }
+
     // ===== Factory =====
 
     class Factory
@@ -145,6 +174,8 @@ class AccountListViewModel(
             private val accountManager: AccountManager,
             private val activeLibraryProvider: ActiveLibraryProvider,
             private val navigator: Navigator,
+            private val bookRepository: BookRepository,
+            private val libraryRepository: LibraryRepository,
         ) : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -152,6 +183,8 @@ class AccountListViewModel(
                     accountManager,
                     activeLibraryProvider,
                     navigator,
+                    bookRepository,
+                    libraryRepository,
                 ) as T
             }
         }

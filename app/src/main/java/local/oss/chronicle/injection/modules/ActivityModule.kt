@@ -8,6 +8,8 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import dagger.Module
 import dagger.Provides
 import kotlinx.coroutines.CoroutineScope
+import local.oss.chronicle.data.local.BookRepository
+import local.oss.chronicle.data.local.LibraryRepository
 import local.oss.chronicle.features.account.AccountListViewModel
 import local.oss.chronicle.features.account.AccountManager
 import local.oss.chronicle.features.account.ActiveLibraryProvider
@@ -71,7 +73,9 @@ class ActivityModule(private val activity: AppCompatActivity) {
         accountManager: AccountManager,
         activeLibraryProvider: ActiveLibraryProvider,
         navigator: Navigator,
+        bookRepository: BookRepository,
+        libraryRepository: LibraryRepository,
     ): AccountListViewModel.Factory {
-        return AccountListViewModel.Factory(accountManager, activeLibraryProvider, navigator)
+        return AccountListViewModel.Factory(accountManager, activeLibraryProvider, navigator, bookRepository, libraryRepository)
     }
 }

@@ -64,15 +64,17 @@ class LibrarySyncRepository
                     }
                     bookRepository.refreshDataPaginated()
                     trackRepository.refreshDataPaginated()
-
+    
                     // TODO: Loading all data into memory :O
                     val audiobooks = bookRepository.getAllBooksAsync()
                     val tracks = trackRepository.getAllTracksAsync()
+                    
+                    // Group tracks by parent book ID for O(n) lookup instead of O(n²) filtering
+                    val tracksByBook = tracks.groupBy { it.parentKey }
+                    
                     audiobooks.forEach { book ->
-                        // TODO: O(n^2) so could be bad for big libs, grouping by tracks first would be O(n)
-
                         // Not necessarily in the right order, but it doesn't matter for updateTrackData
-                        val tracksInAudiobook = tracks.filter { it.parentKey == book.id }
+                        val tracksInAudiobook = tracksByBook[book.id] ?: emptyList()
                         bookRepository.updateTrackData(
                             bookId = book.id,
                             bookProgress = tracksInAudiobook.getProgress(),
@@ -80,8 +82,17 @@ class LibrarySyncRepository
                             trackCount = tracksInAudiobook.size,
                         )
                     }
-
+    
                     collectionsRepository.refreshCollectionsPaginated()
+    
+                    // Update library item counts after syncing books
+                    Timber.d("Updating library item counts")
+                    val allLibraries = libraryRepository.getAllLibraries().first()
+                    allLibraries.forEach { library ->
+                        val bookCount = bookRepository.getBookCountForLibrary(library.id)
+                        libraryRepository.updateItemCount(library.id, bookCount)
+                        Timber.d("Updated item count to $bookCount for library ${library.name}")
+                    }
                 } catch (e: Throwable) {
                     val msg = "Failed to refresh data: ${e.message}"
                     Timber.e(e, "Library sync failed")
@@ -323,11 +334,12 @@ class LibrarySyncRepository
             val audiobooks = bookRepository.getAllBooksAsync()
             val tracks = trackRepository.getAllTracksAsync()
 
-            audiobooks.forEach { book ->
-                // TODO: O(n^2) so could be bad for big libs, grouping by tracks first would be O(n)
+            // Group tracks by parent book ID for O(n) lookup instead of O(n²) filtering
+            val tracksByBook = tracks.groupBy { it.parentKey }
 
+            audiobooks.forEach { book ->
                 // Not necessarily in the right order, but it doesn't matter for updateTrackData
-                val tracksInAudiobook = tracks.filter { it.parentKey == book.id }
+                val tracksInAudiobook = tracksByBook[book.id] ?: emptyList()
                 bookRepository.updateTrackData(
                     bookId = book.id,
                     bookProgress = tracksInAudiobook.getProgress(),
