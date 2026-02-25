@@ -316,6 +316,15 @@ class PlexProgressReporter
         /**
          * Determines if an error is transient and should be retried.
          *
+         * Retryable errors:
+         * - Network timeouts and connection failures
+         * - HTTP 5xx server errors
+         *
+         * Non-retryable errors:
+         * - HTTP 401/403 authentication/authorization failures
+         * - HTTP 404 not found
+         * - Other client errors (4xx)
+         *
          * @param error The error to check
          * @return true if the error is retryable
          */
@@ -326,7 +335,11 @@ class PlexProgressReporter
                 is ConnectException,
                 is IOException,
                 -> true
-                is HttpException -> error.code() in 500..599 // Server errors are retryable
+                is HttpException -> {
+                    // Only retry server errors (5xx), not client errors (4xx)
+                    // Specifically do NOT retry 401/403 auth errors
+                    error.code() in 500..599
+                }
                 else -> false
             }
         }
