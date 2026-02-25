@@ -108,9 +108,7 @@ class PlexProgressReporter
                             playbackTime = trackProgress,
                             playQueueItemId = track.playQueueItemID,
                             key = "${MediaItemTrack.PARENT_KEY_PREFIX}$numericTrackId",
-                            // IMPORTANT: Keep duration * 2 hack for Phase 1
-                            // This will be removed in Phase 3
-                            duration = track.duration * 2,
+                            duration = track.duration,
                             playState = playbackState,
                             hasMde = 1,
                         )
