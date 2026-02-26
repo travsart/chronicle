@@ -6,7 +6,9 @@ import local.oss.chronicle.data.local.LibraryRepository
 import local.oss.chronicle.data.model.Audiobook
 import local.oss.chronicle.data.model.MediaItemTrack
 import local.oss.chronicle.data.model.ServerConnection
+import local.oss.chronicle.data.sources.plex.model.PlayQueueResponseWrapper
 import local.oss.chronicle.data.sources.plex.model.getDuration
+import local.oss.chronicle.data.sources.plex.model.toPlayQueueItemMap
 import local.oss.chronicle.features.player.MediaPlayerService.Companion.PLEX_STATE_PAUSED
 import local.oss.chronicle.features.player.MediaPlayerService.Companion.PLEX_STATE_STOPPED
 import local.oss.chronicle.features.player.ProgressUpdater.Companion.BOOK_FINISHED_END_OFFSET_MILLIS
@@ -23,6 +25,7 @@ import java.io.IOException
 import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -44,6 +47,7 @@ class PlexProgressReporter
     @Inject
     constructor(
         private val plexConfig: PlexConfig,
+        private val plexPrefsRepo: PlexPrefsRepo,
         private val serverConnectionResolver: ServerConnectionResolver,
         private val libraryRepository: LibraryRepository,
     ) {
@@ -59,6 +63,29 @@ class PlexProgressReporter
                     maxDelayMs = 5000L, // Max 5 seconds
                     multiplier = 2.0,
                 )
+        }
+
+        /**
+         * In-memory cache of play queue item IDs by track ID.
+         *
+         * This maps track IDs (e.g., "plex:12345") to their playQueueItemID values
+         * returned from POST /playQueues. These IDs are required for timeline updates
+         * to appear in the Plex dashboard.
+         *
+         * Cleared when playback stops or a new play queue is created.
+         *
+         * Thread-safe: ConcurrentHashMap handles concurrent reads/writes from
+         * worker threads and main thread.
+         */
+        private val playQueueItemCache = ConcurrentHashMap<String, Long>()
+
+        /**
+         * Clears the play queue item cache.
+         * Should be called when playback stops or a new audiobook is loaded.
+         */
+        fun clearPlayQueueCache() {
+            playQueueItemCache.clear()
+            Timber.d("Cleared play queue item cache")
         }
 
         /**
@@ -93,6 +120,16 @@ class PlexProgressReporter
                 book.id.removePrefix("plex:").toIntOrNull()
                     ?: throw IllegalArgumentException("Invalid book ID: ${book.id}")
 
+            // Resolve play queue item ID from cache, fall back to -1 if not found
+            val playQueueItemId = playQueueItemCache[track.id] ?: -1L
+
+            if (playQueueItemId == -1L) {
+                Timber.w(
+                    "No playQueueItemID cached for track ${track.id}. " +
+                        "Dashboard activity may not work. Cache contents: $playQueueItemCache",
+                )
+            }
+
             // Report timeline progress with retry
             when (
                 val result =
@@ -109,7 +146,7 @@ class PlexProgressReporter
                             ratingKey = numericTrackId.toString(),
                             offset = trackProgress.toString(),
                             playbackTime = trackProgress,
-                            playQueueItemId = track.playQueueItemID,
+                            playQueueItemId = playQueueItemId,
                             key = "${MediaItemTrack.PARENT_KEY_PREFIX}$numericTrackId",
                             duration = track.duration,
                             playState = playbackState,
@@ -118,7 +155,10 @@ class PlexProgressReporter
                     }
             ) {
                 is RetryResult.Success -> {
-                    Timber.i("Synced progress for ${book.title}: $playbackState at ${trackProgress}ms")
+                    Timber.i(
+                        "Synced progress for ${book.title}: $playbackState at ${trackProgress}ms " +
+                            "(playQueueItemId=$playQueueItemId)",
+                    )
                 }
                 is RetryResult.Failure -> {
                     Timber.e("Failed to sync progress after ${result.attemptsMade} attempts: ${result.error.message}")
@@ -172,9 +212,11 @@ class PlexProgressReporter
         }
 
         /**
-         * Starts a media session on the Plex server for the given audiobook.
-         * Uses library-specific server connection to ensure the session is created
-         * on the correct server in multi-library setups.
+         * Starts a media session on the Plex server and captures play queue item IDs.
+         *
+         * CRITICAL: The playQueueItemID values from the response are stored in
+         * playQueueItemCache and MUST be sent in subsequent timeline updates for
+         * Plex dashboard activity reporting to work.
          *
          * This call is non-critical - failure will be logged but will NOT prevent playback.
          *
@@ -186,6 +228,9 @@ class PlexProgressReporter
             libraryId: String,
         ) {
             try {
+                // Clear previous play queue cache when starting new session
+                clearPlayQueueCache()
+
                 // Extract numeric book ID
                 val numericBookId =
                     bookId.removePrefix("plex:").toIntOrNull()
@@ -226,9 +271,17 @@ class PlexProgressReporter
                 // Build the media item URI
                 val uri = getMediaItemUri(serverId, numericBookId.toString())
 
-                // Start media session
-                service.startMediaSession(uri)
-                Timber.i("Started media session for book $bookId on server $serverId (library: $libraryId)")
+                // Start media session and capture play queue response
+                val response = service.startMediaSession(uri)
+
+                // Extract and cache play queue item IDs
+                val playQueueMap = response.toPlayQueueItemMap()
+                playQueueItemCache.putAll(playQueueMap)
+
+                Timber.i(
+                    "Started media session for book $bookId on server $serverId (library: $libraryId). " +
+                        "Cached ${playQueueMap.size} play queue item IDs",
+                )
             } catch (e: Exception) {
                 // This is non-critical - log but never throw
                 Timber.e(e, "Failed to start media session for book $bookId: ${e.message}")
@@ -268,7 +321,12 @@ class PlexProgressReporter
 
         /**
          * Creates an OkHttp interceptor with request-scoped auth token.
-         * Similar to PlexInterceptor but uses provided token instead of global state.
+         *
+         * CRITICAL: Headers must match PlexInterceptor exactly for Plex to correlate
+         * play queue creation (startMediaSession) with timeline updates (reportProgress).
+         *
+         * Uses plexPrefsRepo.uuid (NOT plexConfig.sessionIdentifier) for X-Plex-Client-Identifier
+         * to ensure consistency with main interceptor and proper dashboard correlation.
          *
          * @param authToken The auth token for this specific request
          * @return Interceptor that adds Plex headers to requests
@@ -280,13 +338,16 @@ class PlexProgressReporter
                         .header("Accept", "application/json")
                         .header("X-Plex-Platform", "Android")
                         .header("X-Plex-Provides", "player")
-                        .header("X-Plex-Client-Identifier", plexConfig.sessionIdentifier)
+                        .header("X-Plex-Client-Identifier", plexPrefsRepo.uuid)
                         .header("X-Plex-Version", BuildConfig.VERSION_NAME)
                         .header("X-Plex-Product", APP_NAME)
                         .header("X-Plex-Platform-Version", Build.VERSION.RELEASE)
+                        .header("X-Plex-Session-Identifier", plexConfig.sessionIdentifier)
+                        .header("X-Plex-Client-Name", APP_NAME)
                         .header("X-Plex-Device", Build.MODEL)
                         .header("X-Plex-Device-Name", Build.MODEL)
-                        .header("X-Plex-Token", authToken) // Request-scoped token
+                        .header("X-Plex-Client-Profile-Extra", PlexInterceptor.CLIENT_PROFILE_EXTRA)
+                        .header("X-Plex-Token", authToken)
                         .build()
 
                 chain.proceed(request)

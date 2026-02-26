@@ -39,8 +39,10 @@ class PlexInterceptor(
          *
          * Per Plex API spec, musicProfile requires: type, container, audioCodec
          * videoCodec and subtitleCodec use wildcard (*) since not applicable to audio
+         *
+         * PUBLIC: Used by PlexProgressReporter for scoped interceptor header alignment.
          */
-        private const val CLIENT_PROFILE_EXTRA =
+        const val CLIENT_PROFILE_EXTRA =
             "add-direct-play-profile(type=musicProfile&container=mp4,m4a,m4b,mp3,flac,ogg,opus&audioCodec=aac,mp3,flac,vorbis,opus&videoCodec=*&subtitleCodec=*)"
     }
 

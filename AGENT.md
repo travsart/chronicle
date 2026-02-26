@@ -220,6 +220,7 @@ Chronicle uses a centralized state management pattern with [`PlaybackStateContro
 - **Debounced Persistence**: Database writes debounced (3 seconds) to reduce I/O
 - **StateFlow → LiveData Bridge**: [`CurrentlyPlayingSingleton`](app/src/main/java/local/oss/chronicle/features/currentlyplaying/CurrentlyPlayingSingleton.kt) converts StateFlow to LiveData for UI
 - **Library-Aware Progress Reporting**: [`PlexProgressReporter`](app/src/main/java/local/oss/chronicle/data/sources/plex/PlexProgressReporter.kt) ensures progress is synced to the correct Plex server per library
+- **Play Queue Item Cache**: [`PlexProgressReporter`](app/src/main/java/local/oss/chronicle/data/sources/plex/PlexProgressReporter.kt) includes a `playQueueItemCache` for Plex dashboard activity correlation, using consistent Plex headers via `PlexPrefsRepo`
 
 See [`docs/architecture/patterns.md`](docs/architecture/patterns.md) for detailed patterns.
 
@@ -248,6 +249,7 @@ Uses **[Fetch library](https://github.com/tonyofrancis/Fetch)** for downloads:
 - **Chapter detection** is complex - See [`TrackListStateManager`](app/src/main/java/local/oss/chronicle/features/player/TrackListStateManager.kt) for current implementation
 - **Playback position syncing** is library-aware and thread-safe via [`PlexProgressReporter`](app/src/main/java/local/oss/chronicle/data/sources/plex/PlexProgressReporter.kt), which creates request-scoped Retrofit instances to avoid global state mutation
 - **Progress reporting worker** - [`PlexSyncScrobbleWorker`](app/src/main/java/local/oss/chronicle/data/sources/plex/PlexSyncScrobbleWorker.kt) is now a `CoroutineWorker` (not `Worker`) for proper async handling
+- **Play queue item IDs** from `POST /playQueues` responses are cached in-memory and included in timeline updates for Plex dashboard visibility
 - **Media sessions** must be properly released to avoid memory leaks
 - **Data Binding** is used throughout for UI binding - see binding adapters in [`views/`](app/src/main/java/local/oss/chronicle/views/) and feature packages
 

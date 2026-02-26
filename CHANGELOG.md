@@ -93,6 +93,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Library selector menu items
 
 ### Fixed
+- Fixed Plex "Now Playing" dashboard not showing Chronicle as an active streaming client
+  - Aligned scoped interceptor headers in `PlexProgressReporter` to use consistent `X-Plex-Client-Identifier` (UUID) across all API calls
+  - Added missing `X-Plex-Session-Identifier` header to timeline updates
+  - Captured and cached `playQueueItemID` from `POST /playQueues` response for use in timeline updates
+  - Updated network progress reporting frequency to every 30 seconds
 - Fixed OAuth login getting stuck in infinite loop when transient network errors occur during PIN polling
   - Network errors (DNS failures, timeouts, connection resets) no longer corrupt the OAuth PIN ID
   - Only HTTP 404 errors (PIN expired/not found) now clear the PIN ID as intended

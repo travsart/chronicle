@@ -43,13 +43,6 @@ class PlexSyncScrobbleWorker(
      *         Result.failure() if a permanent error occurred (auth failure, etc.)
      */
     override suspend fun doWork(): Result {
-        // Early auth check
-        val authToken = plexPrefs.user?.authToken ?: plexPrefs.accountAuthToken
-        if (authToken.isEmpty()) {
-            Timber.e("No auth token available, cannot sync progress")
-            return Result.failure()
-        }
-
         // Extract input data
         val trackId = inputData.requireString(TRACK_ID_ARG)
         val playbackState = inputData.requireString(TRACK_STATE_ARG)

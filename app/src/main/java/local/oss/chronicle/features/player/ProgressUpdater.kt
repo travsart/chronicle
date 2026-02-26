@@ -59,8 +59,11 @@ interface ProgressUpdater {
         /**
          * The frequency which the remote server is updated at: once for every [NETWORK_CALL_FREQUENCY]
          * calls to the local database
+         *
+         * Set to 30 to send progress every 30 seconds (30 ticks × 1 second interval)
+         * for better Plex dashboard activity reporting.
          */
-        const val NETWORK_CALL_FREQUENCY = 10
+        const val NETWORK_CALL_FREQUENCY = 30
     }
 }
 
@@ -77,7 +80,11 @@ class SimpleProgressUpdater
     ) : ProgressUpdater {
         var mediaController: MediaControllerCompat? = null
 
-        /** Frequency of progress updates */
+        /**
+         * Frequency of progress updates.
+         * Set to 1 second for responsive UI updates. Combined with NETWORK_CALL_FREQUENCY=30,
+         * this sends progress to Plex every 30 seconds.
+         */
         private val updateProgressFrequencyMs = 1000L
 
         /** Tracks the number of times [updateLocalProgress] has been called this session */

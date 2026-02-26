@@ -979,6 +979,9 @@ class AudiobookMediaSessionCallback
             // Clear streaming URL cache when stopping playback
             playbackUrlResolver.clearCache()
 
+            // Clear play queue item cache to prevent stale IDs
+            plexProgressReporter.clearPlayQueueCache()
+
             foregroundServiceController.stopForegroundService(true)
             serviceController.stopService()
         }
