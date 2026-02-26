@@ -206,6 +206,7 @@ The player uses **Media3 (ExoPlayer)** with:
 - [`PlaybackUrlResolver`](app/src/main/java/local/oss/chronicle/data/sources/plex/PlaybackUrlResolver.kt) - Resolves streaming URLs with retry logic and caching
 - [`PlexHttpDataSourceFactory`](app/src/main/java/local/oss/chronicle/data/sources/plex/PlexHttpDataSourceFactory.kt) - Custom DataSource.Factory for ExoPlayer that performs lazy token injection on each HTTP request, preventing stale auth tokens
 - [`ServerConnectionResolver`](app/src/main/java/local/oss/chronicle/data/sources/plex/ServerConnectionResolver.kt) - Resolves library-specific server URLs and auth tokens for multi-library playback
+- [`PlexProgressReporter`](app/src/main/java/local/oss/chronicle/data/sources/plex/PlexProgressReporter.kt) - Thread-safe, library-aware progress reporting to Plex with request-scoped Retrofit instances
 
 All media playback follows Android's MediaSession/MediaBrowser API.
 
@@ -218,6 +219,7 @@ Chronicle uses a centralized state management pattern with [`PlaybackStateContro
 - **Reactive**: State exposed via `StateFlow` for observation
 - **Debounced Persistence**: Database writes debounced (3 seconds) to reduce I/O
 - **StateFlow → LiveData Bridge**: [`CurrentlyPlayingSingleton`](app/src/main/java/local/oss/chronicle/features/currentlyplaying/CurrentlyPlayingSingleton.kt) converts StateFlow to LiveData for UI
+- **Library-Aware Progress Reporting**: [`PlexProgressReporter`](app/src/main/java/local/oss/chronicle/data/sources/plex/PlexProgressReporter.kt) ensures progress is synced to the correct Plex server per library
 
 See [`docs/architecture/patterns.md`](docs/architecture/patterns.md) for detailed patterns.
 
@@ -244,7 +246,8 @@ Uses **[Fetch library](https://github.com/tonyofrancis/Fetch)** for downloads:
 
 - **Authentication tokens expire** - Implement token refresh logic when modifying auth code
 - **Chapter detection** is complex - See [`TrackListStateManager`](app/src/main/java/local/oss/chronicle/features/player/TrackListStateManager.kt) for current implementation
-- **Playback position syncing** happens via [`PlexSyncScrobbleWorker`](app/src/main/java/local/oss/chronicle/data/sources/plex/PlexSyncScrobbleWorker.kt) using WorkManager
+- **Playback position syncing** is library-aware and thread-safe via [`PlexProgressReporter`](app/src/main/java/local/oss/chronicle/data/sources/plex/PlexProgressReporter.kt), which creates request-scoped Retrofit instances to avoid global state mutation
+- **Progress reporting worker** - [`PlexSyncScrobbleWorker`](app/src/main/java/local/oss/chronicle/data/sources/plex/PlexSyncScrobbleWorker.kt) is now a `CoroutineWorker` (not `Worker`) for proper async handling
 - **Media sessions** must be properly released to avoid memory leaks
 - **Data Binding** is used throughout for UI binding - see binding adapters in [`views/`](app/src/main/java/local/oss/chronicle/views/) and feature packages
 
@@ -277,6 +280,10 @@ Chronicle displays all libraries together in a unified view:
 Each library stores its own `serverUrl` and `authToken` in the database. During playback,
 [`ServerConnectionResolver`](app/src/main/java/local/oss/chronicle/data/sources/plex/ServerConnectionResolver.kt)
 resolves the correct server connection for a track's library, ensuring multi-server setups work correctly.
+
+Progress reporting and `startMediaSession()` now use per-library server connections via [`PlexProgressReporter`](app/src/main/java/local/oss/chronicle/data/sources/plex/PlexProgressReporter.kt),
+eliminating race conditions when reporting progress for books from different libraries.
+
 See [`docs/architecture/library-aware-playback.md`](docs/architecture/library-aware-playback.md) for architecture details.
 
 ## 7. Documentation Index

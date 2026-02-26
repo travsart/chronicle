@@ -65,6 +65,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CHANGELOG.md file to track all notable changes to the project
 
 ### Changed
+- **Progress Reporting to Plex**: Overhauled for accuracy and reliability
+  - Migrated `PlexSyncScrobbleWorker` to `CoroutineWorker` for proper async handling
+  - Created `PlexProgressReporter` for thread-safe, library-aware Plex API calls
+  - Removed `duration × 2` hack — Plex dashboard now shows accurate playback progress
+  - Added immediate pause state reporting so Plex "Now Playing" updates immediately (within 500ms)
+  - Made `startMediaSession()` library-aware for multi-library setups
+  - Added retry logic with exponential backoff for failed API calls (3 attempts + WorkManager retry)
+  - Eliminated race condition when reporting progress for books from different libraries
+  - Request-scoped Retrofit instances prevent global state mutation during progress reporting
 - **OAuth Login**: Replaced WebView with Chrome Custom Tabs for improved security and social login support
   - Enables Google/Facebook login (blocked in WebViews)
   - Platform set to "Web" instead of "Android" to enable social authentication

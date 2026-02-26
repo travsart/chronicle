@@ -479,29 +479,51 @@ Plex API response models in [`data/sources/plex/model/`](../../app/src/main/java
 
 ## Playback Position Sync
 
-Chronicle syncs playback position with Plex using WorkManager:
+Chronicle syncs playback position with Plex using WorkManager with library-aware, thread-safe API calls:
 
 ### Sync Flow
 
 ```mermaid
 sequenceDiagram
     participant Player as MediaPlayerService
+    participant ProgressUpdater
     participant Worker as PlexSyncScrobbleWorker
+    participant Reporter as PlexProgressReporter
     participant Plex as Plex Server
     
     Player->>Player: Playback position changes
-    Player->>Worker: Schedule sync work
-    Note over Worker: Debounced to avoid<br/>excessive API calls
-    Worker->>Plex: POST /:/progress
-    Plex-->>Worker: Acknowledged
+    Player->>ProgressUpdater: Schedule sync
+    ProgressUpdater->>Worker: Enqueue work (with libraryId)
+    Note over Worker: CoroutineWorker<br/>Network constraint
+    Worker->>Reporter: reportProgress(libraryId, ratingKey, position, duration, state)
+    Reporter->>Reporter: Resolve server connection<br/>for library
+    Reporter->>Reporter: Create request-scoped<br/>Retrofit instance
+    Note over Reporter: Thread-safe<br/>No global state mutation
+    Reporter->>Plex: GET /:/timeline
+    Note over Reporter: Retry logic:<br/>3 attempts + exponential backoff
+    Plex-->>Reporter: Acknowledged
+    Note over Plex: Updates "Now Playing"<br/>Accurate duration displayed
 ```
+
+### Key Features
+
+- **Library-Aware**: [`PlexProgressReporter`](../../app/src/main/java/local/oss/chronicle/data/sources/plex/PlexProgressReporter.kt) routes requests to the correct Plex server per library
+- **Thread-Safe**: Request-scoped Retrofit instances prevent global state mutation and race conditions
+- **Accurate Durations**: Reports true track duration (no multiplication)
+- **Immediate Pause State**: Pause events reported within 500ms (debounced)
+- **Retry Logic**:
+  - Inner retry: 3 attempts with exponential backoff via `RetryHandler.withRetry()`
+  - Outer retry: WorkManager `BackoffPolicy.EXPONENTIAL`
+- **Network Constraint**: Worker only runs when network is available
+- **Async Handling**: `CoroutineWorker` for proper suspend function support
 
 ### Implementation
 
-[`PlexSyncScrobbleWorker`](../../app/src/main/java/local/oss/chronicle/data/sources/plex/PlexSyncScrobbleWorker.kt) handles:
-- Progress updates during playback
-- Marking items as played/unplayed
-- Syncing across devices
+- [`PlexSyncScrobbleWorker`](../../app/src/main/java/local/oss/chronicle/data/sources/plex/PlexSyncScrobbleWorker.kt) - `CoroutineWorker` that handles async progress sync
+- [`PlexProgressReporter`](../../app/src/main/java/local/oss/chronicle/data/sources/plex/PlexProgressReporter.kt) - Thread-safe, library-aware API calls with request-scoped Retrofit instances
+- [`ProgressUpdater`](../../app/src/main/java/local/oss/chronicle/features/player/ProgressUpdater.kt) - Schedules WorkManager tasks with library context
+
+For detailed architecture, see [Progress Reporting Overhaul](progress-reporting-overhaul.md).
 
 ---
 
