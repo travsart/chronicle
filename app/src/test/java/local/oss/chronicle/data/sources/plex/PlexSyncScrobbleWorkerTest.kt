@@ -24,7 +24,30 @@ import org.mockito.junit.MockitoJUnitRunner
 @RunWith(MockitoJUnitRunner::class)
 class PlexSyncScrobbleWorkerTest {
     @Test
-    fun `worker data factory creates correct Data object`() {
+    fun `makeWorkerData includes libraryId`() {
+        // Given: Valid worker input parameters including libraryId
+        val trackId = "plex:101"
+        val playbackState = "playing"
+        val trackProgress = 1800L
+        val bookProgress = 1800L
+        val libraryId = "plex:library:1"
+
+        // When: Worker data is created
+        val data =
+            PlexSyncScrobbleWorker.makeWorkerData(
+                trackId = trackId,
+                playbackState = playbackState,
+                trackProgress = trackProgress,
+                bookProgress = bookProgress,
+                libraryId = libraryId,
+            )
+
+        // Then: Data object contains libraryId
+        assertThat(data.getString(PlexSyncScrobbleWorker.LIBRARY_ID_ARG)).isEqualTo(libraryId)
+    }
+
+    @Test
+    fun `makeWorkerData includes all required fields`() {
         // Given: Valid worker input parameters
         val trackId = "plex:101"
         val playbackState = "playing"
@@ -33,13 +56,14 @@ class PlexSyncScrobbleWorkerTest {
         val libraryId = "plex:library:1"
 
         // When: Worker data is created
-        val data = PlexSyncScrobbleWorker.makeWorkerData(
-            trackId = trackId,
-            playbackState = playbackState,
-            trackProgress = trackProgress,
-            bookProgress = bookProgress,
-            libraryId = libraryId,
-        )
+        val data =
+            PlexSyncScrobbleWorker.makeWorkerData(
+                trackId = trackId,
+                playbackState = playbackState,
+                trackProgress = trackProgress,
+                bookProgress = bookProgress,
+                libraryId = libraryId,
+            )
 
         // Then: Data object contains all required fields
         assertThat(data.getString(PlexSyncScrobbleWorker.TRACK_ID_ARG)).isEqualTo(trackId)
