@@ -5,13 +5,17 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.test.runTest
+import local.oss.chronicle.data.local.AccountRepository
 import local.oss.chronicle.data.local.LibraryRepository
+import local.oss.chronicle.data.model.Library
 import local.oss.chronicle.data.model.ServerConnection
+import local.oss.chronicle.features.account.CredentialManager
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.Mock
 import org.mockito.junit.MockitoJUnitRunner
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
@@ -23,6 +27,12 @@ class ServerConnectionResolverTest {
     private lateinit var mockLibraryRepository: LibraryRepository
 
     @Mock
+    private lateinit var mockAccountRepository: AccountRepository
+
+    @Mock
+    private lateinit var mockCredentialManager: CredentialManager
+
+    @Mock
     private lateinit var mockPlexConfig: PlexConfig
 
     @Mock
@@ -32,12 +42,14 @@ class ServerConnectionResolverTest {
 
     private val testLibraryId1 = "plex:library:1"
     private val testLibraryId2 = "plex:library:2"
+    private val testAccountId1 = "plex:account:account1"
     private val testServerUrl1 = "https://server1.plex.direct:32400"
     private val testServerUrl2 = "https://server2.plex.direct:32400"
     private val testToken1 = "token-lib1"
     private val testToken2 = "token-lib2"
     private val fallbackUrl = "https://fallback.plex.direct:32400"
     private val fallbackToken = "fallback-token"
+    private val testCredentialsJson = """{"userToken":"$testToken1","serverToken":"server-token-1"}"""
 
     @Before
     fun setup() {
@@ -49,7 +61,13 @@ class ServerConnectionResolverTest {
         whenever(mockPlexPrefsRepo.user).thenReturn(null)
         whenever(mockPlexPrefsRepo.accountAuthToken).thenReturn(fallbackToken)
 
-        resolver = ServerConnectionResolver(mockLibraryRepository, mockPlexConfig, mockPlexPrefsRepo)
+        resolver = ServerConnectionResolver(
+            mockLibraryRepository,
+            mockAccountRepository,
+            mockCredentialManager,
+            mockPlexConfig,
+            mockPlexPrefsRepo
+        )
     }
 
     // ===== Test 1: Resolve returns library-specific connection from database =====
@@ -77,6 +95,7 @@ class ServerConnectionResolverTest {
         runTest {
             // Given: Database has no connection info for library
             whenever(mockLibraryRepository.getServerConnection(testLibraryId1)).thenReturn(null)
+            whenever(mockLibraryRepository.getLibraryById(testLibraryId1)).thenReturn(null)
 
             // When: Resolving connection for library
             val result = resolver.resolve(testLibraryId1)
@@ -96,6 +115,7 @@ class ServerConnectionResolverTest {
             // Given: Database returns connection with null fields
             val dbConnection = ServerConnection(null, null)
             whenever(mockLibraryRepository.getServerConnection(testLibraryId1)).thenReturn(dbConnection)
+            whenever(mockLibraryRepository.getLibraryById(testLibraryId1)).thenReturn(null)
 
             // When: Resolving connection for library
             val result = resolver.resolve(testLibraryId1)
@@ -184,6 +204,7 @@ class ServerConnectionResolverTest {
             // Given: Database has serverUrl but no authToken
             val dbConnection = ServerConnection(testServerUrl1, null)
             whenever(mockLibraryRepository.getServerConnection(testLibraryId1)).thenReturn(dbConnection)
+            whenever(mockLibraryRepository.getLibraryById(testLibraryId1)).thenReturn(null)
 
             // When: Resolving connection
             val result = resolver.resolve(testLibraryId1)
@@ -273,6 +294,7 @@ class ServerConnectionResolverTest {
             // This tests that even incomplete data gets cached
             val dbConnection = ServerConnection(testServerUrl1, null)
             whenever(mockLibraryRepository.getServerConnection(testLibraryId1)).thenReturn(dbConnection)
+            whenever(mockLibraryRepository.getLibraryById(testLibraryId1)).thenReturn(null)
 
             // When: Resolving twice
             val result1 = resolver.resolve(testLibraryId1)
@@ -293,6 +315,7 @@ class ServerConnectionResolverTest {
             // Implementation resolves this with fallback token and caches the result
             val incompleteConnection = ServerConnection(testServerUrl1, null)
             whenever(mockLibraryRepository.getServerConnection(testLibraryId1)).thenReturn(incompleteConnection)
+            whenever(mockLibraryRepository.getLibraryById(testLibraryId1)).thenReturn(null)
 
             // When: Resolving twice
             val result1 = resolver.resolve(testLibraryId1) // First call - queries DB, fills fallback, caches
@@ -327,5 +350,167 @@ class ServerConnectionResolverTest {
             assertThat(result1.authToken).isEqualTo(testToken1)
             assertThat(result2.serverUrl).isEqualTo(testServerUrl2)
             assertThat(result2.authToken).isEqualTo(testToken2)
+        }
+
+    // ===== Test 9: Credential JSON parsing tests =====
+
+    @Test
+    fun `resolve parses userToken from credentials JSON when library authToken is empty`() =
+        runTest {
+            // Given: Library has no authToken but Account has credentials JSON
+            val library = Library(
+                id = testLibraryId1,
+                accountId = testAccountId1,
+                serverId = "test-server",
+                serverName = "Test Server",
+                name = "Test Library",
+                type = "artist",
+                lastSyncedAt = null,
+                itemCount = 0,
+                isActive = true,
+                serverUrl = testServerUrl1,
+                authToken = null,
+            )
+            val dbConnection = ServerConnection(testServerUrl1, null)
+            whenever(mockLibraryRepository.getLibraryById(testLibraryId1)).thenReturn(library)
+            whenever(mockLibraryRepository.getServerConnection(testLibraryId1)).thenReturn(dbConnection)
+            whenever(mockCredentialManager.getCredentials(testAccountId1)).thenReturn(testCredentialsJson)
+
+            // When: Resolving connection
+            val result = resolver.resolve(testLibraryId1)
+
+            // Then: userToken is extracted from JSON and used
+            assertThat(result.serverUrl).isEqualTo(testServerUrl1)
+            assertThat(result.authToken).isEqualTo(testToken1)
+            verify(mockCredentialManager).getCredentials(testAccountId1)
+            // Self-healing should update the library
+            verify(mockLibraryRepository).updateLibrary(eq(library.copy(authToken = testToken1)))
+        }
+
+    @Test
+    fun `resolve handles malformed credentials JSON gracefully`() =
+        runTest {
+            // Given: Library has no authToken and Account has invalid JSON
+            val library = Library(
+                id = testLibraryId1,
+                accountId = testAccountId1,
+                serverId = "test-server",
+                serverName = "Test Server",
+                name = "Test Library",
+                type = "artist",
+                lastSyncedAt = null,
+                itemCount = 0,
+                isActive = true,
+                serverUrl = testServerUrl1,
+                authToken = null,
+            )
+            val dbConnection = ServerConnection(testServerUrl1, null)
+            whenever(mockLibraryRepository.getLibraryById(testLibraryId1)).thenReturn(library)
+            whenever(mockLibraryRepository.getServerConnection(testLibraryId1)).thenReturn(dbConnection)
+            whenever(mockCredentialManager.getCredentials(testAccountId1)).thenReturn("invalid-json{")
+
+            // When: Resolving connection
+            val result = resolver.resolve(testLibraryId1)
+
+            // Then: Falls back to PlexPrefsRepo token
+            assertThat(result.serverUrl).isEqualTo(testServerUrl1)
+            assertThat(result.authToken).isEqualTo(fallbackToken)
+            verify(mockCredentialManager).getCredentials(testAccountId1)
+        }
+
+    @Test
+    fun `resolve detects and repairs corrupted authToken (raw JSON)`() =
+        runTest {
+            // Given: Library has corrupted authToken (raw JSON string from previous bug)
+            val corruptedToken = """{"userToken":"real-token","serverToken":"server-token"}"""
+            val library = Library(
+                id = testLibraryId1,
+                accountId = testAccountId1,
+                serverId = "test-server",
+                serverName = "Test Server",
+                name = "Test Library",
+                type = "artist",
+                lastSyncedAt = null,
+                itemCount = 0,
+                isActive = true,
+                serverUrl = testServerUrl1,
+                authToken = corruptedToken,
+            )
+            val dbConnection = ServerConnection(testServerUrl1, corruptedToken)
+            whenever(mockLibraryRepository.getLibraryById(testLibraryId1)).thenReturn(library)
+            whenever(mockLibraryRepository.getServerConnection(testLibraryId1)).thenReturn(dbConnection)
+            whenever(mockCredentialManager.getCredentials(testAccountId1)).thenReturn(testCredentialsJson)
+
+            // When: Resolving connection
+            val result = resolver.resolve(testLibraryId1)
+
+            // Then: Corrupted token is detected, corrected token is resolved from credentials
+            assertThat(result.serverUrl).isEqualTo(testServerUrl1)
+            assertThat(result.authToken).isEqualTo(testToken1)
+            verify(mockCredentialManager).getCredentials(testAccountId1)
+            // Self-healing should update the library with correct token
+            verify(mockLibraryRepository).updateLibrary(eq(library.copy(authToken = testToken1)))
+        }
+
+    @Test
+    fun `resolve treats authToken starting with left brace as corrupted`() =
+        runTest {
+            // Given: Library has authToken that starts with '{'
+            val corruptedToken = "{some-corrupted-data"
+            val library = Library(
+                id = testLibraryId1,
+                accountId = testAccountId1,
+                serverId = "test-server",
+                serverName = "Test Server",
+                name = "Test Library",
+                type = "artist",
+                lastSyncedAt = null,
+                itemCount = 0,
+                isActive = true,
+                serverUrl = testServerUrl1,
+                authToken = corruptedToken,
+            )
+            val dbConnection = ServerConnection(testServerUrl1, corruptedToken)
+            whenever(mockLibraryRepository.getLibraryById(testLibraryId1)).thenReturn(library)
+            whenever(mockLibraryRepository.getServerConnection(testLibraryId1)).thenReturn(dbConnection)
+            whenever(mockCredentialManager.getCredentials(testAccountId1)).thenReturn(testCredentialsJson)
+
+            // When: Resolving connection
+            val result = resolver.resolve(testLibraryId1)
+
+            // Then: Token is treated as corrupted and replaced
+            assertThat(result.serverUrl).isEqualTo(testServerUrl1)
+            assertThat(result.authToken).isEqualTo(testToken1)
+            verify(mockCredentialManager).getCredentials(testAccountId1)
+        }
+
+    @Test
+    fun `resolve extracts userToken from credentials JSON with serverToken field`() =
+        runTest {
+            // Given: Credentials JSON contains both userToken and serverToken
+            val credentialsWithBothTokens = """{"userToken":"user-abc","serverToken":"server-xyz"}"""
+            val library = Library(
+                id = testLibraryId1,
+                accountId = testAccountId1,
+                serverId = "test-server",
+                serverName = "Test Server",
+                name = "Test Library",
+                type = "artist",
+                lastSyncedAt = null,
+                itemCount = 0,
+                isActive = true,
+                serverUrl = testServerUrl1,
+                authToken = null,
+            )
+            val dbConnection = ServerConnection(testServerUrl1, null)
+            whenever(mockLibraryRepository.getLibraryById(testLibraryId1)).thenReturn(library)
+            whenever(mockLibraryRepository.getServerConnection(testLibraryId1)).thenReturn(dbConnection)
+            whenever(mockCredentialManager.getCredentials(testAccountId1)).thenReturn(credentialsWithBothTokens)
+
+            // When: Resolving connection
+            val result = resolver.resolve(testLibraryId1)
+
+            // Then: Only userToken is extracted and used (serverToken is ignored)
+            assertThat(result.authToken).isEqualTo("user-abc")
         }
 }

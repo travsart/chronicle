@@ -43,13 +43,14 @@ class PlexSyncScrobbleWorker(
      *         Result.failure() if a permanent error occurred (auth failure, etc.)
      */
     override suspend fun doWork(): Result {
-        // Extract input data
+        // Extract input data - libraryId is provided to avoid DB race condition
         val trackId = inputData.requireString(TRACK_ID_ARG)
         val playbackState = inputData.requireString(TRACK_STATE_ARG)
         val trackProgress = inputData.requireLong(TRACK_POSITION_ARG)
         val bookProgress = inputData.requireLong(BOOK_PROGRESS_ARG)
+        val libraryId = inputData.requireString(LIBRARY_ID_ARG)
 
-        // Fetch track and book data
+        // Fetch track and book data (needed for API request payload)
         val track = trackRepository.getTrackAsync(trackId)
         if (track == null) {
             Timber.e("Track not found: $trackId")
@@ -70,17 +71,19 @@ class PlexSyncScrobbleWorker(
 
         val tracks = trackRepository.getTracksForAudiobookAsync(bookId)
 
-        // Resolve library-specific server connection
+        // Use libraryId from input data (not book.libraryId) to avoid race condition
+        // when switching between libraries
         val connection =
             try {
-                serverConnectionResolver.resolve(book.libraryId)
+                serverConnectionResolver.resolve(libraryId)
             } catch (e: Exception) {
-                Timber.e(e, "Failed to resolve server for library: ${book.libraryId}")
+                Timber.e(e, "Failed to resolve server for library: $libraryId")
                 return Result.retry() // Retry on transient errors
             }
 
         Timber.d(
-            "Reporting progress for book: ${book.title} in library: ${book.libraryId} " +
+            "Reporting progress for book: ${book.title} in library: $libraryId " +
+                "(input libraryId, not DB libraryId=${book.libraryId}) " +
                 "to server: ${connection.serverUrl}, state: $playbackState",
         )
 

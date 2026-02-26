@@ -19,12 +19,15 @@ import local.oss.chronicle.util.RetryResult
 import local.oss.chronicle.util.getImage
 import local.oss.chronicle.util.toUri
 import local.oss.chronicle.util.withRetry
+import okhttp3.OkHttpClient
 import timber.log.Timber
 import java.io.IOException
 import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
+import javax.inject.Provider
 import javax.inject.Singleton
 import kotlin.random.Random
 
@@ -38,7 +41,10 @@ import kotlin.random.Random
 @Singleton
 class PlexConfig
     @Inject
-    constructor(private val plexPrefsRepo: PlexPrefsRepo) {
+    constructor(
+        private val plexPrefsRepo: PlexPrefsRepo,
+        private val scopedPlexServiceFactoryProvider: Provider<ScopedPlexServiceFactory>,
+    ) {
         companion object {
             /** Timeout for individual connection attempt (reduced from 15s) */
             const val CONNECTION_TIMEOUT_MS = 10_000L // 10 seconds per attempt
@@ -47,6 +53,25 @@ class PlexConfig
             const val MAX_CONNECTION_TIME_MS = 30_000L // 30 seconds total
 
             const val PLACEHOLDER_URL = "http://placeholder.com"
+        }
+
+        /**
+         * Session-scoped cache of thumbnail URLs that returned 404 Not Found.
+         * Prevents repeated failed HTTP requests during the same playback session.
+         * Cleared when a new book starts playing.
+         */
+        private val failedThumbnailUrls: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
+        /**
+         * Simple OkHttpClient for checking thumbnail URLs (HEAD requests only).
+         * Created separately to avoid circular dependency with the main Media OkHttpClient
+         * which uses PlexConfig's interceptor.
+         */
+        private val thumbnailCheckClient: OkHttpClient by lazy {
+            OkHttpClient.Builder()
+                .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+                .readTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+                .build()
         }
 
         /**
@@ -108,7 +133,7 @@ class PlexConfig
 
         val plexMediaInterceptor = PlexInterceptor(plexPrefsRepo, this, isLoginService = false)
         val plexLoginInterceptor = PlexInterceptor(plexPrefsRepo, this, isLoginService = true)
-
+    
         /** Attempt to load in a cached bitmap for the given thumbnail */
         suspend fun getBitmapFromServer(
             thumb: String?,
@@ -117,7 +142,7 @@ class PlexConfig
             if (thumb.isNullOrEmpty()) {
                 return null
             }
-
+    
             // Retrieve cached album art from Glide if available
             val appContext = Injector.get().applicationContext()
             val imageSize = appContext.resources.getDimension(R.dimen.audiobook_image_width).toInt()
@@ -130,7 +155,15 @@ class PlexConfig
                         "photo/:/transcode?width=$imageSize&height=$imageSize&url=$thumb",
                     ).toUri()
                 }
-
+    
+            val uriString = uri.toString()
+    
+            // Check if this URL previously returned 404 in this session
+            if (failedThumbnailUrls.contains(uriString)) {
+                Timber.d("Skipping thumbnail request for $uriString (cached 404)")
+                return null
+            }
+    
             Timber.i("Notification thumb uri is: $uri")
             val imagePipeline = Fresco.getImagePipeline()
             return withContext(Dispatchers.IO) {
@@ -141,8 +174,59 @@ class PlexConfig
                     bm
                 } catch (t: Throwable) {
                     Timber.e("Failed to retrieve album art for $thumb: $t")
+    
+                    // Check if this was a 404 error by making a lightweight HEAD request
+                    val is404 = checkIf404(uriString)
+                    if (is404) {
+                        failedThumbnailUrls.add(uriString)
+                        Timber.i("Cached thumbnail 404 for session: $uriString")
+                    }
+    
                     null
                 }
+            }
+        }
+    
+        /**
+         * Checks if a URL returns 404 Not Found using a lightweight HEAD request.
+         * This prevents repeatedly requesting thumbnails that don't exist.
+         *
+         * @param url The full URL to check
+         * @return true if the URL returns 404, false otherwise
+         */
+        private suspend fun checkIf404(url: String): Boolean {
+            return withContext(Dispatchers.IO) {
+                try {
+                    val request =
+                        okhttp3.Request.Builder()
+                            .url(url)
+                            .head() // HEAD request is lightweight (no body)
+                            .build()
+    
+                    val response = thumbnailCheckClient.newCall(request).execute()
+                    response.use {
+                        val is404 = it.code == 404
+                        if (is404) {
+                            Timber.d("Confirmed 404 for thumbnail: $url")
+                        }
+                        is404
+                    }
+                } catch (e: Exception) {
+                    Timber.w("Failed to check thumbnail status for $url: ${e.message}")
+                    false // Don't cache on network errors, only genuine 404s
+                }
+            }
+        }
+    
+        /**
+         * Clears the failed thumbnail URL cache.
+         * Should be called when a new playback session starts (new book playing).
+         */
+        fun clearThumbnailFailureCache() {
+            val size = failedThumbnailUrls.size
+            if (size > 0) {
+                failedThumbnailUrls.clear()
+                Timber.d("Cleared thumbnail failure cache ($size URLs)")
             }
         }
 
@@ -260,6 +344,7 @@ class PlexConfig
             _connectionState.postValue(NOT_CONNECTED)
             url = PLACEHOLDER_URL
             connectionSet.clear()
+            scopedPlexServiceFactoryProvider.get().clearCache()
         }
 
         fun clearServer() {

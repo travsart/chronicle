@@ -22,6 +22,7 @@ import org.mockito.Mock
 import org.mockito.Mockito.lenient
 import org.mockito.junit.MockitoJUnitRunner
 import org.mockito.kotlin.any
+import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import retrofit2.HttpException
@@ -69,6 +70,7 @@ class PlexProgressReporterTest {
                 plexPrefsRepo = plexPrefsRepo,
                 serverConnectionResolver = serverConnectionResolver,
                 libraryRepository = libraryRepository,
+                scopedPlexServiceFactory = mock(),
             )
     }
 

@@ -10,6 +10,7 @@ import local.oss.chronicle.data.model.PlexLibrary
 import local.oss.chronicle.data.model.ProviderType
 import local.oss.chronicle.data.model.ServerModel
 import local.oss.chronicle.data.sources.plex.FakePlexPrefsRepo
+import local.oss.chronicle.data.sources.plex.PlexConfig
 import local.oss.chronicle.data.sources.plex.model.Connection
 import local.oss.chronicle.data.sources.plex.model.MediaType
 import local.oss.chronicle.data.sources.plex.model.PlexUser
@@ -36,6 +37,7 @@ class LegacyAccountMigrationTest {
     private lateinit var plexPrefsRepo: FakePlexPrefsRepo
     private lateinit var bookDatabase: BookDatabase
     private lateinit var trackDatabase: TrackDatabase
+    private lateinit var plexConfig: PlexConfig
     private lateinit var migration: LegacyAccountMigration
 
     @Before
@@ -46,6 +48,10 @@ class LegacyAccountMigrationTest {
         plexPrefsRepo = FakePlexPrefsRepo()
         bookDatabase = mock()
         trackDatabase = mock()
+        plexConfig = mock()
+        
+        // Mock plexConfig.url to return a test server URL
+        whenever(plexConfig.url).thenReturn("http://192.168.1.100:32400")
 
         migration =
             LegacyAccountMigration(
@@ -55,6 +61,7 @@ class LegacyAccountMigrationTest {
                 plexPrefsRepo,
                 bookDatabase,
                 trackDatabase,
+                plexConfig,
             )
     }
 
@@ -155,7 +162,8 @@ class LegacyAccountMigrationTest {
                         library.name == "Audiobooks" &&
                         library.serverName == "My Plex Server" &&
                         library.serverId == "server-id-123" &&
-                        library.isActive
+                        library.isActive &&
+                        library.serverUrl == "http://192.168.1.100:32400"
                 },
             )
 
@@ -236,7 +244,8 @@ class LegacyAccountMigrationTest {
                     library.id == "plex:library:legacy" &&
                         library.name == "Library" &&
                         library.serverName == "Plex Server" &&
-                        library.serverId == "legacy-server"
+                        library.serverId == "legacy-server" &&
+                        library.serverUrl == "http://192.168.1.100:32400"
                 },
             )
 

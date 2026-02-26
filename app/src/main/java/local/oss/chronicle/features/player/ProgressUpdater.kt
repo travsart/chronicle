@@ -194,16 +194,28 @@ class SimpleProgressUpdater
             }
             val currentTime = System.currentTimeMillis()
             serviceScope.launch(context = serviceScope.coroutineContext + Dispatchers.IO) {
-                val bookId: String = trackRepository.getBookIdForTrack(trackId)
-                val track: MediaItemTrack = trackRepository.getTrackAsync(trackId) ?: EMPTY_TRACK
+                // Read from PlaybackStateController to avoid race condition when switching libraries
+                val state = playbackStateController.state.value
+                val book = state.audiobook
+                val track = state.currentTrack
+                val tracks = state.tracks
 
-                // No reason to update if the track or book doesn't exist in the DB
-                if (trackId == TRACK_NOT_FOUND || bookId == NO_AUDIOBOOK_FOUND_ID) {
+                // Validate that we're updating the correct track (edge case: rapid track switching)
+                if (track == null || track.id != trackId) {
+                    Timber.w(
+                        "Track mismatch in updateProgress: requested=$trackId, " +
+                            "current=${track?.id}. Skipping update to avoid race condition.",
+                    )
                     return@launch
                 }
 
-                val tracks = trackRepository.getTracksForAudiobookAsync(bookId)
-                val book = bookRepository.getAudiobookAsync(bookId)
+                // No reason to update if the book doesn't exist
+                if (book == null) {
+                    Timber.w("No book in PlaybackState for track $trackId, skipping update")
+                    return@launch
+                }
+
+                val bookId = book.id
                 val bookProgress = tracks.getTrackStartTime(track) + progress
                 val bookDuration = tracks.getDuration()
 
@@ -269,12 +281,13 @@ class SimpleProgressUpdater
                 // Update server once every [networkCallFrequency] calls, or when manual updates
                 // have been specifically requested
                 if (forceNetworkUpdate || tickCounter % NETWORK_CALL_FREQUENCY == 0L) {
-                    // updateNetworkProgress is now suspend so it can fetch libraryId
+                    // Pass libraryId from state to avoid DB lookup race condition
                     updateNetworkProgress(
-                        trackId,
-                        playbackState,
-                        progress,
-                        bookProgress,
+                        trackId = trackId,
+                        playbackState = playbackState,
+                        trackProgress = progress,
+                        bookProgress = bookProgress,
+                        libraryId = book.libraryId,
                     )
                 }
             }
@@ -285,14 +298,11 @@ class SimpleProgressUpdater
             playbackState: String,
             trackProgress: Long,
             bookProgress: Long,
+            libraryId: String,
         ) {
-            // Fetch book to get libraryId for library-aware progress reporting
-            val bookId = trackRepository.getBookIdForTrack(trackId)
-            val book = bookRepository.getAudiobookAsync(bookId)
-            val libraryId = book?.libraryId ?: ""
-
+            // libraryId is now passed from updateProgress() to avoid race condition
             if (libraryId.isEmpty()) {
-                Timber.w("No libraryId found for book $bookId, skipping network update")
+                Timber.w("libraryId is empty, skipping network update")
                 return
             }
 

@@ -8,6 +8,7 @@ import local.oss.chronicle.data.local.TrackDatabase
 import local.oss.chronicle.data.model.Account
 import local.oss.chronicle.data.model.Library
 import local.oss.chronicle.data.model.ProviderType
+import local.oss.chronicle.data.sources.plex.PlexConfig
 import local.oss.chronicle.data.sources.plex.PlexPrefsRepo
 import java.util.UUID
 import javax.inject.Inject
@@ -31,6 +32,7 @@ class LegacyAccountMigration
         private val plexPrefsRepo: PlexPrefsRepo,
         private val bookDatabase: BookDatabase,
         private val trackDatabase: TrackDatabase,
+        private val plexConfig: PlexConfig,
     ) {
         /**
          * Run the migration. Safe to call multiple times - will skip if already migrated.
@@ -95,6 +97,8 @@ class LegacyAccountMigration
                         lastSyncedAt = now,
                         itemCount = 0,
                         isActive = true,
+                        serverUrl = plexConfig.url,
+                        authToken = legacyToken, // Store legacy auth token for library-aware playback
                     )
 
                 libraryRepository.addLibrary(library)

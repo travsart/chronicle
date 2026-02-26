@@ -308,6 +308,56 @@ class AccountManagerTest {
     }
 
     @Test
+    fun addPlexAccountWithLibrary_storesServerAccessTokenInLibrary(): Unit =
+        runBlocking {
+            // Given
+            val userUuid = "user-uuid-123"
+            val username = "testuser"
+            val userThumb = "https://example.com/avatar.png"
+            val serverId = "server-id-456"
+            val serverName = "Test Server"
+            val libraryId = "1"
+            val libraryName = "Audiobooks"
+            val libraryType = "artist"
+            val userAuthToken = "user-oauth-token-abc123"
+            val serverAccessToken = "server-access-token-xyz789"
+            val serverUrl = "http://192.168.1.100:32400"
+
+            // When
+            val (account, library) =
+                accountManager.addPlexAccountWithLibrary(
+                    userUuid = userUuid,
+                    username = username,
+                    userThumb = userThumb,
+                    serverId = serverId,
+                    serverName = serverName,
+                    libraryId = libraryId,
+                    libraryName = libraryName,
+                    libraryType = libraryType,
+                    userAuthToken = userAuthToken,
+                    serverAccessToken = serverAccessToken,
+                    serverUrl = serverUrl,
+                )
+
+            // Then - verify Library.authToken uses serverAccessToken, NOT userAuthToken
+            assertThat(account.id).isEqualTo("plex:account:$userUuid")
+            assertThat(account.displayName).isEqualTo(username)
+            assertThat(library.id).isEqualTo("plex:library:$libraryId")
+            assertThat(library.serverUrl).isEqualTo(serverUrl)
+            assertThat(library.authToken).isEqualTo(serverAccessToken) // ← FIXED: Use server token
+            assertThat(library.authToken).isNotEqualTo(userAuthToken) // ← Must not be user token
+
+            // Verify library was saved with serverUrl and correct authToken
+            verify(libraryRepository).addLibraries(
+                argThat { list ->
+                    list.size == 1 &&
+                    list[0].serverUrl == serverUrl &&
+                    list[0].authToken == serverAccessToken
+                },
+            )
+        }
+
+    @Test
     fun getAllAccounts_delegatesToRepository() {
         // Given
         val accounts =

@@ -683,6 +683,10 @@ class AudiobookMediaSessionCallback
             extras: Bundle,
             playWhenReady: Boolean,
         ) {
+            // Clear thumbnail failure cache when starting a new book playback session
+            // This allows thumbnail requests to be retried for the new book
+            plexConfig.clearThumbnailFailureCache()
+
             // The [MediaItemTrack.id] of the track to be played, either a unique ID from
             // the DB, or default to ACTIVE_TRACK, the most recently listened track in [bookId]
             val startingTrackId = extras.getString(KEY_SEEK_TO_TRACK_WITH_ID, ACTIVE_TRACK)
@@ -852,6 +856,7 @@ class AudiobookMediaSessionCallback
 
                 // Inform plex server that audio playback session has started
                 // Uses library-aware routing to send the session start to the correct server
+                Timber.d("[PlayQueue] Calling plexProgressReporter.startMediaSession(bookId=${book.id}, libraryId=${book.libraryId})")
                 plexProgressReporter.startMediaSession(
                     bookId = book.id,
                     libraryId = book.libraryId,

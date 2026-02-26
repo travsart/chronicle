@@ -211,14 +211,6 @@ class ServiceModule(private val service: MediaPlayerService) {
 
     @Provides
     @ServiceScope
-    fun playbackUrlResolver(
-        plexMediaService: PlexMediaService,
-        plexConfig: PlexConfig,
-        serverConnectionResolver: local.oss.chronicle.data.sources.plex.ServerConnectionResolver,
-    ): PlaybackUrlResolver = PlaybackUrlResolver(plexMediaService, plexConfig, serverConnectionResolver)
-
-    @Provides
-    @ServiceScope
     fun voiceCommandBridgeAudio(serviceScope: kotlinx.coroutines.CoroutineScope): VoiceCommandBridgeAudio =
         VoiceCommandBridgeAudio(service, serviceScope)
 }

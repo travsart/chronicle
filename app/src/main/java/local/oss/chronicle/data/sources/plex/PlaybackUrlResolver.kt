@@ -1,27 +1,19 @@
 package local.oss.chronicle.data.sources.plex
 
-import android.os.Build
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
-import local.oss.chronicle.BuildConfig
 import local.oss.chronicle.data.model.MediaItemTrack
-import local.oss.chronicle.data.model.ServerConnection
 import local.oss.chronicle.data.sources.plex.model.getStreamUrl
 import local.oss.chronicle.data.sources.plex.model.hasPlayableMethod
 import local.oss.chronicle.util.RetryConfig
 import local.oss.chronicle.util.RetryResult
 import local.oss.chronicle.util.withRetry
-import okhttp3.Interceptor
-import okhttp3.OkHttpClient
-import retrofit2.Retrofit
-import retrofit2.converter.moshi.MoshiConverterFactory
 import timber.log.Timber
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -47,9 +39,8 @@ import javax.inject.Singleton
 class PlaybackUrlResolver
     @Inject
     constructor(
-        private val plexMediaService: PlexMediaService,
-        private val plexConfig: PlexConfig,
         private val serverConnectionResolver: ServerConnectionResolver,
+        private val scopedPlexServiceFactory: ScopedPlexServiceFactory,
     ) {
         /**
          * Cached URL with expiration tracking.
@@ -198,11 +189,12 @@ class PlaybackUrlResolver
                     val resolvedUrl = result.value
                     // Resolve connection to get serverUrl for caching
                     val connection = serverConnectionResolver.resolve(libraryId)
-                    // Cache the result
+                    // Cache the result with library-specific serverUrl
                     urlCache[trackKey] =
                         CachedUrl(
                             url = resolvedUrl,
-                            serverUrl = connection.serverUrl ?: plexConfig.url,
+                            serverUrl = connection.serverUrl
+                                ?: throw IllegalStateException("No server URL for library $libraryId"),
                             libraryId = libraryId,
                         )
                     // Also update the static cache for backward compatibility
@@ -241,7 +233,8 @@ class PlaybackUrlResolver
         ): String {
             // Resolve library-specific server connection
             val connection = serverConnectionResolver.resolve(libraryId)
-            val serverUrl = connection.serverUrl ?: plexConfig.url
+            val serverUrl = connection.serverUrl
+                ?: throw IllegalStateException("No server URL for library $libraryId")
     
             // Strip the "plex:" prefix to get numeric rating key for API call
             val numericRatingKey = track.id.removePrefix("plex:")
@@ -250,7 +243,7 @@ class PlaybackUrlResolver
             Timber.d("Requesting playback decision for track ${track.id} (${track.title}) from library $libraryId")
     
             // Create library-scoped service with correct auth token
-            val scopedService = createScopedService(connection)
+            val scopedService = scopedPlexServiceFactory.getOrCreateService(connection)
     
             // Call the decision endpoint with library-scoped service
             val decision =
@@ -295,69 +288,6 @@ class PlaybackUrlResolver
             Timber.i("Resolved streaming URL for track ${track.id} from library $libraryId: $streamUrl")
             return fullUrl
         }
-
-        /**
-         * Creates a library-scoped PlexMediaService with specific base URL and auth token.
-         * This instance is used only for this request and discarded after.
-         *
-         * Pattern follows PlexProgressReporter.createScopedService() for consistency.
-         *
-         * @param connection Server connection with URL and auth token
-         * @return PlexMediaService instance configured for this library
-         */
-        private fun createScopedService(connection: ServerConnection): PlexMediaService {
-            val baseUrl = connection.serverUrl ?: throw IllegalStateException("No server URL in connection")
-            val authToken = connection.authToken ?: throw IllegalStateException("No auth token in connection")
-    
-            // Create OkHttp client with request-scoped interceptor
-            val client =
-                OkHttpClient.Builder()
-                    .addInterceptor(createScopedInterceptor(authToken))
-                    .connectTimeout(30, TimeUnit.SECONDS)
-                    .readTimeout(30, TimeUnit.SECONDS)
-                    .writeTimeout(30, TimeUnit.SECONDS)
-                    .build()
-    
-            // Create Retrofit instance with library-specific base URL
-            val retrofit =
-                Retrofit.Builder()
-                    .baseUrl(baseUrl)
-                    .client(client)
-                    .addConverterFactory(MoshiConverterFactory.create())
-                    .build()
-    
-            return retrofit.create(PlexMediaService::class.java)
-        }
-    
-        /**
-         * Creates an OkHttp interceptor with request-scoped auth token.
-         * Similar to PlexInterceptor but uses provided token instead of global state.
-         *
-         * @param authToken The auth token for this specific request
-         * @return Interceptor that adds Plex headers to requests
-         */
-        private fun createScopedInterceptor(authToken: String): Interceptor {
-            return Interceptor { chain ->
-                val request =
-                    chain.request().newBuilder()
-                        .header("Accept", "application/json")
-                        .header("X-Plex-Platform", "Android")
-                        .header("X-Plex-Provides", "player")
-                        .header("X-Plex-Client-Identifier", plexConfig.sessionIdentifier)
-                        .header("X-Plex-Version", BuildConfig.VERSION_NAME)
-                        .header("X-Plex-Product", APP_NAME)
-                        .header("X-Plex-Platform-Version", Build.VERSION.RELEASE)
-                        .header("X-Plex-Device", Build.MODEL)
-                        .header("X-Plex-Device-Name", Build.MODEL)
-                        .header("X-Plex-Token", authToken) // Request-scoped token
-                        // Add client profile header for playback compatibility
-                        .header("X-Plex-Client-Profile-Extra", CLIENT_PROFILE_EXTRA)
-                        .build()
-    
-                chain.proceed(request)
-            }
-        }
-    
     
         /**
          * Builds a full server URL from base and relative path.

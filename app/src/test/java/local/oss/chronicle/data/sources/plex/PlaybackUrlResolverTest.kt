@@ -34,9 +34,8 @@ import org.junit.Test
  * 3. Manual/integration testing of actual Plex API calls
  */
 class PlaybackUrlResolverTest {
-    private lateinit var mockPlexMediaService: PlexMediaService
-    private lateinit var mockPlexConfig: PlexConfig
     private lateinit var mockServerConnectionResolver: ServerConnectionResolver
+    private lateinit var mockScopedPlexServiceFactory: ScopedPlexServiceFactory
     private lateinit var resolver: PlaybackUrlResolver
 
     private val testServerUrl = "http://test-server:32400"
@@ -51,17 +50,8 @@ class PlaybackUrlResolverTest {
 
     @Before
     fun setup() {
-        mockPlexMediaService = mockk()
-        mockPlexConfig = mockk()
         mockServerConnectionResolver = mockk()
-
-        // Setup default mock behavior
-        every { mockPlexConfig.url } returns testServerUrl
-        every { mockPlexConfig.sessionIdentifier } returns "test-session-id"
-        every { mockPlexConfig.toServerString(any()) } answers {
-            val path = firstArg<String>()
-            "$testServerUrl$path"
-        }
+        mockScopedPlexServiceFactory = mockk(relaxed = true)
 
         // Mock ServerConnectionResolver to return test server connection
         coEvery { mockServerConnectionResolver.resolve(any()) } returns
@@ -70,7 +60,7 @@ class PlaybackUrlResolverTest {
                 authToken = "test-token",
             )
 
-        resolver = PlaybackUrlResolver(mockPlexMediaService, mockPlexConfig, mockServerConnectionResolver)
+        resolver = PlaybackUrlResolver(mockServerConnectionResolver, mockScopedPlexServiceFactory)
 
         // Clear the static cache before each test
         MediaItemTrack.streamingUrlCache.clear()

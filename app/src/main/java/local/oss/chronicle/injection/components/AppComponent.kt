@@ -94,6 +94,10 @@ interface AppComponent {
 
     fun progressReporter(): PlexProgressReporter
 
+    fun scopedPlexServiceFactory(): ScopedPlexServiceFactory
+
+    fun playbackUrlResolver(): PlaybackUrlResolver
+
     // Inject
     fun inject(chronicleApplication: ChronicleApplication)
 

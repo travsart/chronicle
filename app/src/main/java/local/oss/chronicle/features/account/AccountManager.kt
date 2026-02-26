@@ -83,6 +83,7 @@ class AccountManager
          * @param libraryType Library type (e.g., "artist")
          * @param userAuthToken User's authentication token
          * @param serverAccessToken Server access token (for shared servers)
+         * @param serverUrl Server URL for this library (used for playback)
          * @return Pair of (Account, Library)
          */
         suspend fun addPlexAccountWithLibrary(
@@ -96,6 +97,7 @@ class AccountManager
             libraryType: String = "artist",
             userAuthToken: String,
             serverAccessToken: String,
+            serverUrl: String,
         ): Pair<Account, Library> {
             // Generate account ID using user UUID
             val accountId = "plex:account:$userUuid"
@@ -131,6 +133,8 @@ class AccountManager
                     lastSyncedAt = null,
                     itemCount = 0,
                     isActive = false, // Set via switch
+                    serverUrl = serverUrl,
+                    authToken = serverAccessToken, // Store server access token for library-aware playback
                 )
 
             // Save library

@@ -1,12 +1,9 @@
 package local.oss.chronicle.data.sources.plex
 
-import android.os.Build
-import local.oss.chronicle.BuildConfig
 import local.oss.chronicle.data.local.LibraryRepository
 import local.oss.chronicle.data.model.Audiobook
 import local.oss.chronicle.data.model.MediaItemTrack
 import local.oss.chronicle.data.model.ServerConnection
-import local.oss.chronicle.data.sources.plex.model.PlayQueueResponseWrapper
 import local.oss.chronicle.data.sources.plex.model.getDuration
 import local.oss.chronicle.data.sources.plex.model.toPlayQueueItemMap
 import local.oss.chronicle.features.player.MediaPlayerService.Companion.PLEX_STATE_PAUSED
@@ -15,18 +12,13 @@ import local.oss.chronicle.features.player.ProgressUpdater.Companion.BOOK_FINISH
 import local.oss.chronicle.util.RetryConfig
 import local.oss.chronicle.util.RetryResult
 import local.oss.chronicle.util.withRetry
-import okhttp3.Interceptor
-import okhttp3.OkHttpClient
 import retrofit2.HttpException
-import retrofit2.Retrofit
-import retrofit2.converter.moshi.MoshiConverterFactory
 import timber.log.Timber
 import java.io.IOException
 import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -50,6 +42,7 @@ class PlexProgressReporter
         private val plexPrefsRepo: PlexPrefsRepo,
         private val serverConnectionResolver: ServerConnectionResolver,
         private val libraryRepository: LibraryRepository,
+        private val scopedPlexServiceFactory: ScopedPlexServiceFactory,
     ) {
         companion object {
             /**
@@ -85,7 +78,7 @@ class PlexProgressReporter
          */
         fun clearPlayQueueCache() {
             playQueueItemCache.clear()
-            Timber.d("Cleared play queue item cache")
+            Timber.d("[PlayQueue] Cleared play queue item cache")
         }
 
         /**
@@ -109,7 +102,7 @@ class PlexProgressReporter
             playbackState: String,
         ) {
             // Create request-scoped PlexService with library-specific base URL
-            val service = createScopedService(connection)
+            val service = scopedPlexServiceFactory.getOrCreateService(connection)
 
             // Extract numeric IDs for API calls (strip "plex:" prefix)
             val numericTrackId =
@@ -228,129 +221,83 @@ class PlexProgressReporter
             libraryId: String,
         ) {
             try {
+                Timber.d("[PlayQueue] startMediaSession() called - bookId=$bookId, libraryId=$libraryId")
+                
                 // Clear previous play queue cache when starting new session
                 clearPlayQueueCache()
+                Timber.d("[PlayQueue] Cleared previous play queue cache")
 
                 // Extract numeric book ID
                 val numericBookId =
                     bookId.removePrefix("plex:").toIntOrNull()
                         ?: throw IllegalArgumentException("Invalid book ID: $bookId")
+                Timber.d("[PlayQueue] Extracted numeric book ID: $numericBookId")
 
                 // Resolve library-specific server connection
                 val connection =
                     try {
                         serverConnectionResolver.resolve(libraryId)
                     } catch (e: Exception) {
-                        Timber.e(e, "Failed to resolve server for library: $libraryId")
+                        Timber.e(e, "[PlayQueue] Failed to resolve server for library: $libraryId")
                         return // Non-critical, don't prevent playback
                     }
+                Timber.d("[PlayQueue] Resolved server connection - serverUrl=${connection.serverUrl}")
 
                 // Get library to retrieve serverId (machine identifier)
                 val library =
                     try {
                         libraryRepository.getLibraryById(libraryId)
                     } catch (e: Exception) {
-                        Timber.e(e, "Failed to get library for id: $libraryId")
+                        Timber.e(e, "[PlayQueue] Failed to get library for id: $libraryId")
                         return // Non-critical, don't prevent playback
                     }
 
                 if (library == null) {
-                    Timber.w("Library not found for id: $libraryId. Cannot start media session.")
+                    Timber.w("[PlayQueue] Library not found for id: $libraryId. Cannot start media session.")
                     return // Non-critical, don't prevent playback
                 }
+                
+                Timber.d(
+                    "[PlayQueue] Retrieved library from DB - name='${library.name}', " +
+                        "serverId='${library.serverId}', serverName='${library.serverName}', " +
+                        "serverUrl=${library.serverUrl}, authToken=${if (library.authToken.isNullOrEmpty()) "EMPTY" else "SET"}"
+                )
 
                 val serverId = library.serverId
+                Timber.d("[PlayQueue] Checking serverId value: '${serverId}' (isEmpty=${serverId.isEmpty()})")
+                
                 if (serverId.isEmpty()) {
-                    Timber.w("Server ID not set for library: $libraryId. Cannot start media session.")
+                    Timber.w("[PlayQueue] Server ID not set for library: $libraryId. Cannot start media session.")
                     return // Non-critical, don't prevent playback
                 }
 
                 // Create library-scoped service
-                val service = createScopedService(connection)
+                val service = scopedPlexServiceFactory.getOrCreateService(connection)
+                Timber.d("[PlayQueue] Created library-scoped PlexService")
 
                 // Build the media item URI
                 val uri = getMediaItemUri(serverId, numericBookId.toString())
+                Timber.d("[PlayQueue] Built media item URI for POST /playQueues: $uri")
 
                 // Start media session and capture play queue response
+                Timber.d("[PlayQueue] Calling POST /playQueues with URI: $uri")
                 val response = service.startMediaSession(uri)
+                Timber.d("[PlayQueue] Received API response - playQueueID=${response.mediaContainer?.playQueueID}, metadata count=${response.mediaContainer?.metadata?.size ?: 0}")
 
                 // Extract and cache play queue item IDs
                 val playQueueMap = response.toPlayQueueItemMap()
+                Timber.d("[PlayQueue] Extracted play queue item map - size=${playQueueMap.size}, contents=$playQueueMap")
+                
                 playQueueItemCache.putAll(playQueueMap)
+                Timber.d("[PlayQueue] Updated playQueueItemCache - total cached items: ${playQueueItemCache.size}")
 
                 Timber.i(
-                    "Started media session for book $bookId on server $serverId (library: $libraryId). " +
+                    "[PlayQueue] Started media session for book $bookId on server $serverId (library: $libraryId). " +
                         "Cached ${playQueueMap.size} play queue item IDs",
                 )
             } catch (e: Exception) {
                 // This is non-critical - log but never throw
-                Timber.e(e, "Failed to start media session for book $bookId: ${e.message}")
-            }
-        }
-
-        /**
-         * Creates a library-scoped PlexService with specific base URL and auth token.
-         * This instance is used only for this request and discarded after.
-         *
-         * @param connection Server connection with URL and auth token
-         * @return PlexMediaService instance configured for this library
-         */
-        private fun createScopedService(connection: ServerConnection): PlexMediaService {
-            val baseUrl = connection.serverUrl ?: throw IllegalStateException("No server URL in connection")
-            val authToken = connection.authToken ?: throw IllegalStateException("No auth token in connection")
-
-            // Create OkHttp client with request-scoped interceptor
-            val client =
-                OkHttpClient.Builder()
-                    .addInterceptor(createScopedInterceptor(authToken))
-                    .connectTimeout(30, TimeUnit.SECONDS)
-                    .readTimeout(30, TimeUnit.SECONDS)
-                    .writeTimeout(30, TimeUnit.SECONDS)
-                    .build()
-
-            // Create Retrofit instance with library-specific base URL
-            val retrofit =
-                Retrofit.Builder()
-                    .baseUrl(baseUrl)
-                    .client(client)
-                    .addConverterFactory(MoshiConverterFactory.create())
-                    .build()
-
-            return retrofit.create(PlexMediaService::class.java)
-        }
-
-        /**
-         * Creates an OkHttp interceptor with request-scoped auth token.
-         *
-         * CRITICAL: Headers must match PlexInterceptor exactly for Plex to correlate
-         * play queue creation (startMediaSession) with timeline updates (reportProgress).
-         *
-         * Uses plexPrefsRepo.uuid (NOT plexConfig.sessionIdentifier) for X-Plex-Client-Identifier
-         * to ensure consistency with main interceptor and proper dashboard correlation.
-         *
-         * @param authToken The auth token for this specific request
-         * @return Interceptor that adds Plex headers to requests
-         */
-        private fun createScopedInterceptor(authToken: String): Interceptor {
-            return Interceptor { chain ->
-                val request =
-                    chain.request().newBuilder()
-                        .header("Accept", "application/json")
-                        .header("X-Plex-Platform", "Android")
-                        .header("X-Plex-Provides", "player")
-                        .header("X-Plex-Client-Identifier", plexPrefsRepo.uuid)
-                        .header("X-Plex-Version", BuildConfig.VERSION_NAME)
-                        .header("X-Plex-Product", APP_NAME)
-                        .header("X-Plex-Platform-Version", Build.VERSION.RELEASE)
-                        .header("X-Plex-Session-Identifier", plexConfig.sessionIdentifier)
-                        .header("X-Plex-Client-Name", APP_NAME)
-                        .header("X-Plex-Device", Build.MODEL)
-                        .header("X-Plex-Device-Name", Build.MODEL)
-                        .header("X-Plex-Client-Profile-Extra", PlexInterceptor.CLIENT_PROFILE_EXTRA)
-                        .header("X-Plex-Token", authToken)
-                        .build()
-
-                chain.proceed(request)
+                Timber.e(e, "[PlayQueue] Failed to start media session for book $bookId: ${e.message}")
             }
         }
 
