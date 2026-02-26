@@ -103,6 +103,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Updated `PlexHttpDataSourceFactory` to inject library-specific auth tokens
   - Updated `PlexSyncScrobbleWorker` for library-aware progress scrobbling
   - Added `serverUrl` and `authToken` fields to Library entity (database migration)
+- Fixed playback failing for audiobooks from non-active libraries due to incorrect metadata path format and wrong auth token in playback decision API calls
+  - `PlaybackUrlResolver` now strips `"plex:"` prefix from metadata paths before API calls (prevents HTTP 400 errors)
+  - Playback decision API calls now use library-scoped Retrofit instances with correct auth tokens (following `PlexProgressReporter` pattern)
 - Fixed HTTP 401 error on Android Auto cold start due to stale auth tokens in ExoPlayer DataSource
 - Fixed server connections accumulating over time - server list now refreshes every 24 hours (every startup in debug builds) and replaces stale connections instead of merging
 - Added "Strict Auto client validation" toggle in Settings → ETC (defaults to off) to resolve Google Play Store rejection caused by review tools being blocked by client signature validation

@@ -45,6 +45,30 @@ graph TD
     style F fill:#FFD700
 ```
 
+## Implementation Status
+
+**Status:** ✅ **IMPLEMENTED** (as of 2026-02-26)
+
+### Key Implementation Details
+
+#### PlaybackUrlResolver Library-Aware API Calls
+
+[`PlaybackUrlResolver`](../../app/src/main/java/local/oss/chronicle/data/sources/plex/PlaybackUrlResolver.kt) now creates library-scoped Retrofit instances for playback decision API calls, consistent with the pattern established in [`PlexProgressReporter`](../../app/src/main/java/local/oss/chronicle/data/sources/plex/PlexProgressReporter.kt).
+
+**Critical Fix: Metadata Path Format**
+- Plex API expects metadata paths without the `"plex:"` prefix (e.g., `/library/metadata/65`)
+- Chronicle's internal track IDs include the prefix (e.g., `"plex:65"`)
+- The prefix is now stripped **at the API call site only** in [`PlaybackUrlResolver.kt`](../../app/src/main/java/local/oss/chronicle/data/sources/plex/PlaybackUrlResolver.kt)
+- Including the prefix in API calls resulted in HTTP 400 errors (Bad Request)
+
+**Library-Scoped Service Pattern**
+- Each playback decision API call now uses a Retrofit instance scoped to the track's library
+- This ensures the correct server URL and auth token are used for multi-library/multi-server setups
+- Follows the same `createScopedService()` pattern established in `PlexProgressReporter`
+- Prevents auth token mismatches that caused HTTP 401 errors when playing tracks from non-active libraries
+
+See [`PlaybackUrlResolver.kt`](../../app/src/main/java/local/oss/chronicle/data/sources/plex/PlaybackUrlResolver.kt) for implementation details.
+
 ## Detailed Design
 
 ### 1. New Component: `ServerConnectionResolver`
