@@ -6,8 +6,9 @@ import local.oss.chronicle.BuildConfig
 import local.oss.chronicle.data.model.Chapter
 import local.oss.chronicle.data.model.MediaItemTrack
 import local.oss.chronicle.data.model.asChapter
-import local.oss.chronicle.data.sources.plex.PlexMediaService
 import local.oss.chronicle.data.sources.plex.PlexPrefsRepo
+import local.oss.chronicle.data.sources.plex.ScopedPlexServiceFactory
+import local.oss.chronicle.data.sources.plex.ServerConnectionResolver
 import local.oss.chronicle.data.sources.plex.model.toChapter
 import timber.log.Timber
 import javax.inject.Inject
@@ -38,7 +39,8 @@ class ChapterRepository
         private val chapterDao: ChapterDao,
         private val prefsRepo: PrefsRepo,
         private val plexPrefsRepo: PlexPrefsRepo,
-        private val plexMediaService: PlexMediaService,
+        private val scopedPlexServiceFactory: ScopedPlexServiceFactory,
+        private val serverConnectionResolver: ServerConnectionResolver,
     ) : IChapterRepository {
         override suspend fun loadChapterData(
             isAudiobookCached: Boolean,
@@ -52,8 +54,28 @@ class ChapterRepository
                         val numericTrackId =
                             track.id.removePrefix("plex:").toIntOrNull()
                                 ?: return@flatMap emptyList()
+
+                        // Get libraryId from the track
+                        val libraryId = track.libraryId
+                        if (libraryId.isEmpty()) {
+                            Timber.w("Track ${track.id} has no libraryId, skipping chapter load")
+                            return@flatMap emptyList()
+                        }
+
+                        // Resolve the server connection for this library
+                        val connection = serverConnectionResolver.resolve(libraryId)
+
+                        // Validate connection has required fields
+                        if (connection.serverUrl == null || connection.authToken == null) {
+                            Timber.e("No valid server connection for library $libraryId (track ${track.id})")
+                            return@flatMap emptyList()
+                        }
+
+                        // Get/create a scoped PlexMediaService for this server
+                        val scopedService = scopedPlexServiceFactory.getOrCreateService(connection)
+
                         val networkChapters =
-                            plexMediaService.retrieveChapterInfo(numericTrackId)
+                            scopedService.retrieveChapterInfo(numericTrackId)
                                 .plexMediaContainer.metadata.firstOrNull()?.plexChapters
                         if (BuildConfig.DEBUG) {
                             // prevent networkChapters from toString()ing and being slow even if timber

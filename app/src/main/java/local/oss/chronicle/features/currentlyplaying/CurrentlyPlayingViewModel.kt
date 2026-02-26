@@ -365,7 +365,16 @@ class CurrentlyPlayingViewModel(
                 if (tracks.value?.size == null) {
                     _isLoadingTracks.value = true
                 }
-                val tracks = trackRepository.loadTracksForAudiobook(bookId)
+                
+                // Get the audiobook first to access libraryId
+                val audiobookData = audiobook.value
+                if (audiobookData == null) {
+                    Timber.w("Cannot refresh tracks for $bookId: audiobook not loaded yet")
+                    _isLoadingTracks.value = false
+                    return@launch
+                }
+                
+                val tracks = trackRepository.loadTracksForAudiobook(bookId, audiobookData.libraryId)
                 if (tracks is Ok) {
                     bookRepository.updateTrackData(
                         bookId,
@@ -373,9 +382,7 @@ class CurrentlyPlayingViewModel(
                         tracks.value.getDuration(),
                         tracks.value.size,
                     )
-                    audiobook.value?.let {
-                        bookRepository.syncAudiobook(it, tracks.value)
-                    }
+                    bookRepository.syncAudiobook(audiobookData, tracks.value)
                 }
                 _isLoadingTracks.value = false
             } catch (e: Throwable) {

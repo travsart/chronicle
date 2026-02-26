@@ -874,10 +874,18 @@ class AudiobookMediaSessionCallback
         ) {
             Timber.d("[VoiceCommandTrace] handlePlayBookWithNoTracks ENTER - bookId: $bookId")
             Timber.i("No known tracks for book: $bookId, attempting to fetch them")
+            
+            // Get the audiobook first to access libraryId
+            val audiobook = bookRepository.getAudiobookAsync(bookId)
+            if (audiobook == null) {
+                Timber.e("[VoiceCommandTrace] handlePlayBookWithNoTracks EXIT - audiobook not found")
+                return
+            }
+            
             // Tracks haven't been loaded by UI for this track, so load it here
             val networkTracks =
                 withContext(Dispatchers.IO) {
-                    trackRepository.loadTracksForAudiobook(bookId)
+                    trackRepository.loadTracksForAudiobook(bookId, audiobook.libraryId)
                 }
             if (networkTracks is Ok) {
                 bookRepository.updateTrackData(
@@ -886,10 +894,7 @@ class AudiobookMediaSessionCallback
                     networkTracks.value.getDuration(),
                     networkTracks.value.size,
                 )
-                val audiobook = bookRepository.getAudiobookAsync(bookId)
-                if (audiobook != null) {
-                    bookRepository.syncAudiobook(audiobook, tracks)
-                }
+                bookRepository.syncAudiobook(audiobook, tracks)
                 playBook(bookId, extras, playWhenReady)
                 Timber.d("[VoiceCommandTrace] handlePlayBookWithNoTracks EXIT - success, retrying playBook")
             } else {

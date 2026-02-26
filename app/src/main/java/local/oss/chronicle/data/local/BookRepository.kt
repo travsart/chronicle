@@ -8,6 +8,8 @@ import local.oss.chronicle.data.model.*
 import local.oss.chronicle.data.sources.MediaSource
 import local.oss.chronicle.data.sources.plex.PlexMediaService
 import local.oss.chronicle.data.sources.plex.PlexPrefsRepo
+import local.oss.chronicle.data.sources.plex.ScopedPlexServiceFactory
+import local.oss.chronicle.data.sources.plex.ServerConnectionResolver
 import local.oss.chronicle.data.sources.plex.model.asAudiobooks
 import local.oss.chronicle.data.sources.plex.model.getDuration
 import local.oss.chronicle.data.sources.plex.model.toChapter
@@ -145,7 +147,7 @@ interface IBookRepository {
     suspend fun setUnwatched(bookId: String)
 
     /** Loads an [Audiobook] in from the network */
-    suspend fun fetchBookAsync(bookId: String): Audiobook?
+    suspend fun fetchBookAsync(bookId: String, libraryId: String): Audiobook?
 
     suspend fun refreshDataPaginated()
 }
@@ -158,6 +160,10 @@ class BookRepository
         private val prefsRepo: PrefsRepo,
         private val plexPrefsRepo: PlexPrefsRepo,
         private val plexMediaService: PlexMediaService,
+        private val chapterRepository: IChapterRepository,
+        private val chapterDao: ChapterDao,
+        private val serverConnectionResolver: ServerConnectionResolver,
+        private val scopedPlexServiceFactory: ScopedPlexServiceFactory,
     ) : IBookRepository {
         // TODO: observe prefsRepo.offlineMode?
 
@@ -387,11 +393,24 @@ class BookRepository
                 try {
                     // Extract numeric ID for Plex API call
                     val numericId = bookId.removePrefix("plex:").toIntOrNull() ?: return@withContext
-                    plexMediaService.watched(numericId.toString())
+
+                    // Get audiobook to determine library ID
+                    val audiobook = bookDao.getAudiobookAsync(bookId)
+                    if (audiobook == null) {
+                        Timber.w("Cannot set watched status - audiobook not found: $bookId")
+                        return@withContext
+                    }
+
+                    // Resolve library-specific server connection
+                    val connection = serverConnectionResolver.resolve(audiobook.libraryId)
+                    val scopedService = scopedPlexServiceFactory.getOrCreateService(connection)
+
+                    // Use scoped service to call the correct server
+                    scopedService.watched(numericId.toString())
                     bookDao.setWatched(bookId)
                     bookDao.resetBookProgress(bookId)
                 } catch (t: Throwable) {
-                    Timber.e("Failed to update watched status: $t")
+                    Timber.e(t, "Failed to update watched status for bookId=$bookId")
                 }
             }
         }
@@ -401,10 +420,23 @@ class BookRepository
                 try {
                     // Extract numeric ID for Plex API call
                     val numericId = bookId.removePrefix("plex:").toIntOrNull() ?: return@withContext
-                    plexMediaService.unwatched(numericId.toString())
+
+                    // Get audiobook to determine library ID
+                    val audiobook = bookDao.getAudiobookAsync(bookId)
+                    if (audiobook == null) {
+                        Timber.w("Cannot set unwatched status - audiobook not found: $bookId")
+                        return@withContext
+                    }
+
+                    // Resolve library-specific server connection
+                    val connection = serverConnectionResolver.resolve(audiobook.libraryId)
+                    val scopedService = scopedPlexServiceFactory.getOrCreateService(connection)
+
+                    // Use scoped service to call the correct server
+                    scopedService.unwatched(numericId.toString())
                     bookDao.setUnwatched(bookId)
                 } catch (t: Throwable) {
-                    Timber.e("Failed to update watched status: $t")
+                    Timber.e(t, "Failed to update unwatched status for bookId=$bookId")
                 }
             }
         }
@@ -458,45 +490,36 @@ class BookRepository
                 }, tracks are $tracks",
             )
             withContext(Dispatchers.IO) {
+                // Delegate chapter loading to ChapterRepository (library-aware)
+                try {
+                    chapterRepository.loadChapterData(audiobook.isCached, tracks)
+                } catch (t: Throwable) {
+                    Timber.e("Failed to load chapters: $t")
+                    return@withContext false
+                }
+
+                // Read chapters back from database, filtering by track IDs
+                val trackIds = tracks.map { it.id }.toSet()
                 val chapters: List<Chapter> =
                     try {
-                        tracks.flatMap { track ->
-                            // Extract numeric ID for Plex API call
-                            val numericTrackId =
-                                track.id.removePrefix("plex:").toIntOrNull()
-                                    ?: return@flatMap emptyList()
-                            val networkChapters =
-                                plexMediaService.retrieveChapterInfo(numericTrackId)
-                                    .plexMediaContainer.metadata.firstOrNull()?.plexChapters
-                            if (BuildConfig.DEBUG) {
-                                // prevent networkChapters from toString()ing and being slow even if timber
-                                // tree isn't attached in the release build
-                                Timber.i("Network chapters: $networkChapters")
-                            }
-                            // If no chapters for this track, make a chapter from the current track
-                            networkChapters?.map { plexChapter ->
-                                plexChapter.toChapter(
-                                    track.id,
-                                    track.discNumber,
-                                    audiobook.isCached,
-                                )
-                            }.takeIf { !it.isNullOrEmpty() } ?: listOf(track.asChapter(0L))
+                        chapterDao.getChapters().filter { chapter ->
+                            trackIds.contains(chapter.trackId)
                         }.sorted()
                     } catch (t: Throwable) {
-                        Timber.e("Failed to load chapters: $t")
-                        return@withContext false
-                    }
-
-                val networkBook =
-                    try {
-                        val retrievedBook = fetchBookAsync(audiobook.id)
-                        retrievedBook ?: return@withContext false
-                    } catch (t: Throwable) {
-                        Timber.e("Failed to load audiobook update")
-                        return@withContext false
+                        Timber.e("Failed to retrieve chapters from database: $t")
+                        emptyList()
                     }
 
                 Timber.i("Loaded chapters: ${chapters.map { "[${it.index}/${it.discNumber}]" }}")
+
+                val networkBook =
+                    try {
+                        val retrievedBook = fetchBookAsync(audiobook.id, audiobook.libraryId)
+                        retrievedBook ?: return@withContext false
+                    } catch (t: Throwable) {
+                        Timber.e("Failed to load audiobook update: $t")
+                        return@withContext false
+                    }
 
                 val merged =
                     Audiobook.merge(
@@ -513,16 +536,27 @@ class BookRepository
             return true
         }
 
-        override suspend fun fetchBookAsync(bookId: String): Audiobook? =
+        override suspend fun fetchBookAsync(bookId: String, libraryId: String): Audiobook? =
             withContext(Dispatchers.IO) {
-                // Extract numeric ID for Plex API call
-                val numericId = bookId.removePrefix("plex:").toIntOrNull() ?: return@withContext null
-                val library = plexPrefsRepo.library ?: return@withContext null
-                val libraryId = "plex:library:${library.id}"
-                plexMediaService.retrieveAlbum(numericId)
-                    .plexMediaContainer
-                    .asAudiobooks(libraryId)
-                    .firstOrNull()
+                try {
+                    // Extract numeric ID for Plex API call
+                    val numericId = bookId.removePrefix("plex:").toIntOrNull() ?: return@withContext null
+
+                    // Resolve library-specific server connection
+                    val connection = serverConnectionResolver.resolve(libraryId)
+                    val scopedService = scopedPlexServiceFactory.getOrCreateService(connection)
+
+                    Timber.d("Fetching book metadata for bookId=$bookId from libraryId=$libraryId")
+
+                    // Use scoped service to call the correct server
+                    scopedService.retrieveAlbum(numericId)
+                        .plexMediaContainer
+                        .asAudiobooks(libraryId) // Tag with the correct libraryId
+                        .firstOrNull()
+                } catch (t: Throwable) {
+                    Timber.e(t, "Failed to fetch book async for bookId=$bookId, libraryId=$libraryId")
+                    null
+                }
             }
 
         suspend fun deleteByLibraryId(libraryId: String) {

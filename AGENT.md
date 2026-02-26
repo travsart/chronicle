@@ -237,6 +237,8 @@ Chronicle uses **Room** (AndroidX) for local data:
 
 **Database migrations** are defined within database class files. Schema versions are stored in [`app/schemas/`](app/schemas/).
 
+**Library-Aware Repositories**: [`BookRepository`](app/src/main/java/local/oss/chronicle/data/local/BookRepository.kt), [`TrackRepository`](app/src/main/java/local/oss/chronicle/data/local/TrackRepository.kt), and [`ChapterRepository`](app/src/main/java/local/oss/chronicle/data/local/ChapterRepository.kt) use [`ServerConnectionResolver`](app/src/main/java/local/oss/chronicle/data/sources/plex/ServerConnectionResolver.kt) + [`ScopedPlexServiceFactory`](app/src/main/java/local/oss/chronicle/data/sources/plex/ScopedPlexServiceFactory.kt) to fetch metadata from the correct Plex server for each library in multi-server setups.
+
 ### 6.5 Offline Playback
 
 Uses **[Fetch library](https://github.com/tonyofrancis/Fetch)** for downloads:
@@ -285,6 +287,8 @@ resolves the correct server connection for a track's library, ensuring multi-ser
 
 Progress reporting and `startMediaSession()` now use per-library server connections via [`PlexProgressReporter`](app/src/main/java/local/oss/chronicle/data/sources/plex/PlexProgressReporter.kt),
 eliminating race conditions when reporting progress for books from different libraries.
+
+The data layer repositories ([`BookRepository`](app/src/main/java/local/oss/chronicle/data/local/BookRepository.kt), [`TrackRepository`](app/src/main/java/local/oss/chronicle/data/local/TrackRepository.kt), and [`ChapterRepository`](app/src/main/java/local/oss/chronicle/data/local/ChapterRepository.kt)) all use the same library-aware pattern via `ServerConnectionResolver` and `ScopedPlexServiceFactory` to fetch metadata from the correct server per library.
 
 See [`docs/architecture/library-aware-playback.md`](docs/architecture/library-aware-playback.md) for architecture details.
 
@@ -420,6 +424,7 @@ Test-driven development is encouraged - write tests before or during implementat
 - [`TrackListStateManagerTest.kt`](app/src/test/java/local/oss/chronicle/features/player/TrackListStateManagerTest.kt) - Player state management testing
 - [`ChapterDetectionRealWorldTest.kt`](app/src/test/java/local/oss/chronicle/features/player/ChapterDetectionRealWorldTest.kt) - Complex chapter detection logic
 - [`AudiobookDetailsViewModelTest.kt`](app/src/test/java/local/oss/chronicle/features/bookdetails/AudiobookDetailsViewModelTest.kt) - ViewModel testing with Mockito
+- [`TrackRepositoryTest.kt`](app/src/test/java/local/oss/chronicle/data/local/TrackRepositoryTest.kt) - Library-aware repository testing with ServerConnectionResolver
 
 **Testing approach:**
 - Mock repositories and dependencies with Mockito

@@ -12,6 +12,8 @@ import local.oss.chronicle.data.model.NO_AUDIOBOOK_FOUND_ID
 import local.oss.chronicle.data.sources.MediaSource
 import local.oss.chronicle.data.sources.plex.PlexMediaService
 import local.oss.chronicle.data.sources.plex.PlexPrefsRepo
+import local.oss.chronicle.data.sources.plex.ScopedPlexServiceFactory
+import local.oss.chronicle.data.sources.plex.ServerConnectionResolver
 import local.oss.chronicle.data.sources.plex.model.MediaType
 import local.oss.chronicle.data.sources.plex.model.asTrackList
 import timber.log.Timber
@@ -29,6 +31,7 @@ interface ITrackRepository {
      */
     suspend fun loadTracksForAudiobook(
         bookId: String,
+        libraryId: String,
         forceUseNetwork: Boolean = false,
     ): Result<List<MediaItemTrack>, Throwable>
 
@@ -112,7 +115,7 @@ interface ITrackRepository {
      *
      * @return a [List<MediaItemTrack>] reflecting tracks returned by the server
      */
-    suspend fun fetchNetworkTracksForBook(bookId: String): List<MediaItemTrack>
+    suspend fun fetchNetworkTracksForBook(bookId: String, libraryId: String): List<MediaItemTrack>
 
     /**
      * Loads in new track data from the network, updates the DB and returns the new track data
@@ -144,6 +147,9 @@ class TrackRepository
         private val prefsRepo: PrefsRepo,
         private val plexMediaService: PlexMediaService,
         private val plexPrefs: PlexPrefsRepo,
+        private val scopedPlexServiceFactory: ScopedPlexServiceFactory,
+        private val serverConnectionResolver: ServerConnectionResolver,
+        private val bookRepository: IBookRepository,
     ) : ITrackRepository {
         @Throws(Throwable::class)
         override suspend fun refreshData() {
@@ -195,13 +201,24 @@ class TrackRepository
             }
         }
 
-        override suspend fun fetchNetworkTracksForBook(bookId: String): List<MediaItemTrack> {
+        override suspend fun fetchNetworkTracksForBook(bookId: String, libraryId: String): List<MediaItemTrack> {
             return withContext(Dispatchers.IO) {
                 // Extract numeric ID from "plex:{id}" format
                 val numericId = bookId.removePrefix("plex:").toIntOrNull() ?: return@withContext emptyList()
-                val library = plexPrefs.library ?: return@withContext emptyList()
-                val libraryId = "plex:library:${library.id}"
-                return@withContext plexMediaService.retrieveTracksForAlbum(numericId)
+                
+                // Resolve the server connection for this library
+                val connection = serverConnectionResolver.resolve(libraryId)
+                
+                // Validate connection has required fields
+                if (connection.serverUrl == null || connection.authToken == null) {
+                    Timber.e("No valid server connection for library $libraryId (book $bookId)")
+                    return@withContext emptyList()
+                }
+                
+                // Get/create a scoped PlexMediaService for this server
+                val scopedService = scopedPlexServiceFactory.getOrCreateService(connection)
+                
+                return@withContext scopedService.retrieveTracksForAlbum(numericId)
                     .plexMediaContainer
                     .asTrackList(libraryId)
             }
@@ -212,7 +229,18 @@ class TrackRepository
             forceUseNetwork: Boolean,
         ): List<MediaItemTrack> =
             withContext(Dispatchers.IO) {
-                val networkTracks = fetchNetworkTracksForBook(bookId)
+                // Get libraryId from a local track or the book itself
+                val existingTracks = getTracksForAudiobookAsync(bookId)
+                val libraryId = existingTracks.firstOrNull()?.libraryId ?: run {
+                    // Fallback: try to get from the book
+                    val book = bookRepository.getAudiobookAsync(bookId)
+                    book?.libraryId ?: run {
+                        Timber.w("Cannot sync tracks for book $bookId: no libraryId available")
+                        return@withContext emptyList()
+                    }
+                }
+                
+                val networkTracks = fetchNetworkTracksForBook(bookId, libraryId)
                 // Re-read local tracks right before merge to minimize race condition window
                 // where ProgressUpdater might update progress between initial read and insertAll
                 val localTracks = getTracksForAudiobookAsync(bookId)
@@ -240,6 +268,7 @@ class TrackRepository
 
         override suspend fun loadTracksForAudiobook(
             bookId: String,
+            libraryId: String,
             forceUseNetwork: Boolean,
         ): Result<List<MediaItemTrack>, Throwable> {
             return withContext(Dispatchers.IO) {
@@ -247,10 +276,20 @@ class TrackRepository
                 try {
                     // Extract numeric ID from "plex:{id}" format
                     val numericId = bookId.removePrefix("plex:").toIntOrNull() ?: return@withContext Err(IllegalArgumentException("Invalid book ID format: $bookId"))
-                    val library = plexPrefs.library ?: return@withContext Err(IllegalStateException("No library selected"))
-                    val libraryId = "plex:library:${library.id}"
+                    
+                    // Resolve the server connection for this library
+                    val connection = serverConnectionResolver.resolve(libraryId)
+                    
+                    // Validate connection has required fields
+                    if (connection.serverUrl == null || connection.authToken == null) {
+                        return@withContext Err(IllegalStateException("No valid server connection for library $libraryId"))
+                    }
+                    
+                    // Get/create a scoped PlexMediaService for this server
+                    val scopedService = scopedPlexServiceFactory.getOrCreateService(connection)
+                    
                     val networkTracks =
-                        plexMediaService.retrieveTracksForAlbum(numericId)
+                        scopedService.retrieveTracksForAlbum(numericId)
                             .plexMediaContainer
                             .asTrackList(libraryId)
                     val mergedTracks =

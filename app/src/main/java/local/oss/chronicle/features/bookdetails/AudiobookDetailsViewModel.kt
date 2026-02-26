@@ -309,13 +309,19 @@ class AudiobookDetailsViewModel(
                 delay(50)
                 val noExistingChapters = chapters.value.isNullOrEmpty()
                 _isLoadingTracks.value = noExistingChapters
-                val trackRequest = trackRepository.loadTracksForAudiobook(bookId)
+                
+                // Get the audiobook first to access libraryId
+                val audiobook = bookRepository.getAudiobookAsync(bookId)
+                if (audiobook == null) {
+                    Timber.e("Failed to load audiobook $bookId")
+                    _isLoadingTracks.value = false
+                    return@launch
+                }
+                
+                val trackRequest = trackRepository.loadTracksForAudiobook(bookId, audiobook.libraryId)
                 if (trackRequest is Ok) {
-                    val audiobook = bookRepository.getAudiobookAsync(bookId)
-                    audiobook?.let {
-                        trackRepository.syncTracksInBook(audiobook.id)
-                        bookRepository.syncAudiobook(audiobook, trackRequest.value)
-                    }
+                    trackRepository.syncTracksInBook(audiobook.id)
+                    bookRepository.syncAudiobook(audiobook, trackRequest.value)
                 }
                 _isLoadingTracks.value = false
             } catch (e: Throwable) {

@@ -237,13 +237,16 @@ interface IBookRepository {
     fun getAllBooks(): LiveData<List<Audiobook>>
     fun getRecentlyAdded(bookCount: Int): LiveData<List<Audiobook>>
     fun getRecentlyListened(bookCount: Int): LiveData<List<Audiobook>>
-    fun getBook(bookId: Int): LiveData<Audiobook?>
+    fun getBook(bookId: String): LiveData<Audiobook?>
     fun search(query: String): LiveData<List<Audiobook>>
     
     suspend fun refreshDataPaginated()
-    suspend fun getAudiobookAsync(bookId: Int): Audiobook?
-    suspend fun updateCachedStatus(bookId: Int, cached: Boolean)
-    suspend fun updateTrackData(bookId: Int, progress: Long, duration: Long, trackCount: Int)
+    suspend fun getAudiobookAsync(bookId: String): Audiobook?
+    suspend fun fetchBookAsync(bookId: String, libraryId: String): Audiobook
+    suspend fun updateCachedStatus(bookId: String, cached: Boolean)
+    suspend fun updateTrackData(bookId: String, progress: Long, duration: Long, trackCount: Int)
+    suspend fun setWatched(bookId: String, libraryId: String)
+    suspend fun setUnwatched(bookId: String, libraryId: String)
 }
 ```
 
@@ -252,38 +255,57 @@ interface IBookRepository {
 ```kotlin
 class BookRepository @Inject constructor(
     private val bookDao: BookDao,
-    private val plexMediaService: PlexMediaService,
+    private val chapterDao: ChapterDao,
+    private val serverConnectionResolver: ServerConnectionResolver,
+    private val scopedPlexServiceFactory: ScopedPlexServiceFactory,
+    private val chapterRepository: IChapterRepository,
     private val plexConfig: PlexConfig,
     private val prefsRepo: PrefsRepo
 ) : IBookRepository {
 
-    // Merge network data with local, preserving local-only fields
-    override suspend fun refreshDataPaginated() {
-        var offset = 0
-        val pageSize = 100
+    // Library-aware book fetching - uses correct server per library
+    override suspend fun fetchBookAsync(bookId: String, libraryId: String): Audiobook {
+        val connection = serverConnectionResolver.resolveConnection(libraryId)
+        val plexService = scopedPlexServiceFactory.createService(connection)
         
-        do {
-            val response = plexMediaService.retrieveAlbumPage(
-                libraryId = prefsRepo.libraryId,
-                containerStart = offset,
-                containerSize = pageSize
-            )
-            
-            val networkBooks = response.container.directories.map { Audiobook.from(it) }
-            val existingBooks = bookDao.getAudiobooks().associateBy { it.id }
-            
-            val mergedBooks = networkBooks.map { network ->
-                existingBooks[network.id]?.let { local ->
-                    Audiobook.merge(network, local)
-                } ?: network
-            }
-            
-            bookDao.insertAll(mergedBooks)
-            offset += pageSize
-        } while (response.container.totalSize > offset)
+        val extractedId = bookId.removePrefix("plex:")
+        val response = plexService.retrieveAlbum(extractedId)
+        
+        val networkBook = Audiobook.from(response.container.directories.first())
+        
+        // Delegate chapter loading to ChapterRepository
+        chapterRepository.loadChaptersForAudiobook(networkBook.id, libraryId)
+        
+        return mergeWithLocal(networkBook)
+    }
+    
+    // Library-aware watched/unwatched status updates
+    override suspend fun setWatched(bookId: String, libraryId: String) {
+        val connection = serverConnectionResolver.resolveConnection(libraryId)
+        val plexService = scopedPlexServiceFactory.createService(connection)
+        val extractedId = bookId.removePrefix("plex:")
+        
+        plexService.scrobble(extractedId)
+        fetchBookAsync(bookId, libraryId) // Refresh metadata
+    }
+    
+    override suspend fun setUnwatched(bookId: String, libraryId: String) {
+        val connection = serverConnectionResolver.resolveConnection(libraryId)
+        val plexService = scopedPlexServiceFactory.createService(connection)
+        val extractedId = bookId.removePrefix("plex:")
+        
+        plexService.unscrobble(extractedId)
+        fetchBookAsync(bookId, libraryId) // Refresh metadata
     }
 }
 ```
+
+**Key changes for multi-library support:**
+- Injects `ServerConnectionResolver` and `ScopedPlexServiceFactory` for library-aware API calls
+- `fetchBookAsync()` accepts `libraryId` parameter to route requests to correct server
+- Chapter loading delegated to `ChapterRepository` (also library-aware)
+- `setWatched()`/`setUnwatched()` now library-aware for accurate progress tracking
+- Injects `IChapterRepository` and `ChapterDao` for chapter management
 
 ### ITrackRepository
 
@@ -291,15 +313,94 @@ class BookRepository @Inject constructor(
 
 ```kotlin
 interface ITrackRepository {
-    fun getTracksForAudiobook(bookId: Int): LiveData<List<MediaItemTrack>>
+    fun getTracksForAudiobook(bookId: String): LiveData<List<MediaItemTrack>>
     
     suspend fun refreshDataPaginated()
-    suspend fun getTracksForAudiobookAsync(bookId: Int): List<MediaItemTrack>
-    suspend fun updateProgress(trackId: Int, position: Long)
-    suspend fun updateCachedStatus(trackId: Int, cached: Boolean)
-    suspend fun getBookIdForTrack(trackId: Int): Int
+    suspend fun getTracksForAudiobookAsync(bookId: String): List<MediaItemTrack>
+    suspend fun fetchNetworkTracksForBook(bookId: String, libraryId: String): List<MediaItemTrack>
+    suspend fun loadTracksForAudiobook(bookId: String, libraryId: String): List<MediaItemTrack>
+    suspend fun updateProgress(trackId: String, position: Long)
+    suspend fun updateCachedStatus(trackId: String, cached: Boolean)
+    suspend fun getBookIdForTrack(trackId: String): String
 }
 ```
+
+**Implementation highlights:**
+
+```kotlin
+class TrackRepository @Inject constructor(
+    private val trackDao: TrackDao,
+    private val serverConnectionResolver: ServerConnectionResolver,
+    private val scopedPlexServiceFactory: ScopedPlexServiceFactory,
+    private val bookRepository: IBookRepository,
+    private val prefsRepo: PrefsRepo
+) : ITrackRepository {
+
+    // Library-aware track fetching - uses correct server per library
+    override suspend fun fetchNetworkTracksForBook(
+        bookId: String,
+        libraryId: String
+    ): List<MediaItemTrack> {
+        val connection = serverConnectionResolver.resolveConnection(libraryId)
+        val plexService = scopedPlexServiceFactory.createService(connection)
+        
+        val extractedId = bookId.removePrefix("plex:")
+        val response = plexService.retrieveAlbum(extractedId)
+        
+        return response.container.directories.first().tracks.map { track ->
+            MediaItemTrack.from(track, extractedId, libraryId)
+        }
+    }
+    
+    // Load tracks with library context
+    override suspend fun loadTracksForAudiobook(
+        bookId: String,
+        libraryId: String
+    ): List<MediaItemTrack> {
+        val networkTracks = fetchNetworkTracksForBook(bookId, libraryId)
+        trackDao.insertAll(networkTracks)
+        return networkTracks
+    }
+}
+```
+
+**Key changes for multi-library support:**
+- Injects `ServerConnectionResolver` and `ScopedPlexServiceFactory` for library-aware API calls
+- `fetchNetworkTracksForBook()` accepts `libraryId` parameter to route requests to correct server
+- `loadTracksForAudiobook()` accepts `libraryId` for consistent library-aware loading
+- All track IDs updated from `Int` to `String` for prefixed format (`"plex:12345"`)
+
+### ChapterRepository
+
+**Library-aware chapter management** ([`ChapterRepository.kt`](../app/src/main/java/local/oss/chronicle/data/local/ChapterRepository.kt)):
+
+```kotlin
+class ChapterRepository @Inject constructor(
+    private val chapterDao: ChapterDao,
+    private val serverConnectionResolver: ServerConnectionResolver,
+    private val scopedPlexServiceFactory: ScopedPlexServiceFactory
+) : IChapterRepository {
+
+    override suspend fun loadChaptersForAudiobook(bookId: String, libraryId: String) {
+        val connection = serverConnectionResolver.resolveConnection(libraryId)
+        val plexService = scopedPlexServiceFactory.createService(connection)
+        
+        val extractedId = bookId.removePrefix("plex:")
+        val response = plexService.retrieveAlbum(extractedId)
+        
+        val chapters = response.container.directories.first().chapters?.map {
+            Chapter.from(it, bookId)
+        } ?: emptyList()
+        
+        chapterDao.insertChapters(bookId, chapters)
+    }
+}
+```
+
+**Key features:**
+- Uses library-specific server connections via `ServerConnectionResolver`
+- Used by `BookRepository` to delegate chapter loading
+- Ensures chapters load from correct Plex server in multi-library setups
 
 ### CollectionsRepository
 

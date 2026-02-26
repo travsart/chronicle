@@ -93,6 +93,18 @@ class AppModule(private val app: Application) {
 
     @Provides
     @Singleton
+    fun provideChapterDatabase(): ChapterDatabase = getChapterDatabase(app.applicationContext)
+
+    @Provides
+    @Singleton
+    fun provideChapterDao(chapterDatabase: ChapterDatabase): ChapterDao = chapterDatabase.chapterDao
+
+    @Provides
+    @Singleton
+    fun provideChapterRepo(chapterRepository: ChapterRepository): IChapterRepository = chapterRepository
+
+    @Provides
+    @Singleton
     fun provideAccountDao(): AccountDao = AccountDatabase.getInstance(app.applicationContext).accountDao()
 
     @Provides

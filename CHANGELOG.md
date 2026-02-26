@@ -93,6 +93,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Library selector menu items
 
 ### Fixed
+- **Fixed:** Chapter and track metadata failing to load for audiobooks from non-active libraries — `BookRepository`, `TrackRepository`, and `ChapterRepository` now use library-specific server connections via `ServerConnectionResolver` and `ScopedPlexServiceFactory`
 - Fixed Plex "Now Playing" dashboard not showing Chronicle as an active streaming client
   - Aligned scoped interceptor headers in `PlexProgressReporter` to use consistent `X-Plex-Client-Identifier` (UUID) across all API calls
   - Added missing `X-Plex-Session-Identifier` header to timeline updates

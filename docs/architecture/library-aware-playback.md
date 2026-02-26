@@ -47,7 +47,7 @@ graph TD
 
 ## Implementation Status
 
-**Status:** ✅ **IMPLEMENTED** (as of 2026-02-26)
+**Status:** ✅ **IMPLEMENTED** (as of 2026-02-27)
 
 ### Key Implementation Details
 
@@ -68,6 +68,45 @@ graph TD
 - Prevents auth token mismatches that caused HTTP 401 errors when playing tracks from non-active libraries
 
 See [`PlaybackUrlResolver.kt`](../../app/src/main/java/local/oss/chronicle/data/sources/plex/PlaybackUrlResolver.kt) for implementation details.
+
+#### BookRepository Library-Aware Metadata Fetching
+
+[`BookRepository`](../../app/src/main/java/local/oss/chronicle/data/local/BookRepository.kt) has been updated to use library-specific server connections for all metadata operations (as of 2026-02-27):
+
+**Fixed Methods:**
+1. **`fetchBookAsync(bookId: String, libraryId: String)`** - Now accepts `libraryId` parameter
+   - Uses `ServerConnectionResolver` to get library-specific connection
+   - Uses `ScopedPlexServiceFactory` to create library-scoped PlexMediaService
+   - Prevents 404 errors when fetching metadata for books from non-active libraries
+   - Updated caller: `syncAudiobook()` now passes `audiobook.libraryId`
+
+2. **`setWatched(bookId: String)`** - Mark book as finished
+   - Queries database to get audiobook's `libraryId`
+   - Uses library-specific connection to call correct server's `/watched` endpoint
+   - Ensures watched status syncs to the correct Plex server
+
+3. **`setUnwatched(bookId: String)`** - Mark book as unfinished
+   - Queries database to get audiobook's `libraryId`
+   - Uses library-specific connection to call correct server's `/unwatched` endpoint
+   - Ensures unwatched status syncs to the correct Plex server
+
+**Pattern Used:**
+```kotlin
+// Get audiobook to determine library ID
+val audiobook = bookDao.getAudiobookAsync(bookId)
+val connection = serverConnectionResolver.resolve(audiobook.libraryId)
+val scopedService = scopedPlexServiceFactory.getOrCreateService(connection)
+
+// Use scoped service for API call
+scopedService.retrieveAlbum(numericId)
+```
+
+**Benefits:**
+- Eliminates 404 errors when syncing books from non-active libraries
+- Ensures metadata updates go to the correct Plex server in multi-server setups
+- Consistent with library-aware pattern used in [`TrackRepository`](../../app/src/main/java/local/oss/chronicle/data/local/TrackRepository.kt) and [`ChapterRepository`](../../app/src/main/java/local/oss/chronicle/data/local/ChapterRepository.kt)
+
+See [`BookRepository.kt`](../../app/src/main/java/local/oss/chronicle/data/local/BookRepository.kt) for implementation details.
 
 ## Detailed Design
 
@@ -850,47 +889,55 @@ fun `resolves URLs for tracks from different libraries correctly`() = runTest {
 
 ## Implementation Checklist
 
-- [ ] Create `ServerConnectionResolver.kt` with caching and fallback logic
-- [ ] Add database migration for `Library.serverUrl` field
-- [ ] Update `Library` entity with `serverUrl` property
-- [ ] Update `LibrarySyncRepository` to populate `serverUrl` during sync
-- [ ] Update `PlaybackUrlResolver` to inject and use `ServerConnectionResolver`
-- [ ] Update `PlaybackUrlResolver` cache keys to include `libraryId`
-- [ ] Update `PlexHttpDataSourceFactory` constructor to accept `libraryId`
-- [ ] Update `PlexHttpDataSourceFactory.createDataSource()` to use `ServerConnectionResolver`
-- [ ] Update `ServiceModule.plexDataSourceFactory` to accept library context
-- [ ] Add `currentLibraryId` tracking to `MediaPlayerService`
-- [ ] Update `MediaPlayerService.loadAudiobookTracks()` to set library context
-- [ ] Add `ServerConnectionResolver` provider to `AppModule`
-- [ ] Implement cache invalidation listeners in `AccountManager`
-- [ ] Write unit tests for `ServerConnectionResolver`
-- [ ] Write integration tests for multi-library playback
-- [ ] Update [`docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md) with new patterns
-- [ ] Update [`docs/features/playback.md`](../../docs/features/playback.md) with library-aware flow
+- [x] Create `ServerConnectionResolver.kt` with caching and fallback logic
+- [x] Add database migration for `Library.serverUrl` field
+- [x] Update `Library` entity with `serverUrl` property
+- [x] Update `LibrarySyncRepository` to populate `serverUrl` during sync
+- [x] Update `PlaybackUrlResolver` to inject and use `ServerConnectionResolver`
+- [x] Update `PlaybackUrlResolver` cache keys to include `libraryId`
+- [x] Update `PlexHttpDataSourceFactory` constructor to accept `libraryId`
+- [x] Update `PlexHttpDataSourceFactory.createDataSource()` to use `ServerConnectionResolver`
+- [x] Update `ServiceModule.plexDataSourceFactory` to accept library context
+- [x] Add `currentLibraryId` tracking to `MediaPlayerService`
+- [x] Update `MediaPlayerService.loadAudiobookTracks()` to set library context
+- [x] Add `ServerConnectionResolver` provider to `AppModule`
+- [x] Implement cache invalidation listeners in `AccountManager`
+- [x] Write unit tests for `ServerConnectionResolver`
+- [x] Write integration tests for multi-library playback
+- [x] Update `TrackRepository` to use library-aware connections (2026-02-26)
+- [x] Update `ChapterRepository` to use library-aware connections (2026-02-26)
+- [x] Update `BookRepository.fetchBookAsync()` to use library-aware connections (2026-02-27)
+- [x] Update `BookRepository.setWatched()` and `setUnwatched()` to use library-aware connections (2026-02-27)
+- [x] Update [`docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md) with new patterns
+- [x] Update [`docs/features/playback.md`](../../docs/features/playback.md) with library-aware flow
 - [ ] Manual testing with multi-server setup
 - [ ] Performance testing of cache hit rates
 
 ## Related Files
 
 ### Core Implementation
-- [`ServerConnectionResolver.kt`](../../app/src/main/java/local/oss/chronicle/data/sources/plex/ServerConnectionResolver.kt) - NEW file
-- [`PlaybackUrlResolver.kt`](../../app/src/main/java/local/oss/chronicle/data/sources/plex/PlaybackUrlResolver.kt:38) - MODIFY
-- [`PlexHttpDataSourceFactory.kt`](../../app/src/main/java/local/oss/chronicle/data/sources/plex/PlexHttpDataSourceFactory.kt:25) - MODIFY
-- [`Library.kt`](../../app/src/main/java/local/oss/chronicle/data/model/Library.kt:30) - MODIFY (add serverUrl)
-- [`MediaItemTrack.kt`](../../app/src/main/java/local/oss/chronicle/data/model/MediaItemTrack.kt:167) - REVIEW (may not need changes)
+- [`ServerConnectionResolver.kt`](../../app/src/main/java/local/oss/chronicle/data/sources/plex/ServerConnectionResolver.kt) - ✅ IMPLEMENTED
+- [`ScopedPlexServiceFactory.kt`](../../app/src/main/java/local/oss/chronicle/data/sources/plex/ScopedPlexServiceFactory.kt) - ✅ IMPLEMENTED
+- [`PlaybackUrlResolver.kt`](../../app/src/main/java/local/oss/chronicle/data/sources/plex/PlaybackUrlResolver.kt) - ✅ MODIFIED
+- [`PlexHttpDataSourceFactory.kt`](../../app/src/main/java/local/oss/chronicle/data/sources/plex/PlexHttpDataSourceFactory.kt) - ✅ MODIFIED
+- [`Library.kt`](../../app/src/main/java/local/oss/chronicle/data/model/Library.kt) - ✅ MODIFIED (added serverUrl)
+- [`MediaItemTrack.kt`](../../app/src/main/java/local/oss/chronicle/data/model/MediaItemTrack.kt) - No changes needed
 
 ### Dependency Injection
-- [`AppModule.kt`](../../app/src/main/java/local/oss/chronicle/injection/modules/AppModule.kt:40) - MODIFY (add provider)
-- [`ServiceModule.kt`](../../app/src/main/java/local/oss/chronicle/injection/modules/ServiceModule.kt:152) - MODIFY (update factory)
+- [`AppModule.kt`](../../app/src/main/java/local/oss/chronicle/injection/modules/AppModule.kt) - ✅ MODIFIED (added providers)
+- [`ServiceModule.kt`](../../app/src/main/java/local/oss/chronicle/injection/modules/ServiceModule.kt) - ✅ MODIFIED (updated factory)
 
 ### Service Layer
-- `MediaPlayerService.kt` - MODIFY (track library context)
-- [`TrackListStateManager.kt`](../../app/src/main/java/local/oss/chronicle/features/player/TrackListStateManager.kt:20) - REVIEW (already has library context via tracks)
+- [`MediaPlayerService.kt`](../../app/src/main/java/local/oss/chronicle/features/player/MediaPlayerService.kt) - ✅ MODIFIED (tracks library context)
+- [`TrackListStateManager.kt`](../../app/src/main/java/local/oss/chronicle/features/player/TrackListStateManager.kt) - ✅ Already has library context via tracks
 
 ### Data Layer
-- [`LibraryRepository.kt`](../../app/src/main/java/local/oss/chronicle/data/local/LibraryRepository.kt:9) - REVIEW
-- [`AccountRepository.kt`](../../app/src/main/java/local/oss/chronicle/data/local/AccountRepository.kt:10) - REVIEW
-- [`CredentialManager.kt`](../../app/src/main/java/local/oss/chronicle/features/account/CredentialManager.kt:16) - REVIEW
+- [`TrackRepository.kt`](../../app/src/main/java/local/oss/chronicle/data/local/TrackRepository.kt) - ✅ MODIFIED (library-aware, 2026-02-26)
+- [`ChapterRepository.kt`](../../app/src/main/java/local/oss/chronicle/data/local/ChapterRepository.kt) - ✅ MODIFIED (library-aware, 2026-02-26)
+- [`BookRepository.kt`](../../app/src/main/java/local/oss/chronicle/data/local/BookRepository.kt) - ✅ MODIFIED (library-aware, 2026-02-27)
+- [`LibraryRepository.kt`](../../app/src/main/java/local/oss/chronicle/data/local/LibraryRepository.kt) - ✅ Used by ServerConnectionResolver
+- [`AccountRepository.kt`](../../app/src/main/java/local/oss/chronicle/data/local/AccountRepository.kt) - ✅ Used by ServerConnectionResolver
+- [`CredentialManager.kt`](../../app/src/main/java/local/oss/chronicle/features/account/CredentialManager.kt) - ✅ Used by ServerConnectionResolver
 
 ## References
 
@@ -903,4 +950,5 @@ fun `resolves URLs for tracks from different libraries correctly`() = runTest {
 
 ---
 
-**Next Steps:** Review this design for approval, then switch to Code mode for implementation.
+**Last Updated:** 2026-02-27
+**Status:** ✅ Core implementation complete. Manual testing with multi-server setup pending.
