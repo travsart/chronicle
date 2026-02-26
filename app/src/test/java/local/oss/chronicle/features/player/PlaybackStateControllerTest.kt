@@ -624,4 +624,96 @@ class PlaybackStateControllerTest {
             // The last captured call should have the correct book position
             assertEquals(75_000L, progressList.last())
         }
+
+    // ========================
+    // Multi-Library Race Condition Fix Tests
+    // ========================
+
+    @Test
+    fun `state value is synchronously updated on loadAudiobook for metadata access`() =
+        runTest {
+            // Load first audiobook
+            val firstAudiobook =
+                Audiobook(
+                    id = "plex:100",
+                    libraryId = "plex:lib:1",
+                    source = PlexMediaSource.MEDIA_SOURCE_ID_PLEX,
+                    title = "First Book",
+                    author = "Author 1",
+                    duration = 180_000L,
+                )
+            controller.loadAudiobook(firstAudiobook, testTracks, testChapters, 0, 30_000L)
+
+            // Verify state is immediately available
+            val firstState = controller.state.value
+            assertEquals("First Book", firstState.audiobook?.title)
+            assertEquals("Chapter 1", firstState.currentChapter?.title)
+            assertEquals(30_000L, firstState.currentTrackPositionMs)
+
+            // Load second audiobook (simulating multi-library playback switch)
+            val secondAudiobook =
+                Audiobook(
+                    id = "plex:200",
+                    libraryId = "plex:lib:2",
+                    source = PlexMediaSource.MEDIA_SOURCE_ID_PLEX,
+                    title = "Second Book",
+                    author = "Author 2",
+                    duration = 120_000L,
+                )
+            val secondTracks =
+                listOf(
+                    MediaItemTrack(id = "plex:10", libraryId = "plex:lib:2", title = "Track A", duration = 60_000L),
+                    MediaItemTrack(id = "plex:11", libraryId = "plex:lib:2", title = "Track B", duration = 60_000L),
+                )
+            val secondChapters =
+                listOf(
+                    Chapter(
+                        id = 10,
+                        title = "Chapter A",
+                        index = 1,
+                        startTimeOffset = 0L,
+                        endTimeOffset = 60_000L,
+                        trackId = "plex:10",
+                        bookId = "plex:200",
+                    ),
+                )
+            controller.loadAudiobook(secondAudiobook, secondTracks, secondChapters, 0, 10_000L)
+
+            // CRITICAL: state.value should be updated SYNCHRONOUSLY
+            // This tests the fix for the race condition where ExoPlayer's onMediaItemTransition
+            // callback fires before async StateFlow collectors complete
+            val secondState = controller.state.value
+            assertEquals("Second Book", secondState.audiobook?.title)
+            assertEquals("Chapter A", secondState.currentChapter?.title)
+            assertEquals(10_000L, secondState.currentTrackPositionMs)
+            assertEquals("plex:lib:2", secondState.audiobook?.libraryId)
+
+            // Verify old state values are NOT present
+            assertTrue(secondState.audiobook?.title != "First Book")
+            assertTrue(secondState.currentChapter?.title != "Chapter 1")
+        }
+
+    @Test
+    fun `state value updates are immediate not async for MediaSession metadata`() =
+        runTest {
+            // This test verifies the fix prevents stale metadata in MediaSession
+            // when switching between books from different libraries
+            controller.loadAudiobook(testAudiobook, testTracks, testChapters, 1, 45_000L)
+
+            // Update position (simulating playback)
+            // Track 2, position 20s = book position 140s (60+60+20), which is in Chapter 2 (90-150s)
+            controller.updatePosition(2, 20_000L)
+
+            // Read state synchronously (as MediaPlayerService.updateSessionMetadataFromPlayer does)
+            val state = controller.state.value
+
+            // Verify state reflects the updated position immediately
+            assertEquals(2, state.currentTrackIndex)
+            assertEquals(20_000L, state.currentTrackPositionMs)
+            assertEquals("Chapter 2", state.currentChapter?.title) // Book pos 140s falls in Chapter 2 (90-150s)
+            assertEquals(testTracks[2], state.currentTrack)
+            assertEquals(testAudiobook, state.audiobook)
+
+            // This ensures MediaSession metadata uses current state, not stale async values
+        }
 }

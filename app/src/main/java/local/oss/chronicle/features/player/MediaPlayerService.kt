@@ -41,6 +41,8 @@ import local.oss.chronicle.data.local.ITrackRepository
 import local.oss.chronicle.data.local.ITrackRepository.Companion.TRACK_NOT_FOUND
 import local.oss.chronicle.data.local.LibrarySyncRepository
 import local.oss.chronicle.data.local.PrefsRepo
+import local.oss.chronicle.data.model.EMPTY_AUDIOBOOK
+import local.oss.chronicle.data.model.EMPTY_CHAPTER
 import local.oss.chronicle.data.model.MediaItemTrack
 import local.oss.chronicle.data.model.getActiveTrack
 import local.oss.chronicle.data.model.getProgress
@@ -549,9 +551,10 @@ class MediaPlayerService :
 
         // Calculate chapter-relative position for the progress bar
         val trackPosition = if (player.playbackState == Player.STATE_IDLE) 0L else player.currentPosition
-        val chapter = currentlyPlaying.chapter.value
+        // Read from synchronous state source to avoid race condition with async updates
+        val chapter = playbackStateController.state.value.currentChapter ?: EMPTY_CHAPTER
         val position =
-            if (chapter != local.oss.chronicle.data.model.EMPTY_CHAPTER) {
+            if (chapter != EMPTY_CHAPTER) {
                 // Chapter-scoped position: current position minus chapter start
                 kotlin.math.max(0L, trackPosition - chapter.startTimeOffset)
             } else {
@@ -562,7 +565,7 @@ class MediaPlayerService :
         // Calculate chapter-relative buffered position
         val trackBufferedPosition = player.bufferedPosition
         val bufferedPosition =
-            if (chapter != local.oss.chronicle.data.model.EMPTY_CHAPTER) {
+            if (chapter != EMPTY_CHAPTER) {
                 kotlin.math.max(0L, trackBufferedPosition - chapter.startTimeOffset)
             } else {
                 trackBufferedPosition
@@ -636,14 +639,16 @@ class MediaPlayerService :
                 ?: extractDescriptionFromTimeline(player)
 
         if (description != null) {
-            // Get current chapter information
-            val chapter = currentlyPlaying.chapter.value
-            val book = currentlyPlaying.book.value
-            val track = currentlyPlaying.track.value
+            // Read from synchronous state source to avoid race condition with async updates
+            // This ensures metadata is always up-to-date, even during multi-library playback
+            val state = playbackStateController.state.value
+            val chapter = state.currentChapter ?: EMPTY_CHAPTER
+            val book = state.audiobook ?: EMPTY_AUDIOBOOK
+            val track = state.currentTrack ?: MediaItemTrack.EMPTY_TRACK
 
             // Build metadata with chapter-scoped information
             val metadata =
-                if (chapter != local.oss.chronicle.data.model.EMPTY_CHAPTER) {
+                if (chapter != EMPTY_CHAPTER) {
                     // Chapter exists: use chapter title and duration
                     val metadataBuilder =
                         MediaMetadataCompat.Builder()
@@ -1271,10 +1276,11 @@ class MediaPlayerService :
             mediaController.playbackState?.extras
                 ?.getLong(EXTRA_ABSOLUTE_TRACK_POSITION) ?: 0L
         val chapterRelativePosition = mediaController.playbackState?.currentPlayBackPosition ?: 0L
-        val chapter = currentlyPlaying.chapter.value
+        // Read from synchronous state source to avoid race condition with async updates
+        val chapter = playbackStateController.state.value.currentChapter ?: EMPTY_CHAPTER
 
         val playerPosition =
-            if (chapter != local.oss.chronicle.data.model.EMPTY_CHAPTER && chapterRelativePosition >= 0) {
+            if (chapter != EMPTY_CHAPTER && chapterRelativePosition >= 0) {
                 chapter.startTimeOffset + chapterRelativePosition
             } else {
                 absolutePositionFromExtras
