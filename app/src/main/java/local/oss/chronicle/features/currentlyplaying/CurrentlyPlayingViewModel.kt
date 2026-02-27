@@ -118,8 +118,15 @@ class CurrentlyPlayingViewModel(
 
     // Used to cache tracks.asChapterList when tracks changes
     private val tracksAsChaptersCache: LiveData<List<Chapter>> =
-        mapAsync(tracks, viewModelScope) {
-            it.asChapterList()
+        DoubleLiveData(
+            audiobookId,
+            tracks,
+        ) { bookId: String?, trackList: List<MediaItemTrack>? ->
+            if (bookId != null && trackList != null) {
+                trackList.asChapterList(bookId)
+            } else {
+                emptyList()
+            }
         }
 
     val chapters: DoubleLiveData<Audiobook?, List<Chapter>, List<Chapter>> =
@@ -365,7 +372,7 @@ class CurrentlyPlayingViewModel(
                 if (tracks.value?.size == null) {
                     _isLoadingTracks.value = true
                 }
-                
+
                 // Get the audiobook first to access libraryId
                 val audiobookData = audiobook.value
                 if (audiobookData == null) {
@@ -373,7 +380,7 @@ class CurrentlyPlayingViewModel(
                     _isLoadingTracks.value = false
                     return@launch
                 }
-                
+
                 val tracks = trackRepository.loadTracksForAudiobook(bookId, audiobookData.libraryId)
                 if (tracks is Ok) {
                     bookRepository.updateTrackData(

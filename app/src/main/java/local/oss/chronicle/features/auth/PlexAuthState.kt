@@ -79,8 +79,9 @@ sealed class PlexAuthState {
     /**
      * Returns true if this state is a terminal state (no further transitions expected).
      */
-    fun isTerminal(): Boolean = when (this) {
-        is Success, is Error, is Timeout, is Cancelled -> true
-        is Idle, is CreatingPin, is WaitingForUser, is Polling -> false
-    }
+    fun isTerminal(): Boolean =
+        when (this) {
+            is Success, is Error, is Timeout, is Cancelled -> true
+            is Idle, is CreatingPin, is WaitingForUser, is Polling -> false
+        }
 }

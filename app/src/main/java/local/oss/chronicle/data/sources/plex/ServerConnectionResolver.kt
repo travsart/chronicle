@@ -69,11 +69,11 @@ class ServerConnectionResolver
                     return cached
                 }
             }
-    
+
             // Cache miss or incomplete data - query database
             val library = libraryRepository.getLibraryById(libraryId)
             val dbConnection = libraryRepository.getServerConnection(libraryId)
-    
+
             // Detect corrupted authToken (raw JSON string from previous bug)
             val libraryToken = dbConnection?.authToken
             val isTokenCorrupted = libraryToken?.startsWith("{") == true
@@ -81,29 +81,30 @@ class ServerConnectionResolver
                 Timber.w("Library authToken appears corrupted (JSON string) for $libraryId, treating as empty")
             }
             val validLibraryToken = if (isTokenCorrupted) null else libraryToken
-    
+
             // Attempt to resolve authToken with multi-tier fallback
             var resolvedToken = validLibraryToken
             var usedFallback = false
             var selfHealNeeded = isTokenCorrupted // Need to heal if token was corrupted
-    
+
             if (resolvedToken.isNullOrEmpty()) {
                 Timber.w("Library $libraryId has empty authToken, attempting fallback")
-                
+
                 if (library != null) {
                     // Fallback 1: Try to get token from library's parent Account
-                    val credentialsJson = try {
-                        credentialManager.getCredentials(library.accountId)
-                    } catch (e: Exception) {
-                        Timber.e(e, "Failed to retrieve credentials for account ${library.accountId}")
-                        null
-                    }
-    
+                    val credentialsJson =
+                        try {
+                            credentialManager.getCredentials(library.accountId)
+                        } catch (e: Exception) {
+                            Timber.e(e, "Failed to retrieve credentials for account ${library.accountId}")
+                            null
+                        }
+
                     if (!credentialsJson.isNullOrEmpty()) {
                         // Parse JSON credentials to extract userToken
                         // Using simple string parsing to avoid org.json dependency issues in unit tests
                         val userToken = extractUserToken(credentialsJson)
-    
+
                         if (userToken.isNotEmpty()) {
                             resolvedToken = userToken
                             usedFallback = true
@@ -112,13 +113,13 @@ class ServerConnectionResolver
                         }
                     }
                 }
-                
+
                 // Fallback 2: Use global PlexPrefsRepo (last resort) if still no token
                 if (resolvedToken.isNullOrEmpty()) {
                     resolvedToken = plexPrefsRepo.server?.accessToken
                         ?: plexPrefsRepo.user?.authToken
                         ?: plexPrefsRepo.accountAuthToken
-                    
+
                     if (!resolvedToken.isNullOrEmpty()) {
                         usedFallback = true
                         if (library != null) {
@@ -131,11 +132,12 @@ class ServerConnectionResolver
 
             // Don't fall back to PlexConfig.url if it's still the placeholder
             val fallbackUrl = plexConfig.url.takeUnless { it == PlexConfig.PLACEHOLDER_URL }
-            
-            val resolved = ServerConnection(
-                serverUrl = dbConnection?.serverUrl ?: fallbackUrl,
-                authToken = resolvedToken,
-            )
+
+            val resolved =
+                ServerConnection(
+                    serverUrl = dbConnection?.serverUrl ?: fallbackUrl,
+                    authToken = resolvedToken,
+                )
 
             // Cache the result
             cache[libraryId] = resolved
@@ -154,7 +156,9 @@ class ServerConnectionResolver
             if (dbConnection?.serverUrl != null && dbConnection.authToken != null && !usedFallback) {
                 Timber.d("Resolved connection for libraryId=$libraryId from database: serverUrl=${resolved.serverUrl}")
             } else if (usedFallback) {
-                Timber.w("Used fallback for libraryId=$libraryId: serverUrl=${resolved.serverUrl}, tokenSource=${if (selfHealNeeded) "Account/PlexPrefs" else "unknown"}")
+                Timber.w(
+                    "Used fallback for libraryId=$libraryId: serverUrl=${resolved.serverUrl}, tokenSource=${if (selfHealNeeded) "Account/PlexPrefs" else "unknown"}",
+                )
             } else {
                 Timber.d("Using fallback PlexConfig for libraryId=$libraryId: serverUrl=${resolved.serverUrl}")
             }

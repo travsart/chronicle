@@ -101,7 +101,7 @@ android {
                 )
         }
     }
-    
+
     sourceSets {
         // Share test utilities between unit tests and instrumented tests
         getByName("test") {

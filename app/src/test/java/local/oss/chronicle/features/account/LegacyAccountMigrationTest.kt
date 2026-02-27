@@ -49,7 +49,7 @@ class LegacyAccountMigrationTest {
         bookDatabase = mock()
         trackDatabase = mock()
         plexConfig = mock()
-        
+
         // Mock plexConfig.url to return a test server URL
         whenever(plexConfig.url).thenReturn("http://192.168.1.100:32400")
 

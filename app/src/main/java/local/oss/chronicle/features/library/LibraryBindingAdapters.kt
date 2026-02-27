@@ -3,7 +3,6 @@ package local.oss.chronicle.features.library
 import android.graphics.drawable.GradientDrawable
 import android.util.Log
 import android.view.View
-import android.view.ViewGroup
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.widget.TextView
 import androidx.constraintlayout.widget.ConstraintLayout
@@ -27,14 +26,15 @@ private val GLOBAL_CONSTRAINT = ConstraintSet()
  * Color palette for library badges.
  * These colors are used to visually distinguish libraries from different accounts.
  */
-private val LIBRARY_BADGE_COLORS = listOf(
-    0xFF1976D2.toInt(), // Blue
-    0xFF388E3C.toInt(), // Green
-    0xFFF57C00.toInt(), // Orange
-    0xFF7B1FA2.toInt(), // Purple
-    0xFFD32F2F.toInt(), // Red
-    0xFF00796B.toInt(), // Teal
-)
+private val LIBRARY_BADGE_COLORS =
+    listOf(
+        0xFF1976D2.toInt(), // Blue
+        0xFF388E3C.toInt(), // Green
+        0xFFF57C00.toInt(), // Orange
+        0xFF7B1FA2.toInt(), // Purple
+        0xFFD32F2F.toInt(), // Red
+        0xFF00796B.toInt(), // Teal
+    )
 
 /**
  * Cache of library ID to library name mappings for efficient lookups.
@@ -164,7 +164,10 @@ fun setLibraryBarColor(
  * Used in grid layouts to ensure consistent square or rectangular aspect ratios.
  */
 @BindingAdapter("isSquare")
-fun setSquareAspectRatio(constraintLayout: ConstraintLayout, isSquare: Boolean) {
+fun setSquareAspectRatio(
+    constraintLayout: ConstraintLayout,
+    isSquare: Boolean,
+) {
     GLOBAL_CONSTRAINT.clone(constraintLayout)
     if (isSquare) {
         GLOBAL_CONSTRAINT.setDimensionRatio(R.id.thumb_container, "1:1")
@@ -180,7 +183,10 @@ fun setSquareAspectRatio(constraintLayout: ConstraintLayout, isSquare: Boolean) 
  * Accepts dimension resources which are float values.
  */
 @BindingAdapter("overrideWidth")
-fun overrideWidth(view: View, width: Float) {
+fun overrideWidth(
+    view: View,
+    width: Float,
+) {
     view.layoutParams.width = if (width > 0) width.toInt() else MATCH_PARENT
 }
 
@@ -189,7 +195,10 @@ fun overrideWidth(view: View, width: Float) {
  * Used for displaying audiobook lists in various views.
  */
 @BindingAdapter("bookList")
-fun bindRecyclerView(recyclerView: RecyclerView, data: List<Audiobook>?) {
+fun bindRecyclerView(
+    recyclerView: RecyclerView,
+    data: List<Audiobook>?,
+) {
     val adapter = recyclerView.adapter as AudiobookAdapter
     adapter.submitList(data)
 }
@@ -199,7 +208,10 @@ fun bindRecyclerView(recyclerView: RecyclerView, data: List<Audiobook>?) {
  * Used to update UI based on server connectivity.
  */
 @BindingAdapter("serverConnected")
-fun bindRecyclerView(recyclerView: RecyclerView, serverConnected: Boolean) {
+fun bindRecyclerView(
+    recyclerView: RecyclerView,
+    serverConnected: Boolean,
+) {
     val adapter = recyclerView.adapter as AudiobookAdapter
     adapter.setServerConnected(serverConnected)
 }

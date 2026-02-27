@@ -237,6 +237,8 @@ Chronicle uses **Room** (AndroidX) for local data:
 
 **Database migrations** are defined within database class files. Schema versions are stored in [`app/schemas/`](app/schemas/).
 
+**ChapterDatabase Migration v1→v2**: Changed primary key from `id` (Plex rating key) to `uid` (auto-generated) to prevent overwrites when multiple chapters share the same track rating key. This was a destructive migration since chapters are transient data that can be refetched.
+
 **Library-Aware Repositories**: [`BookRepository`](app/src/main/java/local/oss/chronicle/data/local/BookRepository.kt), [`TrackRepository`](app/src/main/java/local/oss/chronicle/data/local/TrackRepository.kt), and [`ChapterRepository`](app/src/main/java/local/oss/chronicle/data/local/ChapterRepository.kt) use [`ServerConnectionResolver`](app/src/main/java/local/oss/chronicle/data/sources/plex/ServerConnectionResolver.kt) + [`ScopedPlexServiceFactory`](app/src/main/java/local/oss/chronicle/data/sources/plex/ScopedPlexServiceFactory.kt) to fetch metadata from the correct Plex server for each library in multi-server setups.
 
 ### 6.5 Offline Playback
@@ -289,6 +291,8 @@ Progress reporting and `startMediaSession()` now use per-library server connecti
 eliminating race conditions when reporting progress for books from different libraries.
 
 The data layer repositories ([`BookRepository`](app/src/main/java/local/oss/chronicle/data/local/BookRepository.kt), [`TrackRepository`](app/src/main/java/local/oss/chronicle/data/local/TrackRepository.kt), and [`ChapterRepository`](app/src/main/java/local/oss/chronicle/data/local/ChapterRepository.kt)) all use the same library-aware pattern via `ServerConnectionResolver` and `ScopedPlexServiceFactory` to fetch metadata from the correct server per library.
+
+**Library-Aware Thumbnail URLs**: [`PlexConfig.makeThumbUriForLibrary()`](app/src/main/java/local/oss/chronicle/data/sources/plex/PlexConfig.kt) resolves library-specific server URLs for thumbnail images, preventing 404 errors when displaying books from non-active libraries. UI layouts pass `libraryId` to [`BindingAdapters.bindImageRounded()`](app/src/main/java/local/oss/chronicle/views/BindingAdapters.kt) for library-aware image loading.
 
 See [`docs/architecture/library-aware-playback.md`](docs/architecture/library-aware-playback.md) for architecture details.
 
@@ -425,6 +429,8 @@ Test-driven development is encouraged - write tests before or during implementat
 - [`ChapterDetectionRealWorldTest.kt`](app/src/test/java/local/oss/chronicle/features/player/ChapterDetectionRealWorldTest.kt) - Complex chapter detection logic
 - [`AudiobookDetailsViewModelTest.kt`](app/src/test/java/local/oss/chronicle/features/bookdetails/AudiobookDetailsViewModelTest.kt) - ViewModel testing with Mockito
 - [`TrackRepositoryTest.kt`](app/src/test/java/local/oss/chronicle/data/local/TrackRepositoryTest.kt) - Library-aware repository testing with ServerConnectionResolver
+- [`ChapterPrimaryKeyTest.kt`](app/src/test/java/local/oss/chronicle/data/local/ChapterPrimaryKeyTest.kt) - Chapter primary key validation
+- [`ChapterRepositoryTest.kt`](app/src/test/java/local/oss/chronicle/data/local/ChapterRepositoryTest.kt) - Library-aware chapter loading and bookId association
 
 **Testing approach:**
 - Mock repositories and dependencies with Mockito

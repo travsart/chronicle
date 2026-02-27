@@ -64,14 +64,14 @@ class LibrarySyncRepository
                     }
                     bookRepository.refreshDataPaginated()
                     trackRepository.refreshDataPaginated()
-    
+
                     // TODO: Loading all data into memory :O
                     val audiobooks = bookRepository.getAllBooksAsync()
                     val tracks = trackRepository.getAllTracksAsync()
-                    
+
                     // Group tracks by parent book ID for O(n) lookup instead of O(n²) filtering
                     val tracksByBook = tracks.groupBy { it.parentKey }
-                    
+
                     audiobooks.forEach { book ->
                         // Not necessarily in the right order, but it doesn't matter for updateTrackData
                         val tracksInAudiobook = tracksByBook[book.id] ?: emptyList()
@@ -82,9 +82,9 @@ class LibrarySyncRepository
                             trackCount = tracksInAudiobook.size,
                         )
                     }
-    
+
                     collectionsRepository.refreshCollectionsPaginated()
-    
+
                     // Update library item counts after syncing books
                     Timber.d("Updating library item counts")
                     val allLibraries = libraryRepository.getAllLibraries().first()
@@ -118,7 +118,9 @@ class LibrarySyncRepository
 
             Timber.i("syncAllLibraries: Retrieved ${allLibraries.size} libraries")
             allLibraries.forEachIndexed { index, library ->
-                Timber.d("  Library $index: ${library.name} (ID: ${library.id}, Account: ${library.accountId}, Server: ${library.serverId})")
+                Timber.d(
+                    "  Library $index: ${library.name} (ID: ${library.id}, Account: ${library.accountId}, Server: ${library.serverId})",
+                )
             }
 
             if (allLibraries.isEmpty()) {
@@ -132,7 +134,9 @@ class LibrarySyncRepository
 
             for ((index, library) in allLibraries.withIndex()) {
                 try {
-                    Timber.i("Syncing library ${index + 1}/${allLibraries.size}: ${library.name} (ID: ${library.id}, Account: ${library.accountId})")
+                    Timber.i(
+                        "Syncing library ${index + 1}/${allLibraries.size}: ${library.name} (ID: ${library.id}, Account: ${library.accountId})",
+                    )
                     syncLibrary(library)
                     successCount++
                     Timber.d("Successfully synced library: ${library.name}")
@@ -159,30 +163,31 @@ class LibrarySyncRepository
         private suspend fun syncLibrary(library: Library) {
             Timber.d("syncLibrary: Starting sync for library: ${library.name}")
             Timber.d("syncLibrary: Library details - ID: ${library.id}, AccountID: ${library.accountId}, ServerID: ${library.serverId}")
-            
+
             // Get account for this library
             val account = accountRepository.getAccountById(library.accountId)
             if (account == null) {
                 Timber.e("syncLibrary: Account not found for library ${library.name} (accountId: ${library.accountId})")
                 return
             }
-            
+
             // Get credentials for this account
             val credentialsJson = credentialManager.getCredentials(account.id)
             if (credentialsJson == null) {
                 Timber.e("syncLibrary: No credentials found for account ${account.displayName} (id: ${account.id})")
                 return
             }
-            
+
             // Parse credentials (stored as JSON with userToken and serverToken)
-            val authToken = try {
-                val json = JSONObject(credentialsJson)
-                json.optString("userToken", credentialsJson) // Fallback to raw string if not JSON
-            } catch (e: Exception) {
-                // If not JSON, assume it's the raw token
-                credentialsJson
-            }
-            
+            val authToken =
+                try {
+                    val json = JSONObject(credentialsJson)
+                    json.optString("userToken", credentialsJson) // Fallback to raw string if not JSON
+                } catch (e: Exception) {
+                    // If not JSON, assume it's the raw token
+                    credentialsJson
+                }
+
             // Get server connections and access token from plex.tv
             Timber.d("syncLibrary: Fetching server info for ${library.serverName} (serverId: ${library.serverId})")
             val serverInfo = getServerInfo(library.serverId, authToken)
@@ -190,11 +195,13 @@ class LibrarySyncRepository
                 Timber.e("syncLibrary: No server info found for ${library.serverName}")
                 return
             }
-            
+
             Timber.i("syncLibrary: Configuring PlexConfig for library '${library.name}' on server '${library.serverName}'")
-            Timber.d("syncLibrary: Found ${serverInfo.connections.size} server connections: ${serverInfo.connections.map { "${it.uri} (local=${it.local})" }}")
+            Timber.d(
+                "syncLibrary: Found ${serverInfo.connections.size} server connections: ${serverInfo.connections.map { "${it.uri} (local=${it.local})" }}",
+            )
             Timber.d("syncLibrary: Using server accessToken for API requests")
-            
+
             // Configure PlexConfig with this library's server and the server's access token
             // CRITICAL: Use the server's accessToken (from resources), not the user's auth token
             // This is required for managed users on shared servers
@@ -203,31 +210,33 @@ class LibrarySyncRepository
                 Timber.e("syncLibrary: Failed to connect to server for library ${library.name}")
                 return
             }
-            
+
             Timber.i("syncLibrary: Successfully configured PlexConfig - URL: ${plexConfig.url}")
-            
+
             // Update library entity with server connection details for library-aware playback
             // This allows ServerConnectionResolver to route playback requests to the correct server
-            val updatedLibrary = library.copy(
-                serverUrl = plexConfig.url,
-                authToken = authToken,
-            )
+            val updatedLibrary =
+                library.copy(
+                    serverUrl = plexConfig.url,
+                    authToken = authToken,
+                )
             libraryRepository.updateLibrary(updatedLibrary)
             Timber.d("syncLibrary: Updated library with serverUrl=${plexConfig.url} for library-aware playback")
-    
+
             // CRITICAL: Set the library context for repositories to use
             // The repositories use plexPrefsRepo.library to determine which library to sync
             // Extract numeric library ID from "plex:library:{id}" format
             val numericLibraryId = library.id.removePrefix("plex:library:")
             // Use ARTIST type for audiobook libraries (Plex standard)
-            val plexLibrary = PlexLibrary(
-                name = library.name,
-                type = MediaType.ARTIST,  // Plex uses "artist" type for audiobook libraries
-                id = numericLibraryId
-            )
+            val plexLibrary =
+                PlexLibrary(
+                    name = library.name,
+                    type = MediaType.ARTIST, // Plex uses "artist" type for audiobook libraries
+                    id = numericLibraryId,
+                )
             val previousLibrary = plexPrefsRepo.library
             val previousServer = plexPrefsRepo.server
-            
+
             try {
                 // CRITICAL: Temporarily clear server to force PlexInterceptor to use accountAuthToken
                 // This ensures the correct user token is used when syncing libraries
@@ -235,30 +244,30 @@ class LibrarySyncRepository
                 // server.accessToken over accountAuthToken, so we must clear it to prevent
                 // credential leakage between users.
                 plexPrefsRepo.server = null
-                
+
                 // Temporarily set the current library context
                 plexPrefsRepo.library = plexLibrary
                 Timber.d("syncLibrary: Set library context to ${library.name} (ID: $numericLibraryId)")
-    
+
                 // Now sync with correct credentials AND library context
                 Timber.d("syncLibrary: Refreshing books...")
                 bookRepository.refreshDataPaginated()
                 Timber.d("syncLibrary: Refreshing tracks...")
                 trackRepository.refreshDataPaginated()
-    
+
                 // Update library sync timestamp
                 Timber.d("syncLibrary: Updating sync timestamp...")
                 libraryRepository.updateSyncTimestamp(library.id, System.currentTimeMillis())
-    
+
                 // Update audiobook count for this library
                 val bookCount = bookRepository.getBookCountForLibrary(library.id)
                 libraryRepository.updateItemCount(library.id, bookCount)
                 Timber.d("syncLibrary: Updated item count to $bookCount for library ${library.name}")
-    
+
                 // Sync collections for this library
                 Timber.d("syncLibrary: Refreshing collections...")
                 collectionsRepository.refreshCollectionsPaginated()
-    
+
                 Timber.i("Successfully synced library: ${library.name} from server: ${library.serverName}")
             } finally {
                 // Restore previous server state
@@ -268,7 +277,7 @@ class LibrarySyncRepository
                 } else {
                     Timber.d("syncLibrary: Cleared server (was null)")
                 }
-                
+
                 // Restore previous library context (if any)
                 plexPrefsRepo.library = previousLibrary
                 if (previousLibrary != null) {
@@ -278,7 +287,7 @@ class LibrarySyncRepository
                 }
             }
         }
-    
+
         /**
          * Data class to hold server connection info and access token.
          */
@@ -286,7 +295,7 @@ class LibrarySyncRepository
             val connections: List<Connection>,
             val accessToken: String,
         )
-    
+
         /**
          * Fetches server info (connections and access token) from plex.tv for a specific server.
          * @param serverId The Plex server's clientIdentifier
@@ -302,13 +311,14 @@ class LibrarySyncRepository
                     // Temporarily set auth token for the resources call
                     val previousToken = plexPrefsRepo.accountAuthToken
                     plexPrefsRepo.accountAuthToken = authToken
-                    
+
                     try {
-                        val servers = plexLoginService.resources()
-                            .filter { it.provides.contains("server") }
-                            .map { it.asServer() }
-                            .filter { it.serverId == serverId }
-                        
+                        val servers =
+                            plexLoginService.resources()
+                                .filter { it.provides.contains("server") }
+                                .map { it.asServer() }
+                                .filter { it.serverId == serverId }
+
                         if (servers.isNotEmpty()) {
                             val server = servers.first()
                             ServerInfo(

@@ -32,12 +32,13 @@ abstract class AccountDatabase : RoomDatabase() {
          * Migration from version 1 to 2: Add serverUrl and authToken columns to libraries table.
          * These fields enable library-aware playback by storing server connection details per library.
          */
-        private val MIGRATION_1_2 = object : Migration(1, 2) {
-            override fun migrate(database: SupportSQLiteDatabase) {
-                database.execSQL("ALTER TABLE libraries ADD COLUMN serverUrl TEXT DEFAULT NULL")
-                database.execSQL("ALTER TABLE libraries ADD COLUMN authToken TEXT DEFAULT NULL")
+        private val MIGRATION_1_2 =
+            object : Migration(1, 2) {
+                override fun migrate(database: SupportSQLiteDatabase) {
+                    database.execSQL("ALTER TABLE libraries ADD COLUMN serverUrl TEXT DEFAULT NULL")
+                    database.execSQL("ALTER TABLE libraries ADD COLUMN authToken TEXT DEFAULT NULL")
+                }
             }
-        }
 
         fun getInstance(context: Context): AccountDatabase {
             return INSTANCE ?: synchronized(this) {

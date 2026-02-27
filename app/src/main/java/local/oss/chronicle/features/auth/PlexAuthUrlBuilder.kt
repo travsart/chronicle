@@ -31,16 +31,17 @@ object PlexAuthUrlBuilder {
         clientId: String,
         pinCode: String,
     ): String {
-        val params = buildMap<String, String> {
-            put("code", pinCode)
-            put("clientID", clientId)
-            put("forwardUrl", FORWARD_URL)
-            put("context[device][product]", APP_NAME)
-            put("context[device][platform]", PLATFORM)
-            put("context[device][environment]", "bundled")
-            put("context[device][layout]", "desktop")
-            put("context[device][device]", APP_NAME)
-        }
+        val params =
+            buildMap<String, String> {
+                put("code", pinCode)
+                put("clientID", clientId)
+                put("forwardUrl", FORWARD_URL)
+                put("context[device][product]", APP_NAME)
+                put("context[device][platform]", PLATFORM)
+                put("context[device][environment]", "bundled")
+                put("context[device][layout]", "desktop")
+                put("context[device][device]", APP_NAME)
+            }
 
         return buildString {
             append(AUTH_BASE_URL)

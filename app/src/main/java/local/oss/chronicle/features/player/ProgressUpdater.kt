@@ -13,7 +13,6 @@ import local.oss.chronicle.data.local.ITrackRepository
 import local.oss.chronicle.data.local.ITrackRepository.Companion.TRACK_NOT_FOUND
 import local.oss.chronicle.data.local.PrefsRepo
 import local.oss.chronicle.data.model.*
-import local.oss.chronicle.data.model.MediaItemTrack.Companion.EMPTY_TRACK
 import local.oss.chronicle.data.sources.plex.PlexSyncScrobbleWorker
 import local.oss.chronicle.data.sources.plex.model.getDuration
 import local.oss.chronicle.features.currentlyplaying.CurrentlyPlaying
@@ -240,7 +239,7 @@ class SimpleProgressUpdater
                 val trackWithCurrentProgress = track.copy(progress = progress)
 
                 // [ChapterDebug] Calculate expected chapter based on player position vs DB position
-                val chapters = if (book?.chapters?.isNotEmpty() == true) book.chapters else tracks.asChapterList()
+                val chapters = if (book?.chapters?.isNotEmpty() == true) book.chapters else tracks.asChapterList(bookId)
                 if (chapters.isNotEmpty()) {
                     val chapterFromPlayerPos = chapters.getChapterAt(trackId, progress)
                     val chapterFromDbPos = chapters.getChapterAt(trackId, track.progress)

@@ -4,7 +4,6 @@ import com.github.michaelbull.result.Ok
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
-import local.oss.chronicle.data.model.MediaItemTrack
 import local.oss.chronicle.data.model.ServerConnection
 import local.oss.chronicle.data.sources.plex.PlexMediaService
 import local.oss.chronicle.data.sources.plex.PlexPrefsRepo
@@ -22,7 +21,6 @@ import org.mockito.Mock
 import org.mockito.Mockito
 import org.mockito.junit.MockitoJUnitRunner
 import org.mockito.kotlin.any
-import org.mockito.kotlin.eq
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 
@@ -75,15 +73,16 @@ class TrackRepositoryTest {
     fun setup() {
         Mockito.lenient().`when`(mockPrefsRepo.offlineMode).thenReturn(false)
 
-        trackRepository = TrackRepository(
-            trackDao = mockTrackDao,
-            prefsRepo = mockPrefsRepo,
-            plexMediaService = mockPlexMediaService,
-            plexPrefs = mockPlexPrefs,
-            scopedPlexServiceFactory = mockScopedPlexServiceFactory,
-            serverConnectionResolver = mockServerConnectionResolver,
-            bookRepository = mockBookRepository,
-        )
+        trackRepository =
+            TrackRepository(
+                trackDao = mockTrackDao,
+                prefsRepo = mockPrefsRepo,
+                plexMediaService = mockPlexMediaService,
+                plexPrefs = mockPlexPrefs,
+                scopedPlexServiceFactory = mockScopedPlexServiceFactory,
+                serverConnectionResolver = mockServerConnectionResolver,
+                bookRepository = mockBookRepository,
+            )
     }
 
     /**
@@ -213,10 +212,11 @@ class TrackRepositoryTest {
         ratingKey: Int,
         title: String,
     ): PlexDirectory {
-        val part = Part(
-            key = "/library/parts/$ratingKey/1/file.mp3",
-            size = 5000000L,
-        )
+        val part =
+            Part(
+                key = "/library/parts/$ratingKey/1/file.mp3",
+                size = 5000000L,
+            )
         val media = Media(part = listOf(part))
 
         return PlexDirectory(
@@ -240,12 +240,13 @@ class TrackRepositoryTest {
      * Creates a mock PlexMediaContainerWrapper response.
      */
     private fun createMockPlexResponse(tracks: List<PlexDirectory>): PlexMediaContainerWrapper {
-        val container = PlexMediaContainer(
-            size = tracks.size.toLong(),
-            totalSize = tracks.size.toLong(),
-            offset = 0L,
-            metadata = tracks,
-        )
+        val container =
+            PlexMediaContainer(
+                size = tracks.size.toLong(),
+                totalSize = tracks.size.toLong(),
+                offset = 0L,
+                metadata = tracks,
+            )
         return PlexMediaContainerWrapper(container)
     }
 }

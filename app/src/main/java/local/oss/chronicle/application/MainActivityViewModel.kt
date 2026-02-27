@@ -116,9 +116,16 @@ class MainActivityViewModel(
     val hasCollections = collectionsRepository.hasCollections()
 
     // Used to cache tracks.asChapterList when tracks changes
-    private val tracksAsChaptersCache =
-        mapAsync(tracks, viewModelScope) {
-            it.asChapterList()
+    private val tracksAsChaptersCache: LiveData<List<Chapter>> =
+        DoubleLiveData(
+            audiobookId,
+            tracks,
+        ) { bookId: String?, trackList: List<MediaItemTrack>? ->
+            if (bookId != null && trackList != null) {
+                trackList.asChapterList(bookId)
+            } else {
+                emptyList()
+            }
         }
 
     val chapters: DoubleLiveData<Audiobook, List<Chapter>, List<Chapter>> =

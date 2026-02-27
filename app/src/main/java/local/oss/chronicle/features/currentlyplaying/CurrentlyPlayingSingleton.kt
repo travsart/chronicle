@@ -100,10 +100,10 @@ class CurrentlyPlayingSingleton
 
         private val _chapterLiveData = MutableLiveData<Chapter>(EMPTY_CHAPTER)
         val chapterLiveData: LiveData<Chapter> = _chapterLiveData
-    
+
         private val _isPlayingLiveData = MutableLiveData<Boolean>(false)
         val isPlayingLiveData: LiveData<Boolean> = _isPlayingLiveData
-    
+
         /**
          * Exposes the controller's StateFlow for reactive observation.
          * **Prefer this over individual book/track/chapter flows in new code.**

@@ -108,6 +108,64 @@ scopedService.retrieveAlbum(numericId)
 
 See [`BookRepository.kt`](../../app/src/main/java/local/oss/chronicle/data/local/BookRepository.kt) for implementation details.
 
+#### Library-Aware Thumbnail URLs
+
+Chronicle's UI displays audiobook thumbnails that are hosted on Plex servers. With multi-library support, books from different libraries may be on different servers, requiring library-aware URL resolution for images.
+
+**Problem:**
+- Global `PlexConfig.toServerString()` uses a single server URL for all thumbnail requests
+- When displaying books from non-active libraries, thumbnail URLs pointed to the wrong server
+- This caused HTTP 404 errors and broken images in the UI
+
+**Solution:**
+[`PlexConfig.makeThumbUriForLibrary()`](../../app/src/main/java/local/oss/chronicle/data/sources/plex/PlexConfig.kt) resolves library-specific server URLs for thumbnail images:
+
+```kotlin
+suspend fun makeThumbUriForLibrary(thumb: String, libraryId: String?): String {
+    return if (libraryId != null) {
+        // Resolve library-specific server URL
+        val connection = serverConnectionResolver.resolveConnection(libraryId)
+        buildServerUrl(connection.serverUrl, thumb)
+    } else {
+        // Fallback to global URL
+        toServerString(thumb)
+    }
+}
+```
+
+**UI Integration:**
+[`BindingAdapters.bindImageRounded()`](../../app/src/main/java/local/oss/chronicle/views/BindingAdapters.kt) accepts an optional `libraryId` parameter:
+
+```kotlin
+@BindingAdapter("imageUrl", "libraryId", requireAll = false)
+@JvmStatic
+fun bindImageRounded(imageView: ChronicleDraweeView, url: String?, libraryId: String?) {
+    url?.let {
+        val imageUri = runBlocking {
+            plexConfig.makeThumbUriForLibrary(it, libraryId)
+        }
+        imageView.setImageURI(imageUri)
+    }
+}
+```
+
+**Layout Updates:**
+Layout XMLs now pass `libraryId` to the binding adapter:
+
+```xml
+<local.oss.chronicle.views.ChronicleDraweeView
+    android:id="@+id/audiobook_image"
+    imageUrl="@{audiobook.thumb}"
+    libraryId="@{audiobook.libraryId}"
+    ... />
+```
+
+**Benefits:**
+- Thumbnails load from the correct Plex server for each library
+- Eliminates HTTP 404 errors for books from non-active libraries
+- Works seamlessly with multi-server setups
+- Consistent with library-aware pattern used throughout the data layer
+
 ## Detailed Design
 
 ### 1. New Component: `ServerConnectionResolver`

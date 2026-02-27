@@ -133,7 +133,7 @@ class PlexConfig
 
         val plexMediaInterceptor = PlexInterceptor(plexPrefsRepo, this, isLoginService = false)
         val plexLoginInterceptor = PlexInterceptor(plexPrefsRepo, this, isLoginService = true)
-    
+
         /** Attempt to load in a cached bitmap for the given thumbnail */
         suspend fun getBitmapFromServer(
             thumb: String?,
@@ -142,7 +142,7 @@ class PlexConfig
             if (thumb.isNullOrEmpty()) {
                 return null
             }
-    
+
             // Retrieve cached album art from Glide if available
             val appContext = Injector.get().applicationContext()
             val imageSize = appContext.resources.getDimension(R.dimen.audiobook_image_width).toInt()
@@ -155,15 +155,15 @@ class PlexConfig
                         "photo/:/transcode?width=$imageSize&height=$imageSize&url=$thumb",
                     ).toUri()
                 }
-    
+
             val uriString = uri.toString()
-    
+
             // Check if this URL previously returned 404 in this session
             if (failedThumbnailUrls.contains(uriString)) {
                 Timber.d("Skipping thumbnail request for $uriString (cached 404)")
                 return null
             }
-    
+
             Timber.i("Notification thumb uri is: $uri")
             val imagePipeline = Fresco.getImagePipeline()
             return withContext(Dispatchers.IO) {
@@ -174,19 +174,19 @@ class PlexConfig
                     bm
                 } catch (t: Throwable) {
                     Timber.e("Failed to retrieve album art for $thumb: $t")
-    
+
                     // Check if this was a 404 error by making a lightweight HEAD request
                     val is404 = checkIf404(uriString)
                     if (is404) {
                         failedThumbnailUrls.add(uriString)
                         Timber.i("Cached thumbnail 404 for session: $uriString")
                     }
-    
+
                     null
                 }
             }
         }
-    
+
         /**
          * Checks if a URL returns 404 Not Found using a lightweight HEAD request.
          * This prevents repeatedly requesting thumbnails that don't exist.
@@ -202,7 +202,7 @@ class PlexConfig
                             .url(url)
                             .head() // HEAD request is lightweight (no body)
                             .build()
-    
+
                     val response = thumbnailCheckClient.newCall(request).execute()
                     response.use {
                         val is404 = it.code == 404
@@ -217,7 +217,7 @@ class PlexConfig
                 }
             }
         }
-    
+
         /**
          * Clears the failed thumbnail URL cache.
          * Should be called when a new playback session starts (new book playing).
@@ -255,6 +255,46 @@ class PlexConfig
                 .appendQueryParameter(
                     "X-Plex-Token",
                     plexPrefsRepo.server?.accessToken ?: plexPrefsRepo.accountAuthToken,
+                ).build()
+        }
+
+        /**
+         * Creates a thumbnail URI for a given image path, library-aware.
+         * Uses ServerConnectionResolver to get the correct server URL and auth token
+         * for the library, preventing 404 errors for books in non-active libraries.
+         *
+         * @param part The relative thumbnail path (e.g., "/library/metadata/106/thumb/...")
+         * @param libraryId The library ID to resolve the server connection for
+         * @return A complete URI with server URL, transcode parameters, and auth token
+         */
+        suspend fun makeThumbUriForLibrary(
+            part: String,
+            libraryId: String,
+        ): Uri {
+            val appContext = Injector.get().applicationContext()
+            val imageSize = appContext.resources.getDimension(R.dimen.audiobook_image_width).toInt()
+            val plexThumbPart = "photo/:/transcode?width=$imageSize&height=$imageSize&url=$part"
+
+            // Resolve the correct server connection for this library
+            val serverConnectionResolver = Injector.get().serverConnectionResolver()
+            val connection = serverConnectionResolver.resolve(libraryId)
+
+            // Build the URL using the library's server
+            val baseUrl = connection.serverUrl ?: url
+            val fullUrl =
+                if (baseUrl.endsWith('/') && plexThumbPart.startsWith('/')) {
+                    "$baseUrl${plexThumbPart.substring(1)}"
+                } else if (!baseUrl.endsWith('/') && !plexThumbPart.startsWith('/')) {
+                    "$baseUrl/$plexThumbPart"
+                } else {
+                    "$baseUrl$plexThumbPart"
+                }
+
+            val uri = Uri.parse(fullUrl)
+            return uri.buildUpon()
+                .appendQueryParameter(
+                    "X-Plex-Token",
+                    connection.authToken ?: plexPrefsRepo.accountAuthToken,
                 ).build()
         }
 
@@ -357,13 +397,13 @@ class PlexConfig
         fun clearLibrary() {
             plexPrefsRepo.library = null
         }
-    
+
         fun clearUser() {
             plexPrefsRepo.library = null
             plexPrefsRepo.server = null
             plexPrefsRepo.user = null
         }
-    
+
         /**
          * Temporarily update server configuration for multi-account sync.
          * This allows syncing libraries from different servers/accounts by updating
@@ -378,11 +418,11 @@ class PlexConfig
         ): Boolean {
             Timber.d("updateServerForSync: Setting ${connections.size} connections")
             setPotentialConnections(connections)
-            
+
             // Temporarily update the auth token in prefs for the interceptor to use
             val previousToken = plexPrefsRepo.accountAuthToken
             plexPrefsRepo.accountAuthToken = authToken
-            
+
             return try {
                 // Connect to the server with the new connections
                 // This will update PlexConfig.url with the viable connection
@@ -396,7 +436,7 @@ class PlexConfig
                 // The caller is responsible for restoring previous state if needed
             }
         }
-    
+
         sealed class ConnectionResult {
             data class Success(val url: String) : ConnectionResult()
 

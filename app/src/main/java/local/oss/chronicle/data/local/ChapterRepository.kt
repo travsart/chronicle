@@ -27,6 +27,7 @@ interface IChapterRepository {
      * by [BookRepository] or [TrackRepository] and saves results to the DB
      */
     suspend fun loadChapterData(
+        bookId: String,
         isAudiobookCached: Boolean,
         tracks: List<MediaItemTrack>,
     )
@@ -43,10 +44,11 @@ class ChapterRepository
         private val serverConnectionResolver: ServerConnectionResolver,
     ) : IChapterRepository {
         override suspend fun loadChapterData(
+            bookId: String,
             isAudiobookCached: Boolean,
             tracks: List<MediaItemTrack>,
         ) = withContext(Dispatchers.IO) {
-            Timber.i("Loading chapter data for tracks: $tracks")
+            Timber.i("Loading chapter data for book $bookId with tracks: $tracks")
             val chapters: List<Chapter> =
                 try {
                     tracks.flatMap { track ->
@@ -85,16 +87,20 @@ class ChapterRepository
                         // If no chapters for this track, make a chapter from the current track
                         networkChapters?.map { plexChapter ->
                             plexChapter.toChapter(
-                                track.id,
-                                track.discNumber,
-                                isAudiobookCached,
+                                trackId = track.id,
+                                trackDiscNumber = track.discNumber,
+                                downloaded = isAudiobookCached,
+                                bookId = bookId,
                             )
-                        }.takeIf { !it.isNullOrEmpty() } ?: listOf(track.asChapter(0L))
+                        }.takeIf { !it.isNullOrEmpty() } ?: listOf(track.asChapter(0L, bookId))
                     }.sorted()
                 } catch (t: Throwable) {
                     Timber.e("Failed to load chapters: $t")
                     emptyList()
                 }
+            // Delete existing chapters for this book to prevent duplicates
+            // (uid auto-generation means OnConflictStrategy.REPLACE won't detect duplicates)
+            chapterDao.deleteByBookId(bookId)
             chapterDao.insertAll(chapters)
         }
     }

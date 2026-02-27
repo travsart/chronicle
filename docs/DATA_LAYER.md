@@ -381,7 +381,7 @@ class ChapterRepository @Inject constructor(
     private val scopedPlexServiceFactory: ScopedPlexServiceFactory
 ) : IChapterRepository {
 
-    override suspend fun loadChaptersForAudiobook(bookId: String, libraryId: String) {
+    override suspend fun loadChapterData(bookId: String, libraryId: String) {
         val connection = serverConnectionResolver.resolveConnection(libraryId)
         val plexService = scopedPlexServiceFactory.createService(connection)
         
@@ -389,7 +389,7 @@ class ChapterRepository @Inject constructor(
         val response = plexService.retrieveAlbum(extractedId)
         
         val chapters = response.container.directories.first().chapters?.map {
-            Chapter.from(it, bookId)
+            PlexChapter.toChapter(it, bookId)  // Now accepts bookId parameter
         } ?: emptyList()
         
         chapterDao.insertChapters(bookId, chapters)
@@ -399,6 +399,8 @@ class ChapterRepository @Inject constructor(
 
 **Key features:**
 - Uses library-specific server connections via `ServerConnectionResolver`
+- `loadChapterData()` accepts `bookId` parameter to correctly associate chapters with their audiobook
+- `PlexChapter.toChapter()` conversion now accepts `bookId` to set the chapter's parent book
 - Used by `BookRepository` to delegate chapter loading
 - Ensures chapters load from correct Plex server in multi-library setups
 
@@ -506,15 +508,24 @@ data class MediaItemTrack(
 ### Chapter
 
 ```kotlin
+@Entity
 data class Chapter(
-    val id: Long,
-    val index: Long,
     val title: String,
+    @PrimaryKey(autoGenerate = true) val uid: Long = 0L,  // Auto-generated primary key
+    val id: Long,                                         // Plex rating key (non-unique)
+    val index: Long,
+    val discNumber: Int,
     val startTimeOffset: Long,
     val endTimeOffset: Long,
-    val downloaded: Boolean = false
+    val downloaded: Boolean,
+    val trackId: Long,
+    val bookId: String,  // Parent audiobook ID
 )
 ```
+
+**Primary Key Change (v1→v2)**: Changed from `@PrimaryKey id` to `@PrimaryKey(autoGenerate = true) uid` to prevent overwrites when multiple chapters share the same track rating key. The `id` field is retained for Plex identification but is no longer the primary key.
+
+**Database Migration**: ChapterDatabase v1→v2 was a destructive migration (dropped and recreated table) since chapters are transient data that can be refetched from the Plex server.
 
 ## SharedPreferences
 

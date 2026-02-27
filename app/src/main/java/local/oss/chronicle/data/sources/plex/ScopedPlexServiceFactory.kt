@@ -66,15 +66,15 @@ class ScopedPlexServiceFactory
             val serverUrl =
                 connection.serverUrl
                     ?: throw IllegalStateException("No server URL in connection")
-            
+
             // Validate that we're not using a placeholder URL
             if (serverUrl.contains("placeholder.com", ignoreCase = true)) {
                 throw IllegalStateException(
                     "Cannot create service with placeholder URL: $serverUrl. " +
-                    "Ensure PlexConfig.url is properly set before attempting playback."
+                        "Ensure PlexConfig.url is properly set before attempting playback.",
                 )
             }
-            
+
             val authToken =
                 connection.authToken
                     ?: throw IllegalStateException("No auth token in connection")

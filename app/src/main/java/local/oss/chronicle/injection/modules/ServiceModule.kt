@@ -6,38 +6,31 @@ import android.content.Context
 import android.hardware.SensorManager
 import android.media.AudioManager
 import android.media.ToneGenerator
-import android.os.Build
 import android.support.v4.media.RatingCompat.RATING_NONE
 import android.support.v4.media.session.MediaControllerCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.MediaSessionCompat.*
 import androidx.core.app.NotificationManagerCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
-import androidx.media3.common.util.Util
-import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import dagger.Module
 import dagger.Provides
 import kotlinx.coroutines.CompletableJob
-import local.oss.chronicle.BuildConfig
 import local.oss.chronicle.R
 import local.oss.chronicle.application.MainActivity
 import local.oss.chronicle.data.sources.plex.APP_NAME
-import local.oss.chronicle.data.sources.plex.PlaybackUrlResolver
-import local.oss.chronicle.data.sources.plex.PlexConfig
 import local.oss.chronicle.data.sources.plex.PlexHttpDataSourceFactory
-import local.oss.chronicle.data.sources.plex.PlexMediaService
 import local.oss.chronicle.data.sources.plex.PlexPrefsRepo
 import local.oss.chronicle.features.player.*
-import local.oss.chronicle.util.SecurityUtils
-import timber.log.Timber
 import local.oss.chronicle.features.player.MediaPlayerService.Companion.EXOPLAYER_BACK_BUFFER_DURATION_MILLIS
 import local.oss.chronicle.features.player.MediaPlayerService.Companion.EXOPLAYER_MAX_BUFFER_DURATION_MILLIS
 import local.oss.chronicle.features.player.MediaPlayerService.Companion.EXOPLAYER_MIN_BUFFER_DURATION_MILLIS
 import local.oss.chronicle.injection.scopes.ServiceScope
 import local.oss.chronicle.util.PackageValidator
+import local.oss.chronicle.util.SecurityUtils
+import timber.log.Timber
 import kotlin.time.ExperimentalTime
 
 @ExperimentalTime
@@ -155,13 +148,13 @@ class ServiceModule(private val service: MediaPlayerService) {
         val serverTokenHash = SecurityUtils.hashToken(plexPrefs.server?.accessToken)
         val userTokenHash = SecurityUtils.hashToken(plexPrefs.user?.authToken)
         val accountTokenHash = SecurityUtils.hashToken(plexPrefs.accountAuthToken)
-        
+
         Timber.d(
             "[TokenInjection] plexDataSourceFactory provider called: " +
                 "serverToken=$serverTokenHash, userToken=$userTokenHash, " +
-                "accountToken=$accountTokenHash"
+                "accountToken=$accountTokenHash",
         )
-        
+
         // Return custom factory that reads tokens lazily on each createDataSource() call
         // Phase 3: Return concrete type to allow setting currentLibraryId for library-aware token injection
         return PlexHttpDataSourceFactory(

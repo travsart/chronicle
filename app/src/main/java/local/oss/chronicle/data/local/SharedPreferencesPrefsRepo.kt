@@ -7,7 +7,6 @@ import local.oss.chronicle.data.local.PrefsRepo.Companion.KEY_ALLOW_AUTO
 import local.oss.chronicle.data.local.PrefsRepo.Companion.KEY_AUTO_REWIND_ENABLED
 import local.oss.chronicle.data.local.PrefsRepo.Companion.KEY_BOOK_COVER_STYLE
 import local.oss.chronicle.data.local.PrefsRepo.Companion.KEY_BOOK_SORT_BY
-import local.oss.chronicle.data.local.PrefsRepo.Companion.KEY_VOICE_SEARCH_FALLBACK
 import local.oss.chronicle.data.local.PrefsRepo.Companion.KEY_BRIDGE_AUDIO_ENABLED
 import local.oss.chronicle.data.local.PrefsRepo.Companion.KEY_DEBUG_DISABLE_PROGRESS
 import local.oss.chronicle.data.local.PrefsRepo.Companion.KEY_HIDE_PLAYED_AUDIOBOOKS
@@ -27,6 +26,7 @@ import local.oss.chronicle.data.local.PrefsRepo.Companion.KEY_SHAKE_TO_SNOOZE_EN
 import local.oss.chronicle.data.local.PrefsRepo.Companion.KEY_SKIP_SILENCE
 import local.oss.chronicle.data.local.PrefsRepo.Companion.KEY_STRICT_AUTO_VALIDATION
 import local.oss.chronicle.data.local.PrefsRepo.Companion.KEY_SYNC_DIR_PATH
+import local.oss.chronicle.data.local.PrefsRepo.Companion.KEY_VOICE_SEARCH_FALLBACK
 import local.oss.chronicle.data.local.PrefsRepo.Companion.NO_PREMIUM_TOKEN
 import local.oss.chronicle.data.local.PrefsRepo.Companion.VIEW_STYLES
 import local.oss.chronicle.data.local.PrefsRepo.Companion.VIEW_STYLE_COVER_GRID

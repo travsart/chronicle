@@ -5,7 +5,6 @@ import androidx.work.OneTimeWorkRequest
 import androidx.work.Operation
 import androidx.work.WorkContinuation
 import androidx.work.WorkManager
-import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.TestScope
@@ -15,7 +14,6 @@ import local.oss.chronicle.data.local.IBookRepository
 import local.oss.chronicle.data.local.ITrackRepository
 import local.oss.chronicle.data.local.PrefsRepo
 import local.oss.chronicle.data.model.Audiobook
-import local.oss.chronicle.data.model.EMPTY_AUDIOBOOK
 import local.oss.chronicle.data.model.MediaItemTrack
 import local.oss.chronicle.data.sources.plex.PlexMediaSource
 import local.oss.chronicle.features.currentlyplaying.CurrentlyPlaying
@@ -90,241 +88,260 @@ class ProgressUpdaterTest {
         ).thenReturn(mockWorkContinuation)
         whenever(mockWorkContinuation.enqueue()).thenReturn(mockOperation)
 
-        progressUpdater = SimpleProgressUpdater(
-            serviceScope = testScope,
-            trackRepository = trackRepository,
-            bookRepository = bookRepository,
-            workManager = workManager,
-            prefsRepo = prefsRepo,
-            currentlyPlaying = currentlyPlaying,
-            playbackStateController = playbackStateController,
-        )
+        progressUpdater =
+            SimpleProgressUpdater(
+                serviceScope = testScope,
+                trackRepository = trackRepository,
+                bookRepository = bookRepository,
+                workManager = workManager,
+                prefsRepo = prefsRepo,
+                currentlyPlaying = currentlyPlaying,
+                playbackStateController = playbackStateController,
+            )
     }
 
     @Test
-    fun `updateProgress reads from PlaybackStateController not database`() = testScope.runTest {
-        // Given: A book and track in PlaybackStateController state
-        val libraryId = "plex:library:1"
-        val bookId = "plex:100"
-        val trackId = "plex:101"
+    fun `updateProgress reads from PlaybackStateController not database`() =
+        testScope.runTest {
+            // Given: A book and track in PlaybackStateController state
+            val libraryId = "plex:library:1"
+            val bookId = "plex:100"
+            val trackId = "plex:101"
 
-        val book = Audiobook(
-            id = bookId,
-            libraryId = libraryId,
-            source = PlexMediaSource.MEDIA_SOURCE_ID_PLEX,
-            title = "Test Book",
-        )
+            val book =
+                Audiobook(
+                    id = bookId,
+                    libraryId = libraryId,
+                    source = PlexMediaSource.MEDIA_SOURCE_ID_PLEX,
+                    title = "Test Book",
+                )
 
-        val track = MediaItemTrack(
-            id = trackId,
-            parentKey = bookId,
-            title = "Track 1",
-            duration = 60000L,
-            progress = 0L,
-        )
+            val track =
+                MediaItemTrack(
+                    id = trackId,
+                    parentKey = bookId,
+                    title = "Track 1",
+                    duration = 60000L,
+                    progress = 0L,
+                )
 
-        val tracks = listOf(track)
+            val tracks = listOf(track)
 
-        val playbackState = PlaybackState(
-            audiobook = book,
-            tracks = tracks,
-            currentTrackIndex = 0,
-            currentTrackPositionMs = 5000L,
-            isPlaying = true,
-        )
+            val playbackState =
+                PlaybackState(
+                    audiobook = book,
+                    tracks = tracks,
+                    currentTrackIndex = 0,
+                    currentTrackPositionMs = 5000L,
+                    isPlaying = true,
+                )
 
-        // Mock PlaybackStateController to return the test state
-        val stateFlow = MutableStateFlow(playbackState)
-        whenever(playbackStateController.state).thenReturn(stateFlow)
+            // Mock PlaybackStateController to return the test state
+            val stateFlow = MutableStateFlow(playbackState)
+            whenever(playbackStateController.state).thenReturn(stateFlow)
 
-        // When: updateProgress is called
-        progressUpdater.updateProgress(
-            trackId = trackId,
-            playbackState = MediaPlayerService.PLEX_STATE_PLAYING,
-            progress = 5000L,
-            forceNetworkUpdate = false,
-        )
+            // When: updateProgress is called
+            progressUpdater.updateProgress(
+                trackId = trackId,
+                playbackState = MediaPlayerService.PLEX_STATE_PLAYING,
+                progress = 5000L,
+                forceNetworkUpdate = false,
+            )
 
-        // Give time for coroutine to complete
-        testScheduler.advanceUntilIdle()
+            // Give time for coroutine to complete
+            testScheduler.advanceUntilIdle()
 
-        // Then: Database was NOT queried for book/track data
-        verify(trackRepository, never()).getBookIdForTrack(any())
-        verify(trackRepository, never()).getTrackAsync(any())
-        verify(bookRepository, never()).getAudiobookAsync(any())
-        verify(trackRepository, never()).getTracksForAudiobookAsync(any())
-    }
-
-    @Test
-    fun `updateProgress skips update when track mismatch detected`() = testScope.runTest {
-        // Given: PlaybackState has a different track than what's being updated
-        val libraryId = "plex:library:1"
-        val bookId = "plex:100"
-        val currentTrackId = "plex:101"
-        val outdatedTrackId = "plex:999" // Stale track ID from rapid switching
-
-        val book = Audiobook(
-            id = bookId,
-            libraryId = libraryId,
-            source = PlexMediaSource.MEDIA_SOURCE_ID_PLEX,
-            title = "Test Book",
-        )
-
-        val currentTrack = MediaItemTrack(
-            id = currentTrackId,
-            parentKey = bookId,
-            title = "Current Track",
-            duration = 60000L,
-        )
-
-        val playbackState = PlaybackState(
-            audiobook = book,
-            tracks = listOf(currentTrack),
-            currentTrackIndex = 0,
-            currentTrackPositionMs = 5000L,
-            isPlaying = true,
-        )
-
-        val stateFlow = MutableStateFlow(playbackState)
-        whenever(playbackStateController.state).thenReturn(stateFlow)
-
-        // When: updateProgress is called with outdated track ID
-        progressUpdater.updateProgress(
-            trackId = outdatedTrackId,
-            playbackState = MediaPlayerService.PLEX_STATE_PLAYING,
-            progress = 5000L,
-            forceNetworkUpdate = false,
-        )
-
-        testScheduler.advanceUntilIdle()
-
-        // Then: Progress update was skipped (no DB writes)
-        verify(bookRepository, never()).updateProgress(any(), any(), any())
-        verify(trackRepository, never()).updateTrackProgress(any(), any(), any())
-    }
+            // Then: Database was NOT queried for book/track data
+            verify(trackRepository, never()).getBookIdForTrack(any())
+            verify(trackRepository, never()).getTrackAsync(any())
+            verify(bookRepository, never()).getAudiobookAsync(any())
+            verify(trackRepository, never()).getTracksForAudiobookAsync(any())
+        }
 
     @Test
-    fun `updateProgress skips when no book in PlaybackState`() = testScope.runTest {
-        // Given: PlaybackState has no book loaded
-        val playbackState = PlaybackState(
-            audiobook = null,
-            tracks = emptyList(),
-            currentTrackIndex = -1,
-            currentTrackPositionMs = 0L,
-            isPlaying = false,
-        )
+    fun `updateProgress skips update when track mismatch detected`() =
+        testScope.runTest {
+            // Given: PlaybackState has a different track than what's being updated
+            val libraryId = "plex:library:1"
+            val bookId = "plex:100"
+            val currentTrackId = "plex:101"
+            val outdatedTrackId = "plex:999" // Stale track ID from rapid switching
 
-        val stateFlow = MutableStateFlow(playbackState)
-        whenever(playbackStateController.state).thenReturn(stateFlow)
+            val book =
+                Audiobook(
+                    id = bookId,
+                    libraryId = libraryId,
+                    source = PlexMediaSource.MEDIA_SOURCE_ID_PLEX,
+                    title = "Test Book",
+                )
 
-        // When: updateProgress is called
-        progressUpdater.updateProgress(
-            trackId = "plex:101",
-            playbackState = MediaPlayerService.PLEX_STATE_PLAYING,
-            progress = 5000L,
-            forceNetworkUpdate = false,
-        )
+            val currentTrack =
+                MediaItemTrack(
+                    id = currentTrackId,
+                    parentKey = bookId,
+                    title = "Current Track",
+                    duration = 60000L,
+                )
 
-        testScheduler.advanceUntilIdle()
+            val playbackState =
+                PlaybackState(
+                    audiobook = book,
+                    tracks = listOf(currentTrack),
+                    currentTrackIndex = 0,
+                    currentTrackPositionMs = 5000L,
+                    isPlaying = true,
+                )
 
-        // Then: Progress update was skipped
-        verify(bookRepository, never()).updateProgress(any(), any(), any())
-        verify(trackRepository, never()).updateTrackProgress(any(), any(), any())
-    }
+            val stateFlow = MutableStateFlow(playbackState)
+            whenever(playbackStateController.state).thenReturn(stateFlow)
 
-    @Test
-    fun `updateProgress uses libraryId from PlaybackState for network update`() = testScope.runTest {
-        // Given: A book in library 1 in PlaybackState
-        val library1Id = "plex:library:1"
-        val bookId = "plex:100"
-        val trackId = "plex:101"
+            // When: updateProgress is called with outdated track ID
+            progressUpdater.updateProgress(
+                trackId = outdatedTrackId,
+                playbackState = MediaPlayerService.PLEX_STATE_PLAYING,
+                progress = 5000L,
+                forceNetworkUpdate = false,
+            )
 
-        val book = Audiobook(
-            id = bookId,
-            libraryId = library1Id, // Book is in library 1
-            source = PlexMediaSource.MEDIA_SOURCE_ID_PLEX,
-            title = "Book in Library 1",
-        )
+            testScheduler.advanceUntilIdle()
 
-        val track = MediaItemTrack(
-            id = trackId,
-            parentKey = bookId,
-            title = "Track 1",
-            duration = 60000L,
-        )
-
-        val playbackState = PlaybackState(
-            audiobook = book,
-            tracks = listOf(track),
-            currentTrackIndex = 0,
-            currentTrackPositionMs = 5000L,
-            isPlaying = true,
-        )
-
-        val stateFlow = MutableStateFlow(playbackState)
-        whenever(playbackStateController.state).thenReturn(stateFlow)
-
-        // When: updateProgress is called with forceNetworkUpdate=true
-        progressUpdater.updateProgress(
-            trackId = trackId,
-            playbackState = MediaPlayerService.PLEX_STATE_PLAYING,
-            progress = 5000L,
-            forceNetworkUpdate = true,
-        )
-
-        testScheduler.advanceUntilIdle()
-
-        // Then: WorkManager was called (WorkManager verification would require more setup)
-        // The key assertion is that we didn't query the DB for libraryId
-        verify(bookRepository, never()).getAudiobookAsync(any())
-    }
+            // Then: Progress update was skipped (no DB writes)
+            verify(bookRepository, never()).updateProgress(any(), any(), any())
+            verify(trackRepository, never()).updateTrackProgress(any(), any(), any())
+        }
 
     @Test
-    fun `updateProgress correctly handles multi-library switch scenario`() = testScope.runTest {
-        // Given: Simulating a switch from library 1 to library 2
-        val library2Id = "plex:library:2"
-        val bookId = "plex:200"
-        val trackId = "plex:201"
+    fun `updateProgress skips when no book in PlaybackState`() =
+        testScope.runTest {
+            // Given: PlaybackState has no book loaded
+            val playbackState =
+                PlaybackState(
+                    audiobook = null,
+                    tracks = emptyList(),
+                    currentTrackIndex = -1,
+                    currentTrackPositionMs = 0L,
+                    isPlaying = false,
+                )
 
-        val bookInLibrary2 = Audiobook(
-            id = bookId,
-            libraryId = library2Id, // Now in library 2
-            source = PlexMediaSource.MEDIA_SOURCE_ID_PLEX,
-            title = "Book in Library 2",
-        )
+            val stateFlow = MutableStateFlow(playbackState)
+            whenever(playbackStateController.state).thenReturn(stateFlow)
 
-        val track = MediaItemTrack(
-            id = trackId,
-            parentKey = bookId,
-            title = "Track 1",
-            duration = 60000L,
-        )
+            // When: updateProgress is called
+            progressUpdater.updateProgress(
+                trackId = "plex:101",
+                playbackState = MediaPlayerService.PLEX_STATE_PLAYING,
+                progress = 5000L,
+                forceNetworkUpdate = false,
+            )
 
-        // PlaybackStateController shows the new library 2 book
-        val playbackState = PlaybackState(
-            audiobook = bookInLibrary2,
-            tracks = listOf(track),
-            currentTrackIndex = 0,
-            currentTrackPositionMs = 3000L,
-            isPlaying = true,
-        )
+            testScheduler.advanceUntilIdle()
 
-        val stateFlow = MutableStateFlow(playbackState)
-        whenever(playbackStateController.state).thenReturn(stateFlow)
+            // Then: Progress update was skipped
+            verify(bookRepository, never()).updateProgress(any(), any(), any())
+            verify(trackRepository, never()).updateTrackProgress(any(), any(), any())
+        }
 
-        // When: updateProgress is called (DB might still have stale library 1 data)
-        progressUpdater.updateProgress(
-            trackId = trackId,
-            playbackState = MediaPlayerService.PLEX_STATE_PLAYING,
-            progress = 3000L,
-            forceNetworkUpdate = true,
-        )
+    @Test
+    fun `updateProgress uses libraryId from PlaybackState for network update`() =
+        testScope.runTest {
+            // Given: A book in library 1 in PlaybackState
+            val library1Id = "plex:library:1"
+            val bookId = "plex:100"
+            val trackId = "plex:101"
 
-        testScheduler.advanceUntilIdle()
+            val book =
+                Audiobook(
+                    id = bookId,
+                    libraryId = library1Id, // Book is in library 1
+                    source = PlexMediaSource.MEDIA_SOURCE_ID_PLEX,
+                    title = "Book in Library 1",
+                )
 
-        // Then: The progress update uses library 2 context from PlaybackState,
-        // not stale library 1 context from database
-        // (Verified by not querying database for book/library info)
-        verify(bookRepository, never()).getAudiobookAsync(bookId)
-    }
+            val track =
+                MediaItemTrack(
+                    id = trackId,
+                    parentKey = bookId,
+                    title = "Track 1",
+                    duration = 60000L,
+                )
+
+            val playbackState =
+                PlaybackState(
+                    audiobook = book,
+                    tracks = listOf(track),
+                    currentTrackIndex = 0,
+                    currentTrackPositionMs = 5000L,
+                    isPlaying = true,
+                )
+
+            val stateFlow = MutableStateFlow(playbackState)
+            whenever(playbackStateController.state).thenReturn(stateFlow)
+
+            // When: updateProgress is called with forceNetworkUpdate=true
+            progressUpdater.updateProgress(
+                trackId = trackId,
+                playbackState = MediaPlayerService.PLEX_STATE_PLAYING,
+                progress = 5000L,
+                forceNetworkUpdate = true,
+            )
+
+            testScheduler.advanceUntilIdle()
+
+            // Then: WorkManager was called (WorkManager verification would require more setup)
+            // The key assertion is that we didn't query the DB for libraryId
+            verify(bookRepository, never()).getAudiobookAsync(any())
+        }
+
+    @Test
+    fun `updateProgress correctly handles multi-library switch scenario`() =
+        testScope.runTest {
+            // Given: Simulating a switch from library 1 to library 2
+            val library2Id = "plex:library:2"
+            val bookId = "plex:200"
+            val trackId = "plex:201"
+
+            val bookInLibrary2 =
+                Audiobook(
+                    id = bookId,
+                    libraryId = library2Id, // Now in library 2
+                    source = PlexMediaSource.MEDIA_SOURCE_ID_PLEX,
+                    title = "Book in Library 2",
+                )
+
+            val track =
+                MediaItemTrack(
+                    id = trackId,
+                    parentKey = bookId,
+                    title = "Track 1",
+                    duration = 60000L,
+                )
+
+            // PlaybackStateController shows the new library 2 book
+            val playbackState =
+                PlaybackState(
+                    audiobook = bookInLibrary2,
+                    tracks = listOf(track),
+                    currentTrackIndex = 0,
+                    currentTrackPositionMs = 3000L,
+                    isPlaying = true,
+                )
+
+            val stateFlow = MutableStateFlow(playbackState)
+            whenever(playbackStateController.state).thenReturn(stateFlow)
+
+            // When: updateProgress is called (DB might still have stale library 1 data)
+            progressUpdater.updateProgress(
+                trackId = trackId,
+                playbackState = MediaPlayerService.PLEX_STATE_PLAYING,
+                progress = 3000L,
+                forceNetworkUpdate = true,
+            )
+
+            testScheduler.advanceUntilIdle()
+
+            // Then: The progress update uses library 2 context from PlaybackState,
+            // not stale library 1 context from database
+            // (Verified by not querying database for book/library info)
+            verify(bookRepository, never()).getAudiobookAsync(bookId)
+        }
 }

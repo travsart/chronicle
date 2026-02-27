@@ -81,9 +81,10 @@ class AuthReturnActivity : AppCompatActivity() {
 
         // Launch MainActivity to bring the app to the foreground over the Chrome Custom Tab,
         // which doesn't auto-close when navigating away via deep links
-        val mainActivityIntent = Intent(this, MainActivity::class.java).apply {
-            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-        }
+        val mainActivityIntent =
+            Intent(this, MainActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            }
         startActivity(mainActivityIntent)
 
         // Immediately finish - we don't need to show any UI

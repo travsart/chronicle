@@ -83,21 +83,27 @@ The [`Chapter`](../../app/src/main/java/local/oss/chronicle/data/model/Chapter.k
 @Entity
 data class Chapter(
     val title: String,
-    @PrimaryKey val id: Long,
+    @PrimaryKey(autoGenerate = true) val uid: Long = 0L,  // Auto-generated primary key
+    val id: Long,                                         // Plex rating key (non-unique)
     val index: Long,
     val discNumber: Int,
     val startTimeOffset: Long,  // Milliseconds from track start
     val endTimeOffset: Long,    // Milliseconds from track start
     val downloaded: Boolean,
     val trackId: Long,          // Parent track ID
-    val bookId: Long,           // Parent audiobook ID
+    val bookId: String,         // Parent audiobook ID
 )
 ```
 
 **Key Properties**:
+- `uid` - Auto-generated primary key (unique per chapter row)
+- `id` - Plex rating key (may be shared between multiple chapters)
 - `startTimeOffset` / `endTimeOffset` - Position offsets relative to the **containing track**, not the book
 - `trackId` - Links chapter to its containing audio file
+- `bookId` - Parent audiobook ID for filtering and association
 - `discNumber` - Used for multi-disc audiobooks with section headers
+
+**Primary Key Change (ChapterDatabase v1→v2)**: Changed from `@PrimaryKey id` to `@PrimaryKey(autoGenerate = true) uid` to prevent overwrites when multiple chapters share the same track rating key. This fixes the bug where only the last chapter was displayed for multi-chapter audiobooks.
 
 ### Chapter Detection
 
@@ -129,21 +135,32 @@ The function matches a chapter when:
 sequenceDiagram
     participant UI as AudiobookDetailsFragment
     participant VM as AudiobookDetailsViewModel
-    participant Repo as ChapterRepository
+    participant BookRepo as BookRepository
+    participant ChapterRepo as ChapterRepository
+    participant Resolver as ServerConnectionResolver
     participant Plex as PlexMediaService
     participant DB as ChapterDatabase
     
     UI->>VM: View audiobook
-    VM->>Repo: loadChapterData
-    Repo->>Plex: retrieveChapterInfo per track
-    Plex-->>Repo: PlexChapter list
-    Repo->>Repo: PlexChapter.toChapter conversion
-    Repo->>DB: insertAll
+    VM->>BookRepo: fetchBookAsync(bookId, libraryId)
+    BookRepo->>ChapterRepo: loadChapterData(bookId, libraryId)
+    ChapterRepo->>Resolver: resolveConnection(libraryId)
+    Resolver-->>ChapterRepo: ServerConnection
+    ChapterRepo->>Plex: retrieveAlbum (library-specific)
+    Plex-->>ChapterRepo: PlexChapter list
+    ChapterRepo->>ChapterRepo: PlexChapter.toChapter(chapter, bookId)
+    ChapterRepo->>DB: insertChapters
     DB-->>VM: chapters LiveData update
     VM-->>UI: Display chapter list
 ```
 
 **Implementation**: [`ChapterRepository.loadChapterData()`](../../app/src/main/java/local/oss/chronicle/data/local/ChapterRepository.kt:43)
+
+**Key Changes**:
+- Chapter loading now library-aware via `ServerConnectionResolver` for multi-server setups
+- `loadChapterData()` accepts `bookId` parameter to associate chapters with their audiobook
+- `PlexChapter.toChapter()` conversion now accepts `bookId` parameter
+- Chapters are correctly associated with their parent audiobook in the database
 
 ### Fallback Behavior
 
@@ -375,6 +392,58 @@ Chapters would rapidly flip-flop between values during playback, causing UI flic
 4. **Removed conflicting updates** - Eliminated `currentlyPlaying.update()` from [`OnMediaChangedCallback.onMetadataChanged()`](../../app/src/main/java/local/oss/chronicle/features/player/OnMediaChangedCallback.kt)
 
 For detailed fix documentation, see [`plans/CHAPTER_FLIPFLOP_FIX.md`](../../plans/CHAPTER_FLIPFLOP_FIX.md).
+
+---
+
+## Historical Fixes: Duplicate Chapters Bug
+
+### Problem
+
+Chapters appeared duplicated 2-4 times in the audiobook details screen. Each library re-sync accumulated additional duplicate chapter rows in the database.
+
+**Root Cause**: The primary key change from [`ChapterDatabase`](../../app/src/main/java/local/oss/chronicle/data/local/ChapterDatabase.kt) v1→v2 migration (from `id` to auto-generated `uid`) prevented `OnConflictStrategy.REPLACE` from detecting duplicates:
+
+```kotlin
+// v1: Primary key was id (Plex rating key)
+@PrimaryKey val id: Long
+
+// v2: Primary key became auto-generated uid
+@PrimaryKey(autoGenerate = true) val uid: Long = 0L
+val id: Long  // No longer primary key
+```
+
+With auto-generated `uid` as the primary key, each chapter insert creates a new row rather than replacing the existing one, because `uid` is always unique. The `OnConflictStrategy.REPLACE` had no way to detect that a chapter with the same `id`, `trackId`, and `index` already existed.
+
+### Solution
+
+Implemented a **delete-before-insert** pattern in [`ChapterRepository.loadChapterData()`](../../app/src/main/java/local/oss/chronicle/data/local/ChapterRepository.kt):
+
+```kotlin
+suspend fun loadChapterData(bookId: String, libraryId: String) {
+    // 1. Delete all existing chapters for this book
+    chapterDao.deleteByBookId(bookId)
+    
+    // 2. Insert fresh chapters from Plex API
+    chapterDao.insertAll(chapters)
+}
+```
+
+This ensures:
+- No duplicates accumulate on re-sync
+- Fresh chapter data is loaded on each sync
+- Chapter count remains accurate regardless of sync frequency
+
+**Alternative Considered**: Using a composite unique index on `(bookId, trackId, index)` was rejected because:
+- It would cause constraint violations on insert rather than silent replacement
+- Delete-before-insert is clearer and more maintainable
+- Chapters are transient data that can be safely refetched from Plex
+
+### Test Coverage
+
+[`ChapterRepositoryTest`](../../app/src/test/java/local/oss/chronicle/data/local/ChapterRepositoryTest.kt) verifies:
+- No duplicates after multiple re-syncs
+- Correct delete-before-insert ordering
+- Chapter count matches expected values
 
 ---
 

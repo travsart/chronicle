@@ -222,7 +222,7 @@ class PlexProgressReporter
         ) {
             try {
                 Timber.d("[PlayQueue] startMediaSession() called - bookId=$bookId, libraryId=$libraryId")
-                
+
                 // Clear previous play queue cache when starting new session
                 clearPlayQueueCache()
                 Timber.d("[PlayQueue] Cleared previous play queue cache")
@@ -256,16 +256,16 @@ class PlexProgressReporter
                     Timber.w("[PlayQueue] Library not found for id: $libraryId. Cannot start media session.")
                     return // Non-critical, don't prevent playback
                 }
-                
+
                 Timber.d(
                     "[PlayQueue] Retrieved library from DB - name='${library.name}', " +
                         "serverId='${library.serverId}', serverName='${library.serverName}', " +
-                        "serverUrl=${library.serverUrl}, authToken=${if (library.authToken.isNullOrEmpty()) "EMPTY" else "SET"}"
+                        "serverUrl=${library.serverUrl}, authToken=${if (library.authToken.isNullOrEmpty()) "EMPTY" else "SET"}",
                 )
 
                 val serverId = library.serverId
-                Timber.d("[PlayQueue] Checking serverId value: '${serverId}' (isEmpty=${serverId.isEmpty()})")
-                
+                Timber.d("[PlayQueue] Checking serverId value: '$serverId' (isEmpty=${serverId.isEmpty()})")
+
                 if (serverId.isEmpty()) {
                     Timber.w("[PlayQueue] Server ID not set for library: $libraryId. Cannot start media session.")
                     return // Non-critical, don't prevent playback
@@ -282,12 +282,14 @@ class PlexProgressReporter
                 // Start media session and capture play queue response
                 Timber.d("[PlayQueue] Calling POST /playQueues with URI: $uri")
                 val response = service.startMediaSession(uri)
-                Timber.d("[PlayQueue] Received API response - playQueueID=${response.mediaContainer?.playQueueID}, metadata count=${response.mediaContainer?.metadata?.size ?: 0}")
+                Timber.d(
+                    "[PlayQueue] Received API response - playQueueID=${response.mediaContainer?.playQueueID}, metadata count=${response.mediaContainer?.metadata?.size ?: 0}",
+                )
 
                 // Extract and cache play queue item IDs
                 val playQueueMap = response.toPlayQueueItemMap()
                 Timber.d("[PlayQueue] Extracted play queue item map - size=${playQueueMap.size}, contents=$playQueueMap")
-                
+
                 playQueueItemCache.putAll(playQueueMap)
                 Timber.d("[PlayQueue] Updated playQueueItemCache - total cached items: ${playQueueItemCache.size}")
 

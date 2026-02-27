@@ -1,7 +1,7 @@
 package local.oss.chronicle.util
 
-import java.security.MessageDigest
 import timber.log.Timber
+import java.security.MessageDigest
 
 /**
  * Security utilities for safe handling of sensitive data in logging and debugging.

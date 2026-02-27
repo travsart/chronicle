@@ -351,8 +351,8 @@ class AccountManagerTest {
             verify(libraryRepository).addLibraries(
                 argThat { list ->
                     list.size == 1 &&
-                    list[0].serverUrl == serverUrl &&
-                    list[0].authToken == serverAccessToken
+                        list[0].serverUrl == serverUrl &&
+                        list[0].authToken == serverAccessToken
                 },
             )
         }

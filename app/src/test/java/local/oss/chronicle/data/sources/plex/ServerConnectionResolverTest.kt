@@ -61,13 +61,14 @@ class ServerConnectionResolverTest {
         whenever(mockPlexPrefsRepo.user).thenReturn(null)
         whenever(mockPlexPrefsRepo.accountAuthToken).thenReturn(fallbackToken)
 
-        resolver = ServerConnectionResolver(
-            mockLibraryRepository,
-            mockAccountRepository,
-            mockCredentialManager,
-            mockPlexConfig,
-            mockPlexPrefsRepo
-        )
+        resolver =
+            ServerConnectionResolver(
+                mockLibraryRepository,
+                mockAccountRepository,
+                mockCredentialManager,
+                mockPlexConfig,
+                mockPlexPrefsRepo,
+            )
     }
 
     // ===== Test 1: Resolve returns library-specific connection from database =====
@@ -358,19 +359,20 @@ class ServerConnectionResolverTest {
     fun `resolve parses userToken from credentials JSON when library authToken is empty`() =
         runTest {
             // Given: Library has no authToken but Account has credentials JSON
-            val library = Library(
-                id = testLibraryId1,
-                accountId = testAccountId1,
-                serverId = "test-server",
-                serverName = "Test Server",
-                name = "Test Library",
-                type = "artist",
-                lastSyncedAt = null,
-                itemCount = 0,
-                isActive = true,
-                serverUrl = testServerUrl1,
-                authToken = null,
-            )
+            val library =
+                Library(
+                    id = testLibraryId1,
+                    accountId = testAccountId1,
+                    serverId = "test-server",
+                    serverName = "Test Server",
+                    name = "Test Library",
+                    type = "artist",
+                    lastSyncedAt = null,
+                    itemCount = 0,
+                    isActive = true,
+                    serverUrl = testServerUrl1,
+                    authToken = null,
+                )
             val dbConnection = ServerConnection(testServerUrl1, null)
             whenever(mockLibraryRepository.getLibraryById(testLibraryId1)).thenReturn(library)
             whenever(mockLibraryRepository.getServerConnection(testLibraryId1)).thenReturn(dbConnection)
@@ -391,19 +393,20 @@ class ServerConnectionResolverTest {
     fun `resolve handles malformed credentials JSON gracefully`() =
         runTest {
             // Given: Library has no authToken and Account has invalid JSON
-            val library = Library(
-                id = testLibraryId1,
-                accountId = testAccountId1,
-                serverId = "test-server",
-                serverName = "Test Server",
-                name = "Test Library",
-                type = "artist",
-                lastSyncedAt = null,
-                itemCount = 0,
-                isActive = true,
-                serverUrl = testServerUrl1,
-                authToken = null,
-            )
+            val library =
+                Library(
+                    id = testLibraryId1,
+                    accountId = testAccountId1,
+                    serverId = "test-server",
+                    serverName = "Test Server",
+                    name = "Test Library",
+                    type = "artist",
+                    lastSyncedAt = null,
+                    itemCount = 0,
+                    isActive = true,
+                    serverUrl = testServerUrl1,
+                    authToken = null,
+                )
             val dbConnection = ServerConnection(testServerUrl1, null)
             whenever(mockLibraryRepository.getLibraryById(testLibraryId1)).thenReturn(library)
             whenever(mockLibraryRepository.getServerConnection(testLibraryId1)).thenReturn(dbConnection)
@@ -423,19 +426,20 @@ class ServerConnectionResolverTest {
         runTest {
             // Given: Library has corrupted authToken (raw JSON string from previous bug)
             val corruptedToken = """{"userToken":"real-token","serverToken":"server-token"}"""
-            val library = Library(
-                id = testLibraryId1,
-                accountId = testAccountId1,
-                serverId = "test-server",
-                serverName = "Test Server",
-                name = "Test Library",
-                type = "artist",
-                lastSyncedAt = null,
-                itemCount = 0,
-                isActive = true,
-                serverUrl = testServerUrl1,
-                authToken = corruptedToken,
-            )
+            val library =
+                Library(
+                    id = testLibraryId1,
+                    accountId = testAccountId1,
+                    serverId = "test-server",
+                    serverName = "Test Server",
+                    name = "Test Library",
+                    type = "artist",
+                    lastSyncedAt = null,
+                    itemCount = 0,
+                    isActive = true,
+                    serverUrl = testServerUrl1,
+                    authToken = corruptedToken,
+                )
             val dbConnection = ServerConnection(testServerUrl1, corruptedToken)
             whenever(mockLibraryRepository.getLibraryById(testLibraryId1)).thenReturn(library)
             whenever(mockLibraryRepository.getServerConnection(testLibraryId1)).thenReturn(dbConnection)
@@ -457,19 +461,20 @@ class ServerConnectionResolverTest {
         runTest {
             // Given: Library has authToken that starts with '{'
             val corruptedToken = "{some-corrupted-data"
-            val library = Library(
-                id = testLibraryId1,
-                accountId = testAccountId1,
-                serverId = "test-server",
-                serverName = "Test Server",
-                name = "Test Library",
-                type = "artist",
-                lastSyncedAt = null,
-                itemCount = 0,
-                isActive = true,
-                serverUrl = testServerUrl1,
-                authToken = corruptedToken,
-            )
+            val library =
+                Library(
+                    id = testLibraryId1,
+                    accountId = testAccountId1,
+                    serverId = "test-server",
+                    serverName = "Test Server",
+                    name = "Test Library",
+                    type = "artist",
+                    lastSyncedAt = null,
+                    itemCount = 0,
+                    isActive = true,
+                    serverUrl = testServerUrl1,
+                    authToken = corruptedToken,
+                )
             val dbConnection = ServerConnection(testServerUrl1, corruptedToken)
             whenever(mockLibraryRepository.getLibraryById(testLibraryId1)).thenReturn(library)
             whenever(mockLibraryRepository.getServerConnection(testLibraryId1)).thenReturn(dbConnection)
@@ -489,19 +494,20 @@ class ServerConnectionResolverTest {
         runTest {
             // Given: Credentials JSON contains both userToken and serverToken
             val credentialsWithBothTokens = """{"userToken":"user-abc","serverToken":"server-xyz"}"""
-            val library = Library(
-                id = testLibraryId1,
-                accountId = testAccountId1,
-                serverId = "test-server",
-                serverName = "Test Server",
-                name = "Test Library",
-                type = "artist",
-                lastSyncedAt = null,
-                itemCount = 0,
-                isActive = true,
-                serverUrl = testServerUrl1,
-                authToken = null,
-            )
+            val library =
+                Library(
+                    id = testLibraryId1,
+                    accountId = testAccountId1,
+                    serverId = "test-server",
+                    serverName = "Test Server",
+                    name = "Test Library",
+                    type = "artist",
+                    lastSyncedAt = null,
+                    itemCount = 0,
+                    isActive = true,
+                    serverUrl = testServerUrl1,
+                    authToken = null,
+                )
             val dbConnection = ServerConnection(testServerUrl1, null)
             whenever(mockLibraryRepository.getLibraryById(testLibraryId1)).thenReturn(library)
             whenever(mockLibraryRepository.getServerConnection(testLibraryId1)).thenReturn(dbConnection)

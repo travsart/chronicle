@@ -4,13 +4,8 @@ import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 import local.oss.chronicle.data.local.LibraryRepository
-import local.oss.chronicle.data.model.Audiobook
 import local.oss.chronicle.data.model.Library
-import local.oss.chronicle.data.model.MediaItemTrack
 import local.oss.chronicle.data.model.ServerConnection
-import local.oss.chronicle.data.sources.plex.model.PlayQueueItem
-import local.oss.chronicle.data.sources.plex.model.PlayQueueMediaContainer
-import local.oss.chronicle.data.sources.plex.model.PlayQueueResponseWrapper
 import local.oss.chronicle.features.player.MediaPlayerService.Companion.PLEX_STATE_PAUSED
 import local.oss.chronicle.features.player.MediaPlayerService.Companion.PLEX_STATE_PLAYING
 import local.oss.chronicle.features.player.MediaPlayerService.Companion.PLEX_STATE_STOPPED
@@ -60,7 +55,7 @@ class PlexProgressReporterTest {
     fun setup() {
         // Mock PlexConfig to return test values (lenient since not all tests use this)
         lenient().`when`(plexConfig.sessionIdentifier).thenReturn("test-session-id")
-        
+
         // Mock PlexPrefsRepo to return test UUID (lenient since not all tests use this)
         lenient().`when`(plexPrefsRepo.uuid).thenReturn("test-uuid-12345")
 
@@ -523,7 +518,7 @@ class PlexProgressReporterTest {
         //
         // The -1 value tells Plex that we don't have a valid play queue item ID,
         // which may cause dashboard activity to not work correctly.
-        
+
         val expectedFallback = -1L
         assertThat(expectedFallback).isEqualTo(-1L)
     }

@@ -204,7 +204,7 @@ class AccountManager
             libraries: List<Library>,
         ) {
             libraryRepository.addLibraries(libraries.map { it.copy(accountId = accountId) })
-            
+
             // Clear ServerConnectionResolver cache when libraries are added
             serverConnectionResolver.clearCache()
         }

@@ -93,7 +93,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Library selector menu items
 
 ### Fixed
+- **Fixed:** Chapters appearing duplicated (2-4x) in audiobook details screen due to auto-generated primary key preventing conflict detection on re-sync — `ChapterRepository.loadChapterData()` now uses delete-before-insert pattern to prevent duplicates
 - **Fixed:** Chapter and track metadata failing to load for audiobooks from non-active libraries — `BookRepository`, `TrackRepository`, and `ChapterRepository` now use library-specific server connections via `ServerConnectionResolver` and `ScopedPlexServiceFactory`
+- **Fixed:** Only last chapter displayed for multi-chapter audiobooks due to primary key conflict — Chapters now use auto-generated `uid` primary key instead of `id` (ChapterDatabase v1→v2 migration)
+- **Fixed:** Chapters missing bookId association — `PlexChapter.toChapter()` now accepts `bookId` parameter and `ChapterRepository.loadChapterData()` correctly associates chapters with their audiobook
+- **Fixed:** Thumbnail images returning 404 for non-active library books — Added `PlexConfig.makeThumbUriForLibrary()` for library-aware thumbnail URL resolution
 - Fixed Plex "Now Playing" dashboard not showing Chronicle as an active streaming client
   - Aligned scoped interceptor headers in `PlexProgressReporter` to use consistent `X-Plex-Client-Identifier` (UUID) across all API calls
   - Added missing `X-Plex-Session-Identifier` header to timeline updates

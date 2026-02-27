@@ -3,7 +3,6 @@ package local.oss.chronicle.data.local
 import androidx.lifecycle.LiveData
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import local.oss.chronicle.BuildConfig
 import local.oss.chronicle.data.model.*
 import local.oss.chronicle.data.sources.MediaSource
 import local.oss.chronicle.data.sources.plex.PlexMediaService
@@ -12,7 +11,6 @@ import local.oss.chronicle.data.sources.plex.ScopedPlexServiceFactory
 import local.oss.chronicle.data.sources.plex.ServerConnectionResolver
 import local.oss.chronicle.data.sources.plex.model.asAudiobooks
 import local.oss.chronicle.data.sources.plex.model.getDuration
-import local.oss.chronicle.data.sources.plex.model.toChapter
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -147,7 +145,10 @@ interface IBookRepository {
     suspend fun setUnwatched(bookId: String)
 
     /** Loads an [Audiobook] in from the network */
-    suspend fun fetchBookAsync(bookId: String, libraryId: String): Audiobook?
+    suspend fun fetchBookAsync(
+        bookId: String,
+        libraryId: String,
+    ): Audiobook?
 
     suspend fun refreshDataPaginated()
 }
@@ -492,7 +493,7 @@ class BookRepository
             withContext(Dispatchers.IO) {
                 // Delegate chapter loading to ChapterRepository (library-aware)
                 try {
-                    chapterRepository.loadChapterData(audiobook.isCached, tracks)
+                    chapterRepository.loadChapterData(audiobook.id, audiobook.isCached, tracks)
                 } catch (t: Throwable) {
                     Timber.e("Failed to load chapters: $t")
                     return@withContext false
@@ -536,7 +537,10 @@ class BookRepository
             return true
         }
 
-        override suspend fun fetchBookAsync(bookId: String, libraryId: String): Audiobook? =
+        override suspend fun fetchBookAsync(
+            bookId: String,
+            libraryId: String,
+        ): Audiobook? =
             withContext(Dispatchers.IO) {
                 try {
                     // Extract numeric ID for Plex API call

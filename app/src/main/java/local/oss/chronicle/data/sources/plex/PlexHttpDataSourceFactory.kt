@@ -34,7 +34,6 @@ class PlexHttpDataSourceFactory(
     private val context: Context,
     private val plexPrefsRepo: PlexPrefsRepo,
 ) : HttpDataSource.Factory {
-
     /**
      * ServerConnectionResolver for library-aware token resolution.
      * Injected lazily to avoid circular dependencies during DI initialization.
@@ -52,21 +51,22 @@ class PlexHttpDataSourceFactory(
             field = value
             // Pre-resolve and cache the token for this library to avoid blocking on createDataSource()
             // runBlocking is acceptable here because ServerConnectionResolver has an in-memory cache
-            cachedAuthToken = value?.let { libId ->
-                runBlocking {
-                    try {
-                        val connection = serverConnectionResolver.resolve(libId)
-                        Timber.d(
-                            "[TokenInjection] Pre-resolved token for library $libId: " +
-                                "${SecurityUtils.hashToken(connection.authToken)}"
-                        )
-                        connection.authToken
-                    } catch (e: Exception) {
-                        Timber.e(e, "[TokenInjection] Failed to resolve token for library $libId, falling back to global")
-                        null
+            cachedAuthToken =
+                value?.let { libId ->
+                    runBlocking {
+                        try {
+                            val connection = serverConnectionResolver.resolve(libId)
+                            Timber.d(
+                                "[TokenInjection] Pre-resolved token for library $libId: " +
+                                    "${SecurityUtils.hashToken(connection.authToken)}",
+                            )
+                            connection.authToken
+                        } catch (e: Exception) {
+                            Timber.e(e, "[TokenInjection] Failed to resolve token for library $libId, falling back to global")
+                            null
+                        }
                     }
                 }
-            }
         }
 
     /**
@@ -115,22 +115,23 @@ class PlexHttpDataSourceFactory(
         factory.setUserAgent(Util.getUserAgent(context, APP_NAME))
 
         // Resolve auth token: library-specific (if available) or global (fallback)
-        val authToken = cachedAuthToken ?: run {
-            // Fallback to global token from preferences
-            val serverToken = plexPrefsRepo.server?.accessToken
-            val userToken = plexPrefsRepo.user?.authToken
-            val accountToken = plexPrefsRepo.accountAuthToken
+        val authToken =
+            cachedAuthToken ?: run {
+                // Fallback to global token from preferences
+                val serverToken = plexPrefsRepo.server?.accessToken
+                val userToken = plexPrefsRepo.user?.authToken
+                val accountToken = plexPrefsRepo.accountAuthToken
 
-            // Select most privileged token available (matches PlexInterceptor logic)
-            serverToken ?: userToken ?: accountToken
-        }
+                // Select most privileged token available (matches PlexInterceptor logic)
+                serverToken ?: userToken ?: accountToken
+            }
 
         if (BuildConfig.DEBUG) {
             val tokenHash = SecurityUtils.hashToken(authToken)
             val source = if (cachedAuthToken != null) "library-specific" else "global"
             Timber.d(
                 "[TokenInjection] PlexHttpDataSourceFactory.createDataSource(): " +
-                    "token=$tokenHash (source=$source), currentLibraryId=$currentLibraryId"
+                    "token=$tokenHash (source=$source), currentLibraryId=$currentLibraryId",
             )
         }
 
@@ -148,19 +149,20 @@ class PlexHttpDataSourceFactory(
      * Must include all headers required by Plex Media Server API.
      */
     private fun buildHeaders(authToken: String): Map<String, String> {
-        val headers = mutableMapOf(
-            "X-Plex-Platform" to "Android",
-            "X-Plex-Provides" to "player",
-            "X-Plex-Client-Name" to APP_NAME,
-            "X-Plex-Client-Identifier" to plexPrefsRepo.uuid,
-            "X-Plex-Version" to BuildConfig.VERSION_NAME,
-            "X-Plex-Product" to APP_NAME,
-            "X-Plex-Platform-Version" to Build.VERSION.RELEASE,
-            "X-Plex-Device" to Build.MODEL,
-            "X-Plex-Device-Name" to Build.MODEL,
-            "X-Plex-Session-Identifier" to plexPrefsRepo.uuid,
-            "X-Plex-Client-Profile-Extra" to CLIENT_PROFILE_EXTRA,
-        )
+        val headers =
+            mutableMapOf(
+                "X-Plex-Platform" to "Android",
+                "X-Plex-Provides" to "player",
+                "X-Plex-Client-Name" to APP_NAME,
+                "X-Plex-Client-Identifier" to plexPrefsRepo.uuid,
+                "X-Plex-Version" to BuildConfig.VERSION_NAME,
+                "X-Plex-Product" to APP_NAME,
+                "X-Plex-Platform-Version" to Build.VERSION.RELEASE,
+                "X-Plex-Device" to Build.MODEL,
+                "X-Plex-Device-Name" to Build.MODEL,
+                "X-Plex-Session-Identifier" to plexPrefsRepo.uuid,
+                "X-Plex-Client-Profile-Extra" to CLIENT_PROFILE_EXTRA,
+            )
 
         // Only add auth token if non-empty
         if (authToken.isNotEmpty()) {

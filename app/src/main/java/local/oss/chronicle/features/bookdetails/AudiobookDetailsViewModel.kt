@@ -97,7 +97,7 @@ class AudiobookDetailsViewModel(
     // Used to cache tracks.asChapterList when tracks changes
     private val tracksAsChaptersCache: LiveData<List<Chapter>> =
         mapAsync(tracks, viewModelScope) {
-            it.asChapterList()
+            it.asChapterList(inputAudiobook.id)
         }
 
     val chapters: DoubleLiveData<Audiobook?, List<Chapter>, List<Chapter>> =
@@ -105,11 +105,18 @@ class AudiobookDetailsViewModel(
             audiobook,
             tracksAsChaptersCache,
         ) { _audiobook: Audiobook?, _tracksAsChapters: List<Chapter>? ->
-            Timber.i("Chapter data updated! ")
-            if (_audiobook?.chapters?.isNotEmpty() == true) {
-                _audiobook.chapters
-            } else {
-                _tracksAsChapters ?: emptyList()
+            Timber.i(
+                "Chapter data updated! audiobook chapters: ${_audiobook?.chapters?.size}, tracksAsChapters: ${_tracksAsChapters?.size}",
+            )
+
+            val audiobookChapters = _audiobook?.chapters.orEmpty()
+            val trackChapters = _tracksAsChapters.orEmpty()
+
+            // Prefer the source with more chapters (real Plex chapters > track fallbacks)
+            when {
+                audiobookChapters.size >= trackChapters.size -> audiobookChapters
+                trackChapters.isNotEmpty() -> trackChapters
+                else -> emptyList()
             }
         }
 
@@ -309,7 +316,7 @@ class AudiobookDetailsViewModel(
                 delay(50)
                 val noExistingChapters = chapters.value.isNullOrEmpty()
                 _isLoadingTracks.value = noExistingChapters
-                
+
                 // Get the audiobook first to access libraryId
                 val audiobook = bookRepository.getAudiobookAsync(bookId)
                 if (audiobook == null) {
@@ -317,7 +324,7 @@ class AudiobookDetailsViewModel(
                     _isLoadingTracks.value = false
                     return@launch
                 }
-                
+
                 val trackRequest = trackRepository.loadTracksForAudiobook(bookId, audiobook.libraryId)
                 if (trackRequest is Ok) {
                     trackRepository.syncTracksInBook(audiobook.id)

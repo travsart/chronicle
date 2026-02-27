@@ -810,7 +810,7 @@ class AudiobookMediaSessionCallbackTest {
         //
         // Since plexProgressReporter is a @RelaxedMockK, clearPlayQueueCache() is automatically
         // stubbed and will not throw during onStop() execution.
-        
+
         // Verify the implementation includes the call (documented in source code)
         // Full testing requires instrumentation tests due to Android framework dependencies
     }

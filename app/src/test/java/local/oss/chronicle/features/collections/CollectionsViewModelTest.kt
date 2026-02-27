@@ -60,32 +60,33 @@ class CollectionsViewModelTest {
 
     private lateinit var viewModel: CollectionsViewModel
 
-    private val testCollections = listOf(
-        Collection(
-            id = 1,
-            source = PlexMediaSource.MEDIA_SOURCE_ID_PLEX,
-            title = "Fantasy Series from Library A",
-            childCount = 5L,
-            thumb = "/library/1/collections/1/thumb",
-            childIds = listOf(1, 2, 3, 4, 5),
-        ),
-        Collection(
-            id = 2,
-            source = PlexMediaSource.MEDIA_SOURCE_ID_PLEX,
-            title = "Mystery Series from Library B",
-            childCount = 3L,
-            thumb = "/library/2/collections/2/thumb",
-            childIds = listOf(6, 7, 8),
-        ),
-        Collection(
-            id = 3,
-            source = PlexMediaSource.MEDIA_SOURCE_ID_PLEX,
-            title = "Sci-Fi Collection from Library A",
-            childCount = 7L,
-            thumb = "/library/1/collections/3/thumb",
-            childIds = listOf(9, 10, 11, 12, 13, 14, 15),
-        ),
-    )
+    private val testCollections =
+        listOf(
+            Collection(
+                id = 1,
+                source = PlexMediaSource.MEDIA_SOURCE_ID_PLEX,
+                title = "Fantasy Series from Library A",
+                childCount = 5L,
+                thumb = "/library/1/collections/1/thumb",
+                childIds = listOf(1, 2, 3, 4, 5),
+            ),
+            Collection(
+                id = 2,
+                source = PlexMediaSource.MEDIA_SOURCE_ID_PLEX,
+                title = "Mystery Series from Library B",
+                childCount = 3L,
+                thumb = "/library/2/collections/2/thumb",
+                childIds = listOf(6, 7, 8),
+            ),
+            Collection(
+                id = 3,
+                source = PlexMediaSource.MEDIA_SOURCE_ID_PLEX,
+                title = "Sci-Fi Collection from Library A",
+                childCount = 7L,
+                thumb = "/library/1/collections/3/thumb",
+                childIds = listOf(9, 10, 11, 12, 13, 14, 15),
+            ),
+        )
 
     @Before
     fun setup() {
@@ -117,185 +118,193 @@ class CollectionsViewModelTest {
     @Test
     fun `collections from all libraries are aggregated`() {
         runBlocking {
-        // Given: Collections from multiple libraries (identifiable by their thumb paths)
-        val allCollectionsLiveData = MutableLiveData(testCollections)
-        `when`(collectionsRepository.getAllCollections()).thenReturn(allCollectionsLiveData)
+            // Given: Collections from multiple libraries (identifiable by their thumb paths)
+            val allCollectionsLiveData = MutableLiveData(testCollections)
+            `when`(collectionsRepository.getAllCollections()).thenReturn(allCollectionsLiveData)
 
-        // When: ViewModel is created
-        viewModel = CollectionsViewModel(
-            prefsRepo,
-            librarySyncRepository,
-            collectionsRepository,
-            sharedPreferences,
-            bookRepository,
-        )
+            // When: ViewModel is created
+            viewModel =
+                CollectionsViewModel(
+                    prefsRepo,
+                    librarySyncRepository,
+                    collectionsRepository,
+                    sharedPreferences,
+                    bookRepository,
+                )
 
-        // Then: getAllCollections should be called (not filtered by library)
-        verify(collectionsRepository).getAllCollections()
+            // Then: getAllCollections should be called (not filtered by library)
+            verify(collectionsRepository).getAllCollections()
 
-        // Verify collections LiveData is initialized
-        assertThat(viewModel.collections, notNullValue())
+            // Verify collections LiveData is initialized
+            assertThat(viewModel.collections, notNullValue())
         }
     }
 
     @Test
     fun `getAllCollections repository method is called without library filter`() {
         runBlocking {
-        // Given: Repository configured to return collections from multiple libraries
-        val allCollectionsLiveData = MutableLiveData(testCollections)
-        `when`(collectionsRepository.getAllCollections()).thenReturn(allCollectionsLiveData)
+            // Given: Repository configured to return collections from multiple libraries
+            val allCollectionsLiveData = MutableLiveData(testCollections)
+            `when`(collectionsRepository.getAllCollections()).thenReturn(allCollectionsLiveData)
 
-        // When: ViewModel is created
-        viewModel = CollectionsViewModel(
-            prefsRepo,
-            librarySyncRepository,
-            collectionsRepository,
-            sharedPreferences,
-            bookRepository,
-        )
+            // When: ViewModel is created
+            viewModel =
+                CollectionsViewModel(
+                    prefsRepo,
+                    librarySyncRepository,
+                    collectionsRepository,
+                    sharedPreferences,
+                    bookRepository,
+                )
 
-        // Then: Verify getAllCollections is called (aggregates all libraries)
-        verify(collectionsRepository, times(1)).getAllCollections()
+            // Then: Verify getAllCollections is called (aggregates all libraries)
+            verify(collectionsRepository, times(1)).getAllCollections()
 
-        // Verify no library-specific methods are called
-        verify(collectionsRepository, never()).getCollection(anyInt())
+            // Verify no library-specific methods are called
+            verify(collectionsRepository, never()).getCollection(anyInt())
         }
     }
 
     @Test
     fun `refreshData triggers sync for all libraries`() {
         runBlocking {
-        // Given: ViewModel is initialized
-        val allCollectionsLiveData = MutableLiveData(testCollections)
-        `when`(collectionsRepository.getAllCollections()).thenReturn(allCollectionsLiveData)
+            // Given: ViewModel is initialized
+            val allCollectionsLiveData = MutableLiveData(testCollections)
+            `when`(collectionsRepository.getAllCollections()).thenReturn(allCollectionsLiveData)
 
-        viewModel = CollectionsViewModel(
-            prefsRepo,
-            librarySyncRepository,
-            collectionsRepository,
-            sharedPreferences,
-            bookRepository,
-        )
+            viewModel =
+                CollectionsViewModel(
+                    prefsRepo,
+                    librarySyncRepository,
+                    collectionsRepository,
+                    sharedPreferences,
+                    bookRepository,
+                )
 
-        // When: User triggers refresh
-        viewModel.refreshData()
+            // When: User triggers refresh
+            viewModel.refreshData()
 
-        // Then: LibrarySyncRepository should sync all libraries (including collections)
-        verify(librarySyncRepository).refreshLibrary()
+            // Then: LibrarySyncRepository should sync all libraries (including collections)
+            verify(librarySyncRepository).refreshLibrary()
         }
     }
 
     @Test
     fun `search queries books from all libraries`() {
         runBlocking {
-        // Given: ViewModel with collections from multiple libraries
-        val allCollectionsLiveData = MutableLiveData(testCollections)
-        val searchResultsLiveData = MutableLiveData(
-            listOf(
-                Audiobook(
-                    id = "plex:1",
-                    source = PlexMediaSource.MEDIA_SOURCE_ID_PLEX,
-                    title = "Fantasy Book",
-                    titleSort = "Fantasy Book",
-                    author = "Author A",
-                    libraryId = "plex:library:1",
-                    thumb = "",
-                    duration = 3600000L,
-                    progress = 0L,
-                ),
-            ),
-        )
+            // Given: ViewModel with collections from multiple libraries
+            val allCollectionsLiveData = MutableLiveData(testCollections)
+            val searchResultsLiveData =
+                MutableLiveData(
+                    listOf(
+                        Audiobook(
+                            id = "plex:1",
+                            source = PlexMediaSource.MEDIA_SOURCE_ID_PLEX,
+                            title = "Fantasy Book",
+                            titleSort = "Fantasy Book",
+                            author = "Author A",
+                            libraryId = "plex:library:1",
+                            thumb = "",
+                            duration = 3600000L,
+                            progress = 0L,
+                        ),
+                    ),
+                )
 
-        `when`(collectionsRepository.getAllCollections()).thenReturn(allCollectionsLiveData)
-        `when`(bookRepository.search(anyString())).thenReturn(searchResultsLiveData)
+            `when`(collectionsRepository.getAllCollections()).thenReturn(allCollectionsLiveData)
+            `when`(bookRepository.search(anyString())).thenReturn(searchResultsLiveData)
 
-        viewModel = CollectionsViewModel(
-            prefsRepo,
-            librarySyncRepository,
-            collectionsRepository,
-            sharedPreferences,
-            bookRepository,
-        )
+            viewModel =
+                CollectionsViewModel(
+                    prefsRepo,
+                    librarySyncRepository,
+                    collectionsRepository,
+                    sharedPreferences,
+                    bookRepository,
+                )
 
-        // When: User searches for a book
-        viewModel.search("Fantasy")
+            // When: User searches for a book
+            viewModel.search("Fantasy")
 
-        // Then: Search should query all books, not filtered by library
-        verify(bookRepository).search("Fantasy")
+            // Then: Search should query all books, not filtered by library
+            verify(bookRepository).search("Fantasy")
         }
     }
 
     @Test
     fun `collections from different libraries are not filtered`() {
         runBlocking {
-        // Given: Collections with different thumb paths indicating different libraries
-        val mixedCollections = listOf(
-            Collection(
-                id = 10,
-                source = PlexMediaSource.MEDIA_SOURCE_ID_PLEX,
-                title = "Collection A",
-                childCount = 2L,
-                thumb = "/library/1/collections/10/thumb", // Library 1
-                childIds = listOf(100, 101),
-            ),
-            Collection(
-                id = 20,
-                source = PlexMediaSource.MEDIA_SOURCE_ID_PLEX,
-                title = "Collection B",
-                childCount = 3L,
-                thumb = "/library/2/collections/20/thumb", // Library 2
-                childIds = listOf(200, 201, 202),
-            ),
-            Collection(
-                id = 30,
-                source = PlexMediaSource.MEDIA_SOURCE_ID_PLEX,
-                title = "Collection C",
-                childCount = 1L,
-                thumb = "/library/3/collections/30/thumb", // Library 3
-                childIds = listOf(300),
-            ),
-        )
+            // Given: Collections with different thumb paths indicating different libraries
+            val mixedCollections =
+                listOf(
+                    Collection(
+                        id = 10,
+                        source = PlexMediaSource.MEDIA_SOURCE_ID_PLEX,
+                        title = "Collection A",
+                        childCount = 2L,
+                        thumb = "/library/1/collections/10/thumb", // Library 1
+                        childIds = listOf(100, 101),
+                    ),
+                    Collection(
+                        id = 20,
+                        source = PlexMediaSource.MEDIA_SOURCE_ID_PLEX,
+                        title = "Collection B",
+                        childCount = 3L,
+                        thumb = "/library/2/collections/20/thumb", // Library 2
+                        childIds = listOf(200, 201, 202),
+                    ),
+                    Collection(
+                        id = 30,
+                        source = PlexMediaSource.MEDIA_SOURCE_ID_PLEX,
+                        title = "Collection C",
+                        childCount = 1L,
+                        thumb = "/library/3/collections/30/thumb", // Library 3
+                        childIds = listOf(300),
+                    ),
+                )
 
-        val allCollectionsLiveData = MutableLiveData(mixedCollections)
-        `when`(collectionsRepository.getAllCollections()).thenReturn(allCollectionsLiveData)
+            val allCollectionsLiveData = MutableLiveData(mixedCollections)
+            `when`(collectionsRepository.getAllCollections()).thenReturn(allCollectionsLiveData)
 
-        // When: ViewModel is created
-        viewModel = CollectionsViewModel(
-            prefsRepo,
-            librarySyncRepository,
-            collectionsRepository,
-            sharedPreferences,
-            bookRepository,
-        )
+            // When: ViewModel is created
+            viewModel =
+                CollectionsViewModel(
+                    prefsRepo,
+                    librarySyncRepository,
+                    collectionsRepository,
+                    sharedPreferences,
+                    bookRepository,
+                )
 
-        // Then: All collections should be loaded without filtering
-        verify(collectionsRepository).getAllCollections()
+            // Then: All collections should be loaded without filtering
+            verify(collectionsRepository).getAllCollections()
 
-        // Verify collections LiveData is initialized
-        assertThat(viewModel.collections, notNullValue())
+            // Verify collections LiveData is initialized
+            assertThat(viewModel.collections, notNullValue())
         }
     }
 
     @Test
     fun `empty search returns empty results without library filter`() {
         runBlocking {
-        // Given: ViewModel with collections
-        val allCollectionsLiveData = MutableLiveData(testCollections)
-        `when`(collectionsRepository.getAllCollections()).thenReturn(allCollectionsLiveData)
+            // Given: ViewModel with collections
+            val allCollectionsLiveData = MutableLiveData(testCollections)
+            `when`(collectionsRepository.getAllCollections()).thenReturn(allCollectionsLiveData)
 
-        viewModel = CollectionsViewModel(
-            prefsRepo,
-            librarySyncRepository,
-            collectionsRepository,
-            sharedPreferences,
-            bookRepository,
-        )
+            viewModel =
+                CollectionsViewModel(
+                    prefsRepo,
+                    librarySyncRepository,
+                    collectionsRepository,
+                    sharedPreferences,
+                    bookRepository,
+                )
 
-        // When: User searches with empty query
-        viewModel.search("")
+            // When: User searches with empty query
+            viewModel.search("")
 
-        // Then: No search should be performed on the repository
-        verify(bookRepository, never()).search(anyString())
+            // Then: No search should be performed on the repository
+            verify(bookRepository, never()).search(anyString())
         }
     }
 }

@@ -16,10 +16,11 @@ import org.junit.Test
 class PlexAuthUrlBuilderTest {
     @Test
     fun buildOAuthUrl_containsBaseUrl() {
-        val url = PlexAuthUrlBuilder.buildOAuthUrl(
-            clientId = "test-client-id",
-            pinCode = "test-pin-code",
-        )
+        val url =
+            PlexAuthUrlBuilder.buildOAuthUrl(
+                clientId = "test-client-id",
+                pinCode = "test-pin-code",
+            )
 
         assertTrue("URL should start with auth base URL", url.startsWith("https://app.plex.tv/auth#?"))
     }
@@ -27,10 +28,11 @@ class PlexAuthUrlBuilderTest {
     @Test
     fun buildOAuthUrl_containsClientId() {
         val clientId = "test-client-123"
-        val url = PlexAuthUrlBuilder.buildOAuthUrl(
-            clientId = clientId,
-            pinCode = "test-pin",
-        )
+        val url =
+            PlexAuthUrlBuilder.buildOAuthUrl(
+                clientId = clientId,
+                pinCode = "test-pin",
+            )
 
         assertTrue(
             "URL should contain clientID parameter",
@@ -41,10 +43,11 @@ class PlexAuthUrlBuilderTest {
     @Test
     fun buildOAuthUrl_containsPinCode() {
         val pinCode = "ABC123"
-        val url = PlexAuthUrlBuilder.buildOAuthUrl(
-            clientId = "test-client",
-            pinCode = pinCode,
-        )
+        val url =
+            PlexAuthUrlBuilder.buildOAuthUrl(
+                clientId = "test-client",
+                pinCode = pinCode,
+            )
 
         assertTrue(
             "URL should contain code parameter",
@@ -54,10 +57,11 @@ class PlexAuthUrlBuilderTest {
 
     @Test
     fun buildOAuthUrl_containsForwardUrl() {
-        val url = PlexAuthUrlBuilder.buildOAuthUrl(
-            clientId = "test-client",
-            pinCode = "test-pin",
-        )
+        val url =
+            PlexAuthUrlBuilder.buildOAuthUrl(
+                clientId = "test-client",
+                pinCode = "test-pin",
+            )
 
         assertTrue(
             "URL should contain forwardUrl parameter",
@@ -67,10 +71,11 @@ class PlexAuthUrlBuilderTest {
 
     @Test
     fun buildOAuthUrl_platformIsWeb() {
-        val url = PlexAuthUrlBuilder.buildOAuthUrl(
-            clientId = "test-client",
-            pinCode = "test-pin",
-        )
+        val url =
+            PlexAuthUrlBuilder.buildOAuthUrl(
+                clientId = "test-client",
+                pinCode = "test-pin",
+            )
 
         assertTrue(
             "Platform should be set to Web (not Android) for social login support",
@@ -80,10 +85,11 @@ class PlexAuthUrlBuilderTest {
 
     @Test
     fun buildOAuthUrl_containsAllRequiredContextParameters() {
-        val url = PlexAuthUrlBuilder.buildOAuthUrl(
-            clientId = "test-client",
-            pinCode = "test-pin",
-        )
+        val url =
+            PlexAuthUrlBuilder.buildOAuthUrl(
+                clientId = "test-client",
+                pinCode = "test-pin",
+            )
 
         // Verify all context parameters are present
         assertTrue(
@@ -114,10 +120,11 @@ class PlexAuthUrlBuilderTest {
         val clientId = "client-with-special-&=?"
         val pinCode = "pin-with-#-and-space"
 
-        val url = PlexAuthUrlBuilder.buildOAuthUrl(
-            clientId = clientId,
-            pinCode = pinCode,
-        )
+        val url =
+            PlexAuthUrlBuilder.buildOAuthUrl(
+                clientId = clientId,
+                pinCode = pinCode,
+            )
 
         // Verify special characters are URL encoded
         assertTrue(
@@ -148,14 +155,16 @@ class PlexAuthUrlBuilderTest {
 
     @Test
     fun buildOAuthUrl_differentInputsProduceDifferentUrls() {
-        val url1 = PlexAuthUrlBuilder.buildOAuthUrl(
-            clientId = "client1",
-            pinCode = "pin1",
-        )
-        val url2 = PlexAuthUrlBuilder.buildOAuthUrl(
-            clientId = "client2",
-            pinCode = "pin2",
-        )
+        val url1 =
+            PlexAuthUrlBuilder.buildOAuthUrl(
+                clientId = "client1",
+                pinCode = "pin1",
+            )
+        val url2 =
+            PlexAuthUrlBuilder.buildOAuthUrl(
+                clientId = "client2",
+                pinCode = "pin2",
+            )
 
         assertTrue(
             "Different inputs should produce different URLs",

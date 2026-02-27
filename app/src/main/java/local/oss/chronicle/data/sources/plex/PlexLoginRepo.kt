@@ -173,12 +173,12 @@ class PlexLoginRepo
         override fun chooseLibrary(plexLibrary: PlexLibrary) {
             Timber.i("User chose library: $plexLibrary")
             plexPrefsRepo.library = plexLibrary
-            
+
             // Save account to multi-account database
             val user = plexPrefsRepo.user
             val server = plexPrefsRepo.server
             val accountToken = plexPrefsRepo.accountAuthToken
-            
+
             if (user != null && server != null && accountToken.isNotEmpty()) {
                 scope.launch {
                     try {
@@ -186,19 +186,20 @@ class PlexLoginRepo
                         // before saving to the database. This prevents stale URLs from
                         // previous accounts being saved for new accounts.
                         // See: LibrarySyncRepository.syncLibrary() for reference pattern
-                        val connectionSuccess = plexConfig.updateServerForSync(
-                            server.connections,
-                            server.accessToken
-                        )
+                        val connectionSuccess =
+                            plexConfig.updateServerForSync(
+                                server.connections,
+                                server.accessToken,
+                            )
                         if (!connectionSuccess) {
                             Timber.e("Failed to connect to server for library ${plexLibrary.name}")
                             // Still navigate on connection error to avoid blocking user
                             _loginState.postEvent(LOGGED_IN_FULLY)
                             return@launch
                         }
-                        
+
                         Timber.i("Successfully resolved server URL: ${plexConfig.url}")
-                        
+
                         val userToken = user.authToken?.takeIf { it.isNotEmpty() } ?: accountToken
                         accountManager.addPlexAccountWithLibrary(
                             userUuid = user.uuid,
@@ -211,7 +212,7 @@ class PlexLoginRepo
                             libraryType = "artist",
                             userAuthToken = userToken,
                             serverAccessToken = server.accessToken,
-                            serverUrl = plexConfig.url
+                            serverUrl = plexConfig.url,
                         )
                         Timber.i("Account saved to database: ${user.uuid}, library: ${plexLibrary.id}")
                         // ✅ Navigate ONLY after save completes

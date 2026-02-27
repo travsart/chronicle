@@ -8,8 +8,9 @@ import local.oss.chronicle.data.local.ITrackRepository.Companion.TRACK_NOT_FOUND
 
 @Entity
 data class Chapter(
+    @PrimaryKey(autoGenerate = true)
+    val uid: Long = 0L,
     val title: String = "",
-    @PrimaryKey
     val id: Long = 0L,
     val index: Long = 0L,
     val discNumber: Int = 1,
@@ -42,7 +43,7 @@ data class Chapter(
     }
 }
 
-val EMPTY_CHAPTER = Chapter("")
+val EMPTY_CHAPTER = Chapter(uid = 0L, title = "")
 
 /**
  * Returns the chapter which contains the [timeStamp] (the playback progress of the track containing
@@ -73,6 +74,7 @@ class ChapterListConverter {
             val trackId = if (split.size >= 8) split[7] else TRACK_NOT_FOUND
             val bookId = if (split.size >= 9) split[8] else NO_AUDIOBOOK_FOUND_ID
             Chapter(
+                uid = 0L, // Will be auto-generated on insert
                 title = split[0],
                 id = split[1].toLong(),
                 index = split[2].toLong(),

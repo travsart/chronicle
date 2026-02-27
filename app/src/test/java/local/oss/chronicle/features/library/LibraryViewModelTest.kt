@@ -63,41 +63,42 @@ class LibraryViewModelTest {
 
     private lateinit var viewModel: LibraryViewModel
 
-    private val testBooks = listOf(
-        Audiobook(
-            id = "plex:1",
-            source = 0L,
-            title = "Book from Library A",
-            titleSort = "Book from Library A",
-            author = "Author A",
-            libraryId = "plex:library:1",
-            thumb = "",
-            duration = 3600000L,
-            progress = 0L,
-        ),
-        Audiobook(
-            id = "plex:2",
-            source = 0L,
-            title = "Book from Library B",
-            titleSort = "Book from Library B",
-            author = "Author B",
-            libraryId = "plex:library:2",
-            thumb = "",
-            duration = 7200000L,
-            progress = 0L,
-        ),
-        Audiobook(
-            id = "plex:3",
-            source = 0L,
-            title = "Another Book from Library A",
-            titleSort = "Another Book from Library A",
-            author = "Author C",
-            libraryId = "plex:library:1",
-            thumb = "",
-            duration = 5400000L,
-            progress = 0L,
-        ),
-    )
+    private val testBooks =
+        listOf(
+            Audiobook(
+                id = "plex:1",
+                source = 0L,
+                title = "Book from Library A",
+                titleSort = "Book from Library A",
+                author = "Author A",
+                libraryId = "plex:library:1",
+                thumb = "",
+                duration = 3600000L,
+                progress = 0L,
+            ),
+            Audiobook(
+                id = "plex:2",
+                source = 0L,
+                title = "Book from Library B",
+                titleSort = "Book from Library B",
+                author = "Author B",
+                libraryId = "plex:library:2",
+                thumb = "",
+                duration = 7200000L,
+                progress = 0L,
+            ),
+            Audiobook(
+                id = "plex:3",
+                source = 0L,
+                title = "Another Book from Library A",
+                titleSort = "Another Book from Library A",
+                author = "Author C",
+                libraryId = "plex:library:1",
+                thumb = "",
+                duration = 5400000L,
+                progress = 0L,
+            ),
+        )
 
     @Before
     fun setup() {
@@ -135,14 +136,15 @@ class LibraryViewModelTest {
             `when`(bookRepository.getAllBooks()).thenReturn(allBooksLiveData)
 
             // When: ViewModel is created
-            viewModel = LibraryViewModel(
-                bookRepository,
-                trackRepository,
-                prefsRepo,
-                cachedFileManager,
-                librarySyncRepository,
-                sharedPreferences,
-            )
+            viewModel =
+                LibraryViewModel(
+                    bookRepository,
+                    trackRepository,
+                    prefsRepo,
+                    cachedFileManager,
+                    librarySyncRepository,
+                    sharedPreferences,
+                )
 
             // Then: Books LiveData should be initialized
             assertThat(viewModel.books, notNullValue())
@@ -161,14 +163,15 @@ class LibraryViewModelTest {
             `when`(bookRepository.getAllBooks()).thenReturn(allBooksLiveData)
 
             // When: ViewModel is created
-            viewModel = LibraryViewModel(
-                bookRepository,
-                trackRepository,
-                prefsRepo,
-                cachedFileManager,
-                librarySyncRepository,
-                sharedPreferences,
-            )
+            viewModel =
+                LibraryViewModel(
+                    bookRepository,
+                    trackRepository,
+                    prefsRepo,
+                    cachedFileManager,
+                    librarySyncRepository,
+                    sharedPreferences,
+                )
 
             // Then: Verify getAllBooks() is called (aggregates all libraries)
             verify(bookRepository, times(1)).getAllBooks()
@@ -183,20 +186,22 @@ class LibraryViewModelTest {
         runBlocking {
             // Given: ViewModel with books from multiple libraries
             val allBooksLiveData = MutableLiveData(testBooks)
-            val searchResultsLiveData = MutableLiveData(
-                listOf(testBooks[0]), // Book from Library A
-            )
+            val searchResultsLiveData =
+                MutableLiveData(
+                    listOf(testBooks[0]), // Book from Library A
+                )
             `when`(bookRepository.getAllBooks()).thenReturn(allBooksLiveData)
             `when`(bookRepository.search(anyString())).thenReturn(searchResultsLiveData)
 
-            viewModel = LibraryViewModel(
-                bookRepository,
-                trackRepository,
-                prefsRepo,
-                cachedFileManager,
-                librarySyncRepository,
-                sharedPreferences,
-            )
+            viewModel =
+                LibraryViewModel(
+                    bookRepository,
+                    trackRepository,
+                    prefsRepo,
+                    cachedFileManager,
+                    librarySyncRepository,
+                    sharedPreferences,
+                )
 
             // When: User searches for a book
             viewModel.search("Book from Library A")
@@ -213,14 +218,15 @@ class LibraryViewModelTest {
             val allBooksLiveData = MutableLiveData(testBooks)
             `when`(bookRepository.getAllBooks()).thenReturn(allBooksLiveData)
 
-            viewModel = LibraryViewModel(
-                bookRepository,
-                trackRepository,
-                prefsRepo,
-                cachedFileManager,
-                librarySyncRepository,
-                sharedPreferences,
-            )
+            viewModel =
+                LibraryViewModel(
+                    bookRepository,
+                    trackRepository,
+                    prefsRepo,
+                    cachedFileManager,
+                    librarySyncRepository,
+                    sharedPreferences,
+                )
 
             // When: User triggers refresh
             viewModel.refreshData()
@@ -234,30 +240,31 @@ class LibraryViewModelTest {
     fun `tracks from all libraries are queried`() {
         runBlocking {
             // Given: Tracks from multiple libraries
-            val testTracks = listOf(
-                MediaItemTrack(
-                    id = "plex:101",
-                    source = 0L,
-                    album = "plex:1",
-                    libraryId = "plex:library:1",
-                    title = "Track 1",
-                    discNumber = 1,
-                    index = 1,
-                    size = 1024L,
-                    duration = 1800000L,
-                ),
-                MediaItemTrack(
-                    id = "plex:102",
-                    source = 0L,
-                    album = "plex:2",
-                    libraryId = "plex:library:2",
-                    title = "Track 2",
-                    discNumber = 1,
-                    index = 1,
-                    size = 2048L,
-                    duration = 3600000L,
-                ),
-            )
+            val testTracks =
+                listOf(
+                    MediaItemTrack(
+                        id = "plex:101",
+                        source = 0L,
+                        album = "plex:1",
+                        libraryId = "plex:library:1",
+                        title = "Track 1",
+                        discNumber = 1,
+                        index = 1,
+                        size = 1024L,
+                        duration = 1800000L,
+                    ),
+                    MediaItemTrack(
+                        id = "plex:102",
+                        source = 0L,
+                        album = "plex:2",
+                        libraryId = "plex:library:2",
+                        title = "Track 2",
+                        discNumber = 1,
+                        index = 1,
+                        size = 2048L,
+                        duration = 3600000L,
+                    ),
+                )
 
             val tracksLiveData = MutableLiveData(testTracks)
             val allBooksLiveData = MutableLiveData(testBooks)
@@ -266,14 +273,15 @@ class LibraryViewModelTest {
             `when`(trackRepository.getAllTracks()).thenReturn(tracksLiveData)
 
             // When: ViewModel is created
-            viewModel = LibraryViewModel(
-                bookRepository,
-                trackRepository,
-                prefsRepo,
-                cachedFileManager,
-                librarySyncRepository,
-                sharedPreferences,
-            )
+            viewModel =
+                LibraryViewModel(
+                    bookRepository,
+                    trackRepository,
+                    prefsRepo,
+                    cachedFileManager,
+                    librarySyncRepository,
+                    sharedPreferences,
+                )
 
             // Then: getAllTracks should be called (not filtered by library)
             verify(trackRepository).getAllTracks()

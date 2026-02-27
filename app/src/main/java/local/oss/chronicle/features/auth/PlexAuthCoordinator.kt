@@ -155,15 +155,15 @@ class PlexAuthCoordinator
         private fun startPolling(pinId: Long) {
             startTime = System.currentTimeMillis()
             pollingInterval = POLLING_INTERVAL_MS
-    
+
             pollingJob =
                 scope.launch {
                     // Give UI time to observe WaitingForUser and launch Chrome Custom Tab
                     delay(POLLING_INTERVAL_MS)
-    
+
                     while (isActive) {
                         val elapsed = System.currentTimeMillis() - startTime
-    
+
                         // Check timeout (2 minutes)
                         if (elapsed > TIMEOUT_MS) {
                             Timber.w("OAuth authentication timed out after ${elapsed}ms")
@@ -171,7 +171,7 @@ class PlexAuthCoordinator
                             AuthCoordinatorSingleton.unregister()
                             break
                         }
-    
+
                         // Update state with current elapsed time
                         _state.value = PlexAuthState.Polling(pinId, elapsed)
 

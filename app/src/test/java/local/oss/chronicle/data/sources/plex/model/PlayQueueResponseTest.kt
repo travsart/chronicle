@@ -13,7 +13,6 @@ import org.mockito.junit.MockitoJUnitRunner
  */
 @RunWith(MockitoJUnitRunner::class)
 class PlayQueueResponseTest {
-
     // ========================================
     // toPlayQueueItemMap() Tests
     // ========================================
@@ -21,17 +20,19 @@ class PlayQueueResponseTest {
     @Test
     fun `toPlayQueueItemMap maps ratingKey to playQueueItemId correctly`() {
         // Given: A response with multiple items
-        val items = listOf(
-            PlayQueueItem(ratingKey = "12345", playQueueItemID = 1001L, title = "Track 1"),
-            PlayQueueItem(ratingKey = "67890", playQueueItemID = 1002L, title = "Track 2"),
-            PlayQueueItem(ratingKey = "11111", playQueueItemID = 1003L, title = "Track 3"),
-        )
+        val items =
+            listOf(
+                PlayQueueItem(ratingKey = "12345", playQueueItemID = 1001L, title = "Track 1"),
+                PlayQueueItem(ratingKey = "67890", playQueueItemID = 1002L, title = "Track 2"),
+                PlayQueueItem(ratingKey = "11111", playQueueItemID = 1003L, title = "Track 3"),
+            )
 
-        val mediaContainer = PlayQueueMediaContainer(
-            playQueueID = 100L,
-            playQueueSelectedItemID = 1001L,
-            metadata = items,
-        )
+        val mediaContainer =
+            PlayQueueMediaContainer(
+                playQueueID = 100L,
+                playQueueSelectedItemID = 1001L,
+                metadata = items,
+            )
 
         val response = PlayQueueResponseWrapper(mediaContainer = mediaContainer)
 
@@ -48,11 +49,12 @@ class PlayQueueResponseTest {
     @Test
     fun `toPlayQueueItemMap handles null metadata list`() {
         // Given: A response with null metadata
-        val mediaContainer = PlayQueueMediaContainer(
-            playQueueID = 100L,
-            playQueueSelectedItemID = -1L,
-            metadata = null,
-        )
+        val mediaContainer =
+            PlayQueueMediaContainer(
+                playQueueID = 100L,
+                playQueueSelectedItemID = -1L,
+                metadata = null,
+            )
 
         val response = PlayQueueResponseWrapper(mediaContainer = mediaContainer)
 
@@ -78,11 +80,12 @@ class PlayQueueResponseTest {
     @Test
     fun `toPlayQueueItemMap handles empty metadata list`() {
         // Given: A response with empty metadata list
-        val mediaContainer = PlayQueueMediaContainer(
-            playQueueID = 100L,
-            playQueueSelectedItemID = -1L,
-            metadata = emptyList(),
-        )
+        val mediaContainer =
+            PlayQueueMediaContainer(
+                playQueueID = 100L,
+                playQueueSelectedItemID = -1L,
+                metadata = emptyList(),
+            )
 
         val response = PlayQueueResponseWrapper(mediaContainer = mediaContainer)
 
@@ -96,16 +99,18 @@ class PlayQueueResponseTest {
     @Test
     fun `toPlayQueueItemMap handles items with empty ratingKey`() {
         // Given: Items with empty ratingKey
-        val items = listOf(
-            PlayQueueItem(ratingKey = "", playQueueItemID = 1001L, title = "Track 1"),
-            PlayQueueItem(ratingKey = "12345", playQueueItemID = 1002L, title = "Track 2"),
-        )
+        val items =
+            listOf(
+                PlayQueueItem(ratingKey = "", playQueueItemID = 1001L, title = "Track 1"),
+                PlayQueueItem(ratingKey = "12345", playQueueItemID = 1002L, title = "Track 2"),
+            )
 
-        val mediaContainer = PlayQueueMediaContainer(
-            playQueueID = 100L,
-            playQueueSelectedItemID = 1001L,
-            metadata = items,
-        )
+        val mediaContainer =
+            PlayQueueMediaContainer(
+                playQueueID = 100L,
+                playQueueSelectedItemID = 1001L,
+                metadata = items,
+            )
 
         val response = PlayQueueResponseWrapper(mediaContainer = mediaContainer)
 
@@ -121,16 +126,18 @@ class PlayQueueResponseTest {
     @Test
     fun `toPlayQueueItemMap handles items with default playQueueItemID`() {
         // Given: Items with default (-1) playQueueItemID
-        val items = listOf(
-            PlayQueueItem(ratingKey = "12345", playQueueItemID = -1L, title = "Track 1"),
-            PlayQueueItem(ratingKey = "67890", playQueueItemID = 1002L, title = "Track 2"),
-        )
+        val items =
+            listOf(
+                PlayQueueItem(ratingKey = "12345", playQueueItemID = -1L, title = "Track 1"),
+                PlayQueueItem(ratingKey = "67890", playQueueItemID = 1002L, title = "Track 2"),
+            )
 
-        val mediaContainer = PlayQueueMediaContainer(
-            playQueueID = 100L,
-            playQueueSelectedItemID = -1L,
-            metadata = items,
-        )
+        val mediaContainer =
+            PlayQueueMediaContainer(
+                playQueueID = 100L,
+                playQueueSelectedItemID = -1L,
+                metadata = items,
+            )
 
         val response = PlayQueueResponseWrapper(mediaContainer = mediaContainer)
 
@@ -146,15 +153,17 @@ class PlayQueueResponseTest {
     @Test
     fun `toPlayQueueItemMap handles single item response`() {
         // Given: A response with a single item
-        val items = listOf(
-            PlayQueueItem(ratingKey = "12345", playQueueItemID = 1001L, title = "Single Track"),
-        )
+        val items =
+            listOf(
+                PlayQueueItem(ratingKey = "12345", playQueueItemID = 1001L, title = "Single Track"),
+            )
 
-        val mediaContainer = PlayQueueMediaContainer(
-            playQueueID = 100L,
-            playQueueSelectedItemID = 1001L,
-            metadata = items,
-        )
+        val mediaContainer =
+            PlayQueueMediaContainer(
+                playQueueID = 100L,
+                playQueueSelectedItemID = 1001L,
+                metadata = items,
+            )
 
         val response = PlayQueueResponseWrapper(mediaContainer = mediaContainer)
 
@@ -169,17 +178,19 @@ class PlayQueueResponseTest {
     @Test
     fun `toPlayQueueItemMap adds plex prefix consistently`() {
         // Given: Multiple tracks with numeric rating keys
-        val items = listOf(
-            PlayQueueItem(ratingKey = "1", playQueueItemID = 2001L, title = "Track 1"),
-            PlayQueueItem(ratingKey = "999", playQueueItemID = 2002L, title = "Track 999"),
-            PlayQueueItem(ratingKey = "123456789", playQueueItemID = 2003L, title = "Track Long"),
-        )
+        val items =
+            listOf(
+                PlayQueueItem(ratingKey = "1", playQueueItemID = 2001L, title = "Track 1"),
+                PlayQueueItem(ratingKey = "999", playQueueItemID = 2002L, title = "Track 999"),
+                PlayQueueItem(ratingKey = "123456789", playQueueItemID = 2003L, title = "Track Long"),
+            )
 
-        val mediaContainer = PlayQueueMediaContainer(
-            playQueueID = 200L,
-            playQueueSelectedItemID = 2001L,
-            metadata = items,
-        )
+        val mediaContainer =
+            PlayQueueMediaContainer(
+                playQueueID = 200L,
+                playQueueSelectedItemID = 2001L,
+                metadata = items,
+            )
 
         val response = PlayQueueResponseWrapper(mediaContainer = mediaContainer)
 
@@ -200,15 +211,17 @@ class PlayQueueResponseTest {
     @Test
     fun `PlayQueueResponseWrapper handles all fields`() {
         // Given: A complete response structure
-        val items = listOf(
-            PlayQueueItem(ratingKey = "12345", playQueueItemID = 1001L, title = "Track 1"),
-        )
+        val items =
+            listOf(
+                PlayQueueItem(ratingKey = "12345", playQueueItemID = 1001L, title = "Track 1"),
+            )
 
-        val mediaContainer = PlayQueueMediaContainer(
-            playQueueID = 100L,
-            playQueueSelectedItemID = 1001L,
-            metadata = items,
-        )
+        val mediaContainer =
+            PlayQueueMediaContainer(
+                playQueueID = 100L,
+                playQueueSelectedItemID = 1001L,
+                metadata = items,
+            )
 
         val response = PlayQueueResponseWrapper(mediaContainer = mediaContainer)
 

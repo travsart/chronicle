@@ -50,15 +50,15 @@ import local.oss.chronicle.data.model.toMediaItem
 import local.oss.chronicle.data.sources.plex.*
 import local.oss.chronicle.data.sources.plex.IPlexLoginRepo.LoginState.*
 import local.oss.chronicle.data.sources.plex.model.getDuration
-import local.oss.chronicle.util.Event
-import local.oss.chronicle.util.SecurityUtils
 import local.oss.chronicle.features.currentlyplaying.CurrentlyPlaying
 import local.oss.chronicle.features.player.SleepTimer.Companion.ARG_SLEEP_TIMER_ACTION
 import local.oss.chronicle.features.player.SleepTimer.Companion.ARG_SLEEP_TIMER_DURATION_MILLIS
 import local.oss.chronicle.features.player.SleepTimer.SleepTimerAction
 import local.oss.chronicle.injection.components.DaggerServiceComponent
 import local.oss.chronicle.injection.modules.ServiceModule
+import local.oss.chronicle.util.Event
 import local.oss.chronicle.util.PackageValidator
+import local.oss.chronicle.util.SecurityUtils
 import local.oss.chronicle.util.ServiceUtils
 import timber.log.Timber
 import javax.inject.Inject
@@ -249,7 +249,7 @@ class MediaPlayerService :
         val accountTokenHash = SecurityUtils.hashToken(plexPrefs.accountAuthToken)
         Timber.d(
             "[TokenInjection] Post-injection token check: " +
-                "serverToken=$serverTokenHash, userToken=$userTokenHash, accountToken=$accountTokenHash"
+                "serverToken=$serverTokenHash, userToken=$userTokenHash, accountToken=$accountTokenHash",
         )
 
         ServiceUtils.notifyServiceStarted(this)
@@ -448,41 +448,43 @@ class MediaPlayerService :
             }
         }
 
-    private val loginStateObserver = Observer<Event<IPlexLoginRepo.LoginState>> { event ->
-        event.peekContent().let { loginState ->
-            Timber.d("[AndroidAuto] Login state changed: $loginState")
-            
-            // Clear Android Auto error messages when login completes successfully
-            if (loginState == LOGGED_IN_FULLY && isErrorState) {
-                Timber.d("[AndroidAuto] Login successful - clearing error state")
-                // Set playback state to STOPPED to clear any displayed error messages
-                mediaSession.setPlaybackState(
-                    PlaybackStateCompat.Builder()
-                        .setState(
-                            PlaybackStateCompat.STATE_STOPPED,
-                            PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN,
-                            0f,
-                        )
-                        .build(),
-                )
-                isErrorState = false
-                sessionErrorMessage = null
-            }
-            
-            notifyChildrenChanged(CHRONICLE_MEDIA_ROOT_ID)
-        }
-    }
+    private val loginStateObserver =
+        Observer<Event<IPlexLoginRepo.LoginState>> { event ->
+            event.peekContent().let { loginState ->
+                Timber.d("[AndroidAuto] Login state changed: $loginState")
 
-    private val librarySyncObserver = Observer<Boolean> { isRefreshing ->
-        if (!isRefreshing) {
-            Timber.d("[AndroidAuto] Library sync completed, refreshing browse tree")
-            notifyChildrenChanged(CHRONICLE_MEDIA_ROOT_ID)
-            notifyChildrenChanged(getString(R.string.auto_category_recently_added))
-            notifyChildrenChanged(getString(R.string.auto_category_library))
-            notifyChildrenChanged(getString(R.string.auto_category_recently_listened))
-            notifyChildrenChanged(getString(R.string.auto_category_offline))
+                // Clear Android Auto error messages when login completes successfully
+                if (loginState == LOGGED_IN_FULLY && isErrorState) {
+                    Timber.d("[AndroidAuto] Login successful - clearing error state")
+                    // Set playback state to STOPPED to clear any displayed error messages
+                    mediaSession.setPlaybackState(
+                        PlaybackStateCompat.Builder()
+                            .setState(
+                                PlaybackStateCompat.STATE_STOPPED,
+                                PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN,
+                                0f,
+                            )
+                            .build(),
+                    )
+                    isErrorState = false
+                    sessionErrorMessage = null
+                }
+
+                notifyChildrenChanged(CHRONICLE_MEDIA_ROOT_ID)
+            }
         }
-    }
+
+    private val librarySyncObserver =
+        Observer<Boolean> { isRefreshing ->
+            if (!isRefreshing) {
+                Timber.d("[AndroidAuto] Library sync completed, refreshing browse tree")
+                notifyChildrenChanged(CHRONICLE_MEDIA_ROOT_ID)
+                notifyChildrenChanged(getString(R.string.auto_category_recently_added))
+                notifyChildrenChanged(getString(R.string.auto_category_library))
+                notifyChildrenChanged(getString(R.string.auto_category_recently_listened))
+                notifyChildrenChanged(getString(R.string.auto_category_offline))
+            }
+        }
 
     /**
      * Change the tracks in the player to refer to the new server url. Because [PlexConfig] is a
@@ -698,13 +700,13 @@ class MediaPlayerService :
 
     override fun onDestroy() {
         Timber.i("Service destroyed")
-        
+
         // Release TTS resources
         voiceCommandBridgeAudio.release()
-        
+
         plexLoginRepo.loginEvent.removeObserver(loginStateObserver)
         librarySyncRepository.isRefreshing.removeObserver(librarySyncObserver)
-        
+
         // Send one last update to local/remote servers that playback has stopped
         val metadata = mediaController.metadata
         val trackId = metadata?.id
