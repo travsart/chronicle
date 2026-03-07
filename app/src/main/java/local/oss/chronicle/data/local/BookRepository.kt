@@ -4,6 +4,7 @@ import androidx.lifecycle.LiveData
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import local.oss.chronicle.data.model.*
+import androidx.lifecycle.map
 import local.oss.chronicle.data.sources.MediaSource
 import local.oss.chronicle.data.sources.plex.PlexMediaService
 import local.oss.chronicle.data.sources.plex.PlexPrefsRepo
@@ -20,7 +21,13 @@ interface IBookRepository {
     /** Return all [Audiobook]s in the DB, sorted by [Audiobook.titleSort] */
     fun getAllBooks(): LiveData<List<Audiobook>>
 
+    /** Return all [AudiobookListItem]s in the DB - lightweight projection for list views */
+    fun getAllBooksLightweight(): LiveData<List<AudiobookListItem>>
+
     suspend fun getAllBooksAsync(): List<Audiobook>
+
+    /** Return all [AudiobookListItem]s async - lightweight projection for list views */
+    suspend fun getAllBooksLightweightAsync(): List<AudiobookListItem>
 
     suspend fun getRandomBookAsync(): Audiobook
 
@@ -175,7 +182,14 @@ class BookRepository
         private val limitReturnCount = 25
 
         override fun getAllBooks(): LiveData<List<Audiobook>> {
-            return bookDao.getAllRows(prefsRepo.offlineMode)
+            // Use lightweight query and convert to Audiobook for backwards compatibility
+            return bookDao.getAllRowsLightweight(prefsRepo.offlineMode).map { items ->
+                items.toAudiobooks()
+            }
+        }
+    
+        override fun getAllBooksLightweight(): LiveData<List<AudiobookListItem>> {
+            return bookDao.getAllRowsLightweight(prefsRepo.offlineMode)
         }
 
         override suspend fun getBookCount(): Int {
@@ -469,8 +483,15 @@ class BookRepository
         }
 
         override suspend fun getAllBooksAsync(): List<Audiobook> {
+            // Use lightweight query and convert to Audiobook for backwards compatibility
             return withContext(Dispatchers.IO) {
-                bookDao.getAllBooksAsync(prefsRepo.offlineMode)
+                bookDao.getAllBooksLightweightAsync(prefsRepo.offlineMode).toAudiobooks()
+            }
+        }
+    
+        override suspend fun getAllBooksLightweightAsync(): List<AudiobookListItem> {
+            return withContext(Dispatchers.IO) {
+                bookDao.getAllBooksLightweightAsync(prefsRepo.offlineMode)
             }
         }
 

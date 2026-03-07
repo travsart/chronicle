@@ -65,29 +65,46 @@ private fun hideConstraint(constraintSet: ConstraintSet) {
  *
  * When chapter data is not yet loaded, duration may be 0, which would cause
  * the Slider to crash with "valueFrom(0.0) must be smaller than valueTo(0.0)".
- * This adapter ensures a minimum value of 1 is used when the duration is 0 or negative.
+ * This adapter ensures a minimum safe value is used when the duration is 0 or negative.
  */
 @BindingAdapter("safeValueTo")
 fun setSafeValueTo(
     slider: Slider,
     valueTo: Int,
 ) {
-    // Ensure valueTo is always greater than valueFrom (which defaults to 0)
-    // Use 1 as the minimum to prevent the IllegalStateException
-    val safeValueTo =
-        if (valueTo <= slider.valueFrom) {
-            1f
-        } else {
-            valueTo.toFloat()
-        }
+    // Compute safe valueTo using helper
+    val safeValueTo = SliderSafetyHelper.computeSafeValueTo(valueTo, slider.valueFrom)
 
     // Only update if the value has changed to avoid unnecessary updates
     if (slider.valueTo != safeValueTo) {
         slider.valueTo = safeValueTo
 
-        // Also ensure the current value doesn't exceed the new maximum
+        // Also ensure the current value doesn't exceed the new maximum or fall below the minimum
         if (slider.value > safeValueTo) {
             slider.value = safeValueTo
+        } else if (slider.value < slider.valueFrom) {
+            slider.value = slider.valueFrom
         }
+    }
+}
+
+/**
+ * Binding adapter that safely sets the Slider's value property.
+ * Ensures value is always within [valueFrom, valueTo] to prevent IllegalStateException.
+ *
+ * This prevents crashes when the value is set before valueTo is updated, or when the value
+ * temporarily exceeds the current max during state transitions.
+ */
+@BindingAdapter("safeValue")
+fun setSafeValue(
+    slider: Slider,
+    value: Int,
+) {
+    // Compute safe value using helper
+    val safeValue = SliderSafetyHelper.computeSafeValue(value, slider.valueFrom, slider.valueTo)
+
+    // Only update if the value has changed to avoid unnecessary updates
+    if (slider.value != safeValue) {
+        slider.value = safeValue
     }
 }

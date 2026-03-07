@@ -6,6 +6,7 @@ import androidx.room.*
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import local.oss.chronicle.data.model.Audiobook
+import local.oss.chronicle.data.model.AudiobookListItem
 
 private const val BOOK_DATABASE_NAME = "book_db"
 
@@ -153,6 +154,35 @@ abstract class BookDatabase : RoomDatabase() {
 interface BookDao {
     @Query("SELECT * FROM Audiobook WHERE isCached >= :offlineModeActive ORDER BY titleSort")
     fun getAllRows(offlineModeActive: Boolean): LiveData<List<Audiobook>>
+
+    /**
+     * Lightweight query for list views - excludes heavy fields (summary, genre, chapters, etc.)
+     * to reduce memory consumption when loading large libraries.
+     */
+    @Query(
+        """
+        SELECT id, libraryId, source, title, titleSort, author, thumb, duration, progress,
+               isCached, lastViewedAt, viewCount, addedAt, year, viewedLeafCount
+        FROM Audiobook
+        WHERE isCached >= :offlineModeActive
+        ORDER BY titleSort
+        """
+    )
+    fun getAllRowsLightweight(offlineModeActive: Boolean): LiveData<List<AudiobookListItem>>
+
+    /**
+     * Lightweight query for list views - async version.
+     */
+    @Query(
+        """
+        SELECT id, libraryId, source, title, titleSort, author, thumb, duration, progress,
+               isCached, lastViewedAt, viewCount, addedAt, year, viewedLeafCount
+        FROM Audiobook
+        WHERE isCached >= :offlineModeActive
+        ORDER BY titleSort ASC
+        """
+    )
+    fun getAllBooksLightweightAsync(offlineModeActive: Boolean): List<AudiobookListItem>
 
     @Query("SELECT * FROM Audiobook")
     fun getAudiobooks(): List<Audiobook>

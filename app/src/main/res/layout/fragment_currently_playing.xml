@@ -162,7 +162,7 @@
                         android:layout_marginLeft="@dimen/margin_normal"
                         android:layout_marginTop="@dimen/currently_playing_seekbar_margin_top"
                         android:layout_marginRight="@dimen/margin_normal"
-                        android:value="@{(int) (viewModel.chapterProgressForSlider == -1L ? viewModel.trackProgressForSlider : viewModel.chapterProgressForSlider)}"
+                        app:safeValue="@{(int) (viewModel.chapterProgressForSlider == -1L ? viewModel.trackProgressForSlider : viewModel.chapterProgressForSlider)}"
                         app:safeValueTo="@{(int) (viewModel.chapterDuration == 0L ? viewModel.currentTrack.duration : viewModel.chapterDuration ) }"
                         app:labelStyle="@style/ProgressSliderTooltip"
                         app:layout_constraintLeft_toLeftOf="@id/left_gutter"

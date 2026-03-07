@@ -93,14 +93,30 @@ class TrackListStateManager {
         activeTrackIndex: Int,
         offsetFromTrackStart: Long,
     ) = mutex.withLock {
-        if (activeTrackIndex >= _state.trackList.size) {
-            throw IndexOutOfBoundsException(
-                "Cannot set current track index = $activeTrackIndex if tracklist.size == ${_state.trackList.size}",
-            )
+        // Defensive: handle empty track list
+        if (_state.trackList.isEmpty()) {
+            Timber.w("updatePosition called with empty track list, ignoring update")
+            return@withLock
         }
+
+        // Defensive: clamp index to valid range instead of throwing
+        val clampedIndex = when {
+            activeTrackIndex < 0 -> {
+                Timber.w("updatePosition called with negative index $activeTrackIndex, clamping to 0")
+                0
+            }
+            activeTrackIndex >= _state.trackList.size -> {
+                Timber.w(
+                    "updatePosition called with out-of-bounds index $activeTrackIndex (trackList.size=${_state.trackList.size}), clamping to ${_state.trackList.size - 1}",
+                )
+                _state.trackList.size - 1
+            }
+            else -> activeTrackIndex
+        }
+
         _state =
             _state.copy(
-                currentTrackIndex = activeTrackIndex,
+                currentTrackIndex = clampedIndex,
                 currentTrackProgress = offsetFromTrackStart,
             )
     }

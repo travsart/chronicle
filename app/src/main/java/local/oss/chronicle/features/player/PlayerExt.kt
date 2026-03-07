@@ -30,6 +30,12 @@ fun Player.seekRelative(
         )
         seekTo(currentPosition + durationMillis)
     } else {
+        // Defense-in-depth: guard against empty track list
+        if (trackListStateManager.trackList.isEmpty()) {
+            Timber.w("seekRelative called with empty track list, ignoring seek")
+            return
+        }
+
         Timber.i("Seeking via trackliststatemanager")
         trackListStateManager.updatePositionBlocking(currentMediaItemIndex, currentPosition)
         trackListStateManager.seekByRelativeBlocking(durationMillis)

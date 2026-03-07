@@ -192,4 +192,75 @@ class TrackListStateManagerTest {
                 `is`(Pair((1), (25L))),
             )
         }
+
+    @Test
+    fun `updatePosition handles out of bounds index by clamping to last valid index`() =
+        runBlocking {
+            // Given: manager with 3 tracks
+            // When: attempt to set index beyond track list size
+            manager.updatePosition(10, 25)
+
+            // Then: should clamp to last valid index instead of throwing
+            assertThat(
+                manager.currentTrackIndex,
+                `is`(2), // Last valid index for 3 tracks
+            )
+            assertThat(
+                manager.currentTrackProgress,
+                `is`(25L),
+            )
+        }
+
+    @Test
+    fun `updatePosition handles negative index by clamping to zero`() =
+        runBlocking {
+            // Given: manager with tracks
+            // When: attempt to set negative index
+            manager.updatePosition(-1, 25)
+
+            // Then: should clamp to 0 instead of throwing
+            assertThat(
+                manager.currentTrackIndex,
+                `is`(0),
+            )
+            assertThat(
+                manager.currentTrackProgress,
+                `is`(25L),
+            )
+        }
+
+    @Test
+    fun `updatePosition handles empty track list gracefully`() =
+        runBlocking {
+            // Given: manager with empty track list
+            val emptyManager = TrackListStateManager()
+            emptyManager.setTrackList(emptyList())
+
+            // When: attempt to update position on empty list
+            // Then: should not throw, just return
+            emptyManager.updatePosition(0, 25)
+
+            // Verify state remains sensible
+            assertThat(
+                emptyManager.trackList.size,
+                `is`(0),
+            )
+        }
+
+    @Test
+    fun `updatePositionBlocking handles out of bounds index`() {
+        // Given: manager with 3 tracks
+        // When: attempt to set index beyond track list size using blocking variant
+        manager.updatePositionBlocking(10, 25)
+
+        // Then: should clamp to last valid index instead of throwing
+        assertThat(
+            manager.currentTrackIndex,
+            `is`(2), // Last valid index for 3 tracks
+        )
+        assertThat(
+            manager.currentTrackProgress,
+            `is`(25L),
+        )
+    }
 }
