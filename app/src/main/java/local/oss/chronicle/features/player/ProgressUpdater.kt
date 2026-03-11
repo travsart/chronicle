@@ -196,21 +196,41 @@ class SimpleProgressUpdater
                 // Read from PlaybackStateController to avoid race condition when switching libraries
                 val state = playbackStateController.state.value
                 val book = state.audiobook
-                val track = state.currentTrack
+                val stateCurrentTrack = state.currentTrack
                 val tracks = state.tracks
 
                 // Validate that we're updating the correct track (edge case: rapid track switching)
-                if (track == null || track.id != trackId) {
-                    Timber.w(
-                        "Track mismatch in updateProgress: requested=$trackId, " +
-                            "current=${track?.id}. Skipping update to avoid race condition.",
-                    )
-                    return@launch
+                // If there's a mismatch, check if it's a legitimate track transition within the same audiobook
+                val trackIndex = tracks.indexOfFirst { it.id == trackId }
+                
+                if (stateCurrentTrack == null || stateCurrentTrack.id != trackId) {
+                    if (trackIndex == -1) {
+                        // Track not found in current audiobook - this is likely a library switch or different audiobook
+                        Timber.w(
+                            "Track mismatch in updateProgress: requested=$trackId, " +
+                                "current=${stateCurrentTrack?.id}, not found in track list. Skipping update to avoid race condition.",
+                        )
+                        return@launch
+                    } else {
+                        // Track found in track list - this is a legitimate track transition (e.g., auto-advance to next track)
+                        Timber.i(
+                            "Track transition detected in updateProgress: from ${stateCurrentTrack?.id} to $trackId " +
+                                "(new track index=$trackIndex). Proceeding with update.",
+                        )
+                    }
                 }
 
                 // No reason to update if the book doesn't exist
                 if (book == null) {
                     Timber.w("No book in PlaybackState for track $trackId, skipping update")
+                    return@launch
+                }
+
+                // Get the actual track we're updating (either from state or from track list if transitioning)
+                val track = if (trackIndex >= 0) tracks[trackIndex] else null
+                
+                if (track == null) {
+                    Timber.w("Track $trackId not found in track list, skipping update")
                     return@launch
                 }
 
@@ -228,10 +248,8 @@ class SimpleProgressUpdater
                         "playbackState=$playbackState",
                 )
 
-                // Find track index in the track list (0-based)
-                val trackIndex = tracks.indexOfFirst { it.id == trackId }
+                // Update PlaybackStateController with current position
                 if (trackIndex >= 0) {
-                    // Update PlaybackStateController with current position
                     playbackStateController.updatePosition(trackIndex, progress)
                 }
 
