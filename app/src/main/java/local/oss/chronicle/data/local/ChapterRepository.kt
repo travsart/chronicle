@@ -6,6 +6,7 @@ import local.oss.chronicle.BuildConfig
 import local.oss.chronicle.data.model.Chapter
 import local.oss.chronicle.data.model.MediaItemTrack
 import local.oss.chronicle.data.model.asChapter
+import local.oss.chronicle.data.model.filterTransitionMarkers
 import local.oss.chronicle.data.sources.plex.PlexPrefsRepo
 import local.oss.chronicle.data.sources.plex.ScopedPlexServiceFactory
 import local.oss.chronicle.data.sources.plex.ServerConnectionResolver
@@ -92,7 +93,8 @@ class ChapterRepository
                                 downloaded = isAudiobookCached,
                                 bookId = bookId,
                             )
-                        }.takeIf { !it.isNullOrEmpty() } ?: listOf(track.asChapter(0L, bookId))
+                        }?.filterTransitionMarkers().takeIf { !it.isNullOrEmpty() }
+                            ?: listOf(track.asChapter(0L, bookId))
                     }.sorted()
                 } catch (t: Throwable) {
                     Timber.e("Failed to load chapters: $t")

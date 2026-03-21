@@ -526,7 +526,7 @@ class BookRepository
                     try {
                         chapterDao.getChapters().filter { chapter ->
                             trackIds.contains(chapter.trackId)
-                        }.sorted()
+                        }.sorted().filterTransitionMarkers()
                     } catch (t: Throwable) {
                         Timber.e("Failed to retrieve chapters from database: $t")
                         emptyList()

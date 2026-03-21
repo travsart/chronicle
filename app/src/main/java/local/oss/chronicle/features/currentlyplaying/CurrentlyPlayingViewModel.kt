@@ -136,7 +136,7 @@ class CurrentlyPlayingViewModel(
         ) { _audiobook: Audiobook?, _tracksAsChapters: List<Chapter>? ->
             if (_audiobook?.chapters?.isNotEmpty() == true) {
                 // We would really prefer this because it doesn't have to be computed
-                _audiobook.chapters
+                _audiobook.chapters.filterTransitionMarkers()
             } else {
                 _tracksAsChapters ?: emptyList()
             }

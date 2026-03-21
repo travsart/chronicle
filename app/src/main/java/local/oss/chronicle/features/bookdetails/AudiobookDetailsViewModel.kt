@@ -109,7 +109,7 @@ class AudiobookDetailsViewModel(
                 "Chapter data updated! audiobook chapters: ${_audiobook?.chapters?.size}, tracksAsChapters: ${_tracksAsChapters?.size}",
             )
 
-            val audiobookChapters = _audiobook?.chapters.orEmpty()
+            val audiobookChapters = _audiobook?.chapters.orEmpty().filterTransitionMarkers()
             val trackChapters = _tracksAsChapters.orEmpty()
 
             // Prefer the source with more chapters (real Plex chapters > track fallbacks)

@@ -401,6 +401,7 @@ class ChapterRepository @Inject constructor(
 - Uses library-specific server connections via `ServerConnectionResolver`
 - `loadChapterData()` accepts `bookId` parameter to correctly associate chapters with their audiobook
 - `PlexChapter.toChapter()` conversion now accepts `bookId` to set the chapter's parent book
+- Filters out Plex transition markers when a track also has a meaningful embedded chapter, preventing duplicate `0:00` chapter rows in the UI
 - Used by `BookRepository` to delegate chapter loading
 - Ensures chapters load from correct Plex server in multi-library setups
 
@@ -526,6 +527,8 @@ data class Chapter(
 **Primary Key Change (v1→v2)**: Changed from `@PrimaryKey id` to `@PrimaryKey(autoGenerate = true) uid` to prevent overwrites when multiple chapters share the same track rating key. The `id` field is retained for Plex identification but is no longer the primary key.
 
 **Database Migration**: ChapterDatabase v1→v2 was a destructive migration (dropped and recreated table) since chapters are transient data that can be refetched from the Plex server.
+
+**Transition Marker Filtering**: Some Plex audiobook responses include tiny boundary markers, often around 40-50 ms, in addition to the real chapter for the same track. Chronicle skips those marker rows when a meaningful chapter exists for that track so chapter navigation and lists do not show duplicate `0:00` entries.
 
 ## SharedPreferences
 

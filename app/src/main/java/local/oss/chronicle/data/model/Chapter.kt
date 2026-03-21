@@ -4,6 +4,7 @@ import android.text.format.DateUtils
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import androidx.room.TypeConverter
+import local.oss.chronicle.application.MILLIS_PER_SECOND
 import local.oss.chronicle.data.local.ITrackRepository.Companion.TRACK_NOT_FOUND
 
 @Entity
@@ -59,6 +60,25 @@ fun List<Chapter>.getChapterAt(
         }
     }
     return EMPTY_CHAPTER
+}
+
+fun List<Chapter>.filterTransitionMarkers(minDurationMs: Long = MILLIS_PER_SECOND): List<Chapter> {
+    if (isEmpty()) {
+        return this
+    }
+
+    val trackHasMeaningfulChapter =
+        groupBy { it.trackId }
+            .mapValues { (_, trackChapters) ->
+                trackChapters.any { chapter ->
+                    (chapter.endTimeOffset - chapter.startTimeOffset) >= minDurationMs
+                }
+            }
+
+    return filter { chapter ->
+        !trackHasMeaningfulChapter.getValue(chapter.trackId) ||
+            (chapter.endTimeOffset - chapter.startTimeOffset) >= minDurationMs
+    }
 }
 
 class ChapterListConverter {

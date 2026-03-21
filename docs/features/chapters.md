@@ -14,6 +14,8 @@ Chapters enable:
 - Seekbar scoped to current chapter
 - Chapter title display in player and mini player
 
+Chronicle also filters out Plex transition markers when they appear alongside real embedded chapters. These markers are usually very short, sub-second boundary entries that would otherwise show up as duplicate `0:00` chapters in the UI.
+
 ---
 
 ## Architecture
@@ -161,6 +163,7 @@ sequenceDiagram
 - `loadChapterData()` accepts `bookId` parameter to associate chapters with their audiobook
 - `PlexChapter.toChapter()` conversion now accepts `bookId` parameter
 - Chapters are correctly associated with their parent audiobook in the database
+- Sub-second transition markers from Plex are skipped when the same track also contains a meaningful chapter, preventing duplicate `0:00` rows in chapter lists
 
 ### Fallback Behavior
 
@@ -168,6 +171,14 @@ When a track has no embedded chapters:
 - A chapter is synthesized from the [`MediaItemTrack`](../../app/src/main/java/local/oss/chronicle/data/model/MediaItemTrack.kt) using [`track.asChapter()`](../../app/src/main/java/local/oss/chronicle/data/local/ChapterRepository.kt:66)
 - The track title becomes the chapter title
 - Chapter spans the entire track duration
+
+### Plex Transition Markers
+
+Some Plex chapter responses include two markers for the same track:
+- A meaningful chapter entry that spans the real content
+- A second boundary marker of roughly 40-50 ms at the chapter end
+
+Those boundary markers are not useful for chapter navigation. If left unfiltered, they appear as duplicate entries with a displayed duration of `0:00`. Chronicle removes them with [`filterTransitionMarkers()`](../../app/src/main/java/local/oss/chronicle/data/model/Chapter.kt) whenever that track already has a real chapter, while still preserving genuinely short standalone chapters when no better chapter data exists.
 
 ---
 
@@ -213,6 +224,8 @@ graph LR
 3. Determines current chapter using [`getChapterAt()`](../../app/src/main/java/local/oss/chronicle/data/model/Chapter.kt:51)
 4. Updates [`CurrentlyPlayingSingleton`](../../app/src/main/java/local/oss/chronicle/features/currentlyplaying/CurrentlyPlayingSingleton.kt) with new state
 5. [`CurrentlyPlayingSingleton`](../../app/src/main/java/local/oss/chronicle/features/currentlyplaying/CurrentlyPlayingSingleton.kt) deduplicates identical updates to prevent UI flicker
+
+Before playback state and chapter lists consume embedded chapters, Chronicle filters transition markers so chapter selection is based on meaningful content chapters rather than the tiny boundary markers returned by Plex.
 
 ### Deduplication Guard
 

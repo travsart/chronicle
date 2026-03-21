@@ -122,6 +122,7 @@ Chronicle uses Media3 (ExoPlayer) for background audio playback with:
 ### Chapter System
 Chronicle supports chapter navigation for M4B audiobooks and multi-file audiobooks:
 - Chapters sourced from Plex API or synthesized from track files
+- Sub-second Plex transition markers are skipped so duplicate `0:00` chapter rows are not shown
 - Chapter-scoped seekbar and progress display
 - Skip to next/previous chapter navigation
 - Chapter list with active chapter highlighting
