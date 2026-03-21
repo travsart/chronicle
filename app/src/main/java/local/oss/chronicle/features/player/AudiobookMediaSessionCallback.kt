@@ -33,6 +33,7 @@ import local.oss.chronicle.features.player.MediaPlayerService.Companion.KEY_STAR
 import local.oss.chronicle.features.player.MediaPlayerService.Companion.USE_SAVED_TRACK_PROGRESS
 import local.oss.chronicle.injection.scopes.ServiceScope
 import timber.log.Timber
+import java.io.File
 import javax.inject.Inject
 
 @ExperimentalCoroutinesApi
@@ -728,26 +729,58 @@ class AudiobookMediaSessionCallback
                     return@launch
                 }
 
-                Timber.i("Tracks: $tracks")
+                val updatedCacheTrackIds = mutableListOf<String>()
+                val normalizedTracks =
+                    tracks.map { track ->
+                        if (track.cached) {
+                            return@map track
+                        }
+
+                        val cachedFile = File(prefsRepo.cachedMediaDir, track.getCachedFileName())
+                        if (cachedFile.exists()) {
+                            updatedCacheTrackIds += track.id
+                            track.copy(cached = true)
+                        } else {
+                            track
+                        }
+                    }
+
+                if (updatedCacheTrackIds.isNotEmpty()) {
+                    Timber.i(
+                        "Detected ${updatedCacheTrackIds.size} locally cached tracks with stale DB flags for book $bookId; using local files",
+                    )
+                    withContext(Dispatchers.IO) {
+                        updatedCacheTrackIds.forEach { trackId ->
+                            trackRepository.updateCachedStatus(trackId, true)
+                        }
+                    }
+                }
+
+                Timber.i("Tracks: $normalizedTracks")
 
                 // Pre-resolve streaming URLs using Plex's decision endpoint for bandwidth-aware playback
                 // This populates MediaItemTrack.streamingUrlCache which is used by getTrackSource()
-                try {
-                    Timber.i("Pre-resolving streaming URLs for ${tracks.size} tracks...")
-                    val resolvedCount =
-                        withContext(Dispatchers.IO) {
-                            playbackUrlResolver.preResolveUrls(tracks)
-                        }
-                    Timber.i("Successfully pre-resolved $resolvedCount/${tracks.size} streaming URLs")
-                } catch (e: Exception) {
-                    Timber.w(e, "Failed to pre-resolve streaming URLs, will fall back to direct file URLs")
+                val streamingTracks = normalizedTracks.filterNot { it.cached }
+                if (streamingTracks.isNotEmpty()) {
+                    try {
+                        Timber.i("Pre-resolving streaming URLs for ${streamingTracks.size} tracks...")
+                        val resolvedCount =
+                            withContext(Dispatchers.IO) {
+                                playbackUrlResolver.preResolveUrls(streamingTracks)
+                            }
+                        Timber.i("Successfully pre-resolved $resolvedCount/${streamingTracks.size} streaming URLs")
+                    } catch (e: Exception) {
+                        Timber.w(e, "Failed to pre-resolve streaming URLs, will fall back to direct file URLs")
+                    }
+                } else {
+                    Timber.i("Skipping streaming URL pre-resolution because all tracks are cached locally")
                 }
 
-                trackListStateManager.trackList = tracks
-                val metadataList = buildPlaylist(tracks, plexConfig)
+                trackListStateManager.trackList = normalizedTracks
+                val metadataList = buildPlaylist(normalizedTracks, plexConfig)
 
                 val queueItems =
-                    metadataList.zip(tracks).map { (metadata, track) ->
+                    metadataList.zip(normalizedTracks).map { (metadata, track) ->
                         val numericTrackId = track.id.removePrefix("plex:").toLongOrNull() ?: track.id.hashCode().toLong()
                         MediaSessionCompat.QueueItem(
                             metadata.fullDescription,
@@ -758,18 +791,18 @@ class AudiobookMediaSessionCallback
 
                 // startingTrackId is already a String
                 check(
-                    startingTrackId == ACTIVE_TRACK || startingTrackId in tracks.map { it.id },
+                    startingTrackId == ACTIVE_TRACK || startingTrackId in normalizedTracks.map { it.id },
                 ) { "Track not found! " }
 
                 val startingTrack =
                     if (startingTrackId == ACTIVE_TRACK) {
-                        tracks.getActiveTrack()
+                        normalizedTracks.getActiveTrack()
                     } else {
-                        tracks.find { it.id == startingTrackId }
+                        normalizedTracks.find { it.id == startingTrackId }
                     }
 
                 checkNotNull(startingTrack) { "No starting track provided for $startingTrackId" }
-                val startingTrackIndex = tracks.sorted().indexOf(startingTrack)
+                val startingTrackIndex = normalizedTracks.sorted().indexOf(startingTrack)
                 val trueStartTimeOffsetMillis =
                     if (startTimeOffsetMillis != USE_SAVED_TRACK_PROGRESS) {
                         startTimeOffsetMillis
@@ -833,7 +866,7 @@ class AudiobookMediaSessionCallback
                 val chapters = book.chapters.ifEmpty { tracks.asChapterList(book.id) }
                 playbackStateController.loadAudiobook(
                     audiobook = book,
-                    tracks = tracks,
+                    tracks = normalizedTracks,
                     chapters = chapters,
                     startTrackIndex = startingTrackIndex,
                     startPositionMs = trackListStateManager.currentTrackProgress,
@@ -842,7 +875,7 @@ class AudiobookMediaSessionCallback
                 // Keep calling currentlyPlaying.update() for backward compatibility
                 currentlyPlaying.update(
                     book = book,
-                    tracks = tracks,
+                    tracks = normalizedTracks,
                     track = startingTrack.copy(progress = trackListStateManager.currentTrackProgress),
                 )
 

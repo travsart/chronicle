@@ -352,6 +352,12 @@ class CachedFileManager
                             ) {
                                 withContext(Dispatchers.IO) {
                                     Timber.i("Book download success for ($bookId)")
+                                    val tracksForBook =
+                                        trackRepository.getAllTracksAsync().filter { it.parentKey == bookId }
+                                    tracksForBook.forEach { track ->
+                                        trackRepository.updateCachedStatus(track.id, true)
+                                    }
+                                    Timber.i("Marked ${tracksForBook.size} tracks as cached for ($bookId)")
                                     bookRepository.updateCachedStatus(bookId, true)
                                 }
                             }

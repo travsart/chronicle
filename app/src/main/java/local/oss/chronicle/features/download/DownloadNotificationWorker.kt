@@ -39,6 +39,7 @@ class DownloadNotificationWorker(
     private val fetch: Fetch = Injector.get().fetch()
     private val notificationManager = NotificationManagerCompat.from(applicationContext)
     private val bookRepository = Injector.get().bookRepo()
+    private val trackRepository = Injector.get().trackRepo()
 
     private val cancelAllDesc =
         applicationContext.getString(R.string.download_notification_cancel_all)
@@ -102,6 +103,11 @@ class DownloadNotificationWorker(
                                 .map { "plex:${it.key}" }
                         successfulGroupIds.forEach { groupId ->
                             Timber.i("Book download success for ($groupId)")
+                            val tracksForBook =
+                                trackRepository.getAllTracksAsync().filter { it.parentKey == groupId }
+                            tracksForBook.forEach { track ->
+                                trackRepository.updateCachedStatus(track.id, true)
+                            }
                             bookRepository.updateCachedStatus(groupId, true)
                         }
 
