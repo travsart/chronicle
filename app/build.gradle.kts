@@ -25,8 +25,8 @@ android {
         applicationId = "local.oss.chronicle"
         minSdk = 33
         targetSdk = 36
-        versionCode = 48
-        versionName = "0.60.21-SNAPSHOT"
+        versionCode = 60
+        versionName = "0.61.1"
 
         testInstrumentationRunner = "local.oss.chronicle.application.ChronicleTestRunner"
     }
@@ -101,6 +101,16 @@ android {
                 )
         }
     }
+
+    sourceSets {
+        // Share test utilities between unit tests and instrumented tests
+        getByName("test") {
+            java.srcDir("src/testShared/java")
+        }
+        getByName("androidTest") {
+            java.srcDir("src/testShared/java")
+        }
+    }
 }
 
 // Play Publisher configuration
@@ -146,6 +156,7 @@ dependencies {
     implementation(libs.result)
     implementation(libs.swiperefresh)
     implementation(libs.seismic)
+    implementation(libs.security.crypto)
     implementation(libs.browserx)
     implementation(libs.oss)
     implementation(libs.appcompat)
@@ -187,11 +198,14 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
+    testImplementation(libs.mockito.kotlin)
     testImplementation(libs.hamcrest)
+    testImplementation(libs.truth)
     testImplementation(libs.coroutines.test)
     testImplementation(libs.androidx.arch.core.testing)
-    testImplementation(libs.robolectric)
     testImplementation(libs.androidx.test.core)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.room.testing)
 
     /*
      * Instrumented Tests
@@ -208,6 +222,7 @@ dependencies {
     androidTestImplementation(libs.androidx.test.rules)
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.ext.junit.ktx)
+    androidTestImplementation(libs.room.testing)
     androidTestImplementation(libs.screengrab)
 }
 

@@ -14,11 +14,13 @@ import com.bumptech.glide.Glide
 import com.facebook.drawee.backends.pipeline.Fresco
 import com.facebook.imagepipeline.core.ImagePipelineConfig
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.first
 import local.oss.chronicle.BuildConfig
 import local.oss.chronicle.data.local.PrefsRepo
 import local.oss.chronicle.data.model.asServer
 import local.oss.chronicle.data.sources.plex.*
 import local.oss.chronicle.data.sources.plex.model.Connection
+import local.oss.chronicle.features.account.LegacyAccountMigration
 import local.oss.chronicle.injection.components.AppComponent
 import local.oss.chronicle.injection.components.DaggerAppComponent
 import local.oss.chronicle.injection.modules.AppModule
@@ -70,6 +72,9 @@ open class ChronicleApplication : Application() {
     @Inject
     lateinit var frescoConfig: ImagePipelineConfig
 
+    @Inject
+    lateinit var legacyAccountMigration: LegacyAccountMigration
+
     override fun onCreate() {
         if (USE_STRICT_MODE && BuildConfig.DEBUG) {
             StrictMode.setThreadPolicy(
@@ -97,8 +102,10 @@ open class ChronicleApplication : Application() {
         }
 
         appComponent.inject(this)
+        logAccountsAndLibraries() // DEBUG: Log database state
         setupNetwork(plexPrefs)
         updateDownloadedFileState()
+        runLegacyAccountMigration()
         super.onCreate()
         Fresco.initialize(this, frescoConfig)
         // TODO: remove in a future version
@@ -116,6 +123,69 @@ open class ChronicleApplication : Application() {
         applicationScope.launch {
             withContext(Dispatchers.IO) {
                 cachedFileManager.refreshTrackDownloadedStatus()
+            }
+        }
+    }
+
+    /**
+     * DEBUG: Log all accounts and libraries at startup
+     */
+    private fun logAccountsAndLibraries() {
+        applicationScope.launch {
+            withContext(Dispatchers.IO) {
+                try {
+                    val accountRepository = appComponent.accountRepository()
+                    val libraryRepository = appComponent.libraryRepository()
+                    val bookRepository = appComponent.bookRepos()
+
+                    val accountCount = accountRepository.getAccountCount()
+                    Timber.i("DEBUG_STARTUP: Found $accountCount accounts in database")
+
+                    val accounts = accountRepository.getAllAccounts().first()
+                    accounts.forEachIndexed { index, account ->
+                        Timber.i(
+                            "DEBUG_STARTUP:   Account ${index + 1}: ${account.displayName} (ID: ${account.id}, Provider: ${account.providerType})",
+                        )
+                    }
+
+                    val libraries = libraryRepository.getAllLibraries().first()
+                    Timber.i("DEBUG_STARTUP: Found ${libraries.size} libraries in database")
+                    libraries.forEachIndexed { index, library ->
+                        Timber.i(
+                            "DEBUG_STARTUP:   Library ${index + 1}: ${library.name} (ID: ${library.id}, Account: ${library.accountId}, Server: ${library.serverId}, Active: ${library.isActive})",
+                        )
+                    }
+
+                    val bookCount = bookRepository.getBookCount()
+                    Timber.i("DEBUG_STARTUP: Found $bookCount books in database")
+
+                    // Log which libraries have books
+                    val allBooks = bookRepository.getAllBooksAsync()
+                    val booksGroupedByLibrary = allBooks.groupBy { it.libraryId }
+                    Timber.i("DEBUG_STARTUP: Books distribution by library:")
+                    booksGroupedByLibrary.forEach { (libraryId, books) ->
+                        val libraryName = libraries.find { it.id == libraryId }?.name ?: "Unknown"
+                        Timber.i("DEBUG_STARTUP:   Library '$libraryName' ($libraryId): ${books.size} books")
+                    }
+                } catch (e: Exception) {
+                    Timber.e(e, "DEBUG_STARTUP: Failed to log accounts/libraries")
+                }
+            }
+        }
+    }
+
+    /**
+     * Run legacy account migration on first launch.
+     * Migrates existing single-account data to the new multi-account schema.
+     */
+    private fun runLegacyAccountMigration() {
+        applicationScope.launch {
+            withContext(Dispatchers.IO) {
+                try {
+                    legacyAccountMigration.migrate()
+                } catch (e: Exception) {
+                    Timber.e(e, "Failed to run legacy account migration")
+                }
             }
         }
     }

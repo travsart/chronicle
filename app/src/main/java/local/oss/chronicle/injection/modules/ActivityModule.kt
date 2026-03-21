@@ -8,11 +8,17 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import dagger.Module
 import dagger.Provides
 import kotlinx.coroutines.CoroutineScope
+import local.oss.chronicle.data.local.BookRepository
+import local.oss.chronicle.data.local.LibraryRepository
+import local.oss.chronicle.features.account.AccountListViewModel
+import local.oss.chronicle.features.account.AccountManager
+import local.oss.chronicle.features.account.ActiveLibraryProvider
 import local.oss.chronicle.features.player.MediaPlayerService
 import local.oss.chronicle.features.player.MediaServiceConnection
 import local.oss.chronicle.features.player.ProgressUpdater
 import local.oss.chronicle.features.player.SimpleProgressUpdater
 import local.oss.chronicle.injection.scopes.ActivityScope
+import local.oss.chronicle.navigation.Navigator
 import local.oss.chronicle.util.ServiceUtils
 import timber.log.Timber
 
@@ -59,5 +65,17 @@ class ActivityModule(private val activity: AppCompatActivity) {
             conn.connect()
         }
         return conn
+    }
+
+    @Provides
+    @ActivityScope
+    fun provideAccountListViewModelFactory(
+        accountManager: AccountManager,
+        activeLibraryProvider: ActiveLibraryProvider,
+        navigator: Navigator,
+        bookRepository: BookRepository,
+        libraryRepository: LibraryRepository,
+    ): AccountListViewModel.Factory {
+        return AccountListViewModel.Factory(accountManager, activeLibraryProvider, navigator, bookRepository, libraryRepository)
     }
 }

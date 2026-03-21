@@ -4,12 +4,14 @@ import android.text.format.DateUtils
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import androidx.room.TypeConverter
+import local.oss.chronicle.application.MILLIS_PER_SECOND
 import local.oss.chronicle.data.local.ITrackRepository.Companion.TRACK_NOT_FOUND
 
 @Entity
 data class Chapter(
+    @PrimaryKey(autoGenerate = true)
+    val uid: Long = 0L,
     val title: String = "",
-    @PrimaryKey
     val id: Long = 0L,
     val index: Long = 0L,
     val discNumber: Int = 1,
@@ -18,8 +20,8 @@ data class Chapter(
     // The number of milliseconds between the start of the containing track and the end of the chapter
     val endTimeOffset: Long = 0L,
     val downloaded: Boolean = false,
-    val trackId: Long = TRACK_NOT_FOUND.toLong(),
-    val bookId: Long = NO_AUDIOBOOK_FOUND_ID.toLong(),
+    val trackId: String = TRACK_NOT_FOUND,
+    val bookId: String = NO_AUDIOBOOK_FOUND_ID,
 ) : Comparable<Chapter> {
     val durationStr: String
         get() =
@@ -42,14 +44,14 @@ data class Chapter(
     }
 }
 
-val EMPTY_CHAPTER = Chapter("")
+val EMPTY_CHAPTER = Chapter(uid = 0L, title = "")
 
 /**
  * Returns the chapter which contains the [timeStamp] (the playback progress of the track containing
  * this chapter), or [EMPTY_TRACK] if there is no chapter
  */
 fun List<Chapter>.getChapterAt(
-    trackId: Long,
+    trackId: String,
     timeStamp: Long,
 ): Chapter {
     for (chapter in this) {
@@ -58,6 +60,25 @@ fun List<Chapter>.getChapterAt(
         }
     }
     return EMPTY_CHAPTER
+}
+
+fun List<Chapter>.filterTransitionMarkers(minDurationMs: Long = MILLIS_PER_SECOND): List<Chapter> {
+    if (isEmpty()) {
+        return this
+    }
+
+    val trackHasMeaningfulChapter =
+        groupBy { it.trackId }
+            .mapValues { (_, trackChapters) ->
+                trackChapters.any { chapter ->
+                    (chapter.endTimeOffset - chapter.startTimeOffset) >= minDurationMs
+                }
+            }
+
+    return filter { chapter ->
+        !trackHasMeaningfulChapter.getValue(chapter.trackId) ||
+            (chapter.endTimeOffset - chapter.startTimeOffset) >= minDurationMs
+    }
 }
 
 class ChapterListConverter {
@@ -70,9 +91,10 @@ class ChapterListConverter {
             val split = it.split("©")
             val discNumber = if (split.size >= 6) split[5].toInt() else 1
             val downloaded = if (split.size >= 7) split[6].toBoolean() else false
-            val trackId = if (split.size >= 8) split[7].toLong() else TRACK_NOT_FOUND.toLong()
-            val bookId = if (split.size >= 9) split[8].toLong() else NO_AUDIOBOOK_FOUND_ID.toLong()
+            val trackId = if (split.size >= 8) split[7] else TRACK_NOT_FOUND
+            val bookId = if (split.size >= 9) split[8] else NO_AUDIOBOOK_FOUND_ID
             Chapter(
+                uid = 0L, // Will be auto-generated on insert
                 title = split[0],
                 id = split[1].toLong(),
                 index = split[2].toLong(),

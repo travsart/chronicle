@@ -2,6 +2,7 @@ package local.oss.chronicle.data.model
 
 import android.support.v4.media.MediaMetadataCompat
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import local.oss.chronicle.application.Injector
 import local.oss.chronicle.data.local.ITrackRepository.Companion.TRACK_NOT_FOUND
@@ -18,11 +19,12 @@ import kotlin.math.roundToInt
 /**
  * A model for an audio track (i.e. a song)
  */
-@Entity
+@Entity(indices = [Index(value = ["libraryId"]), Index(value = ["parentKey"])])
 data class MediaItemTrack(
     @PrimaryKey
-    val id: Int = TRACK_NOT_FOUND,
-    val parentKey: Int = -1,
+    val id: String = TRACK_NOT_FOUND,
+    val parentKey: String = "-1",
+    val libraryId: String = "",
     val title: String = "",
     val playQueueItemID: Long = -1,
     val thumb: String? = null,
@@ -42,6 +44,7 @@ data class MediaItemTrack(
     val lastViewedAt: Long = 0L,
     val updatedAt: Long = 0L,
     val size: Long = 0L,
+    val source: Long = 0L,
 ) : Comparable<MediaItemTrack> {
     companion object {
         /**
@@ -52,11 +55,15 @@ data class MediaItemTrack(
          * Falls back to direct file URLs if not populated.
          */
         @JvmStatic
-        val streamingUrlCache = ConcurrentHashMap<Int, String>()
+        val streamingUrlCache = ConcurrentHashMap<String, String>()
 
-        fun from(metadata: MediaMetadataCompat): MediaItemTrack {
+        fun from(
+            metadata: MediaMetadataCompat,
+            libraryId: String = "",
+        ): MediaItemTrack {
             return MediaItemTrack(
-                id = metadata.id?.toInt() ?: -1,
+                id = metadata.id ?: "unknown",
+                libraryId = libraryId,
                 title = metadata.title ?: "",
                 playQueueItemID = metadata.trackNumber,
                 thumb = metadata.artUri.toString(),
@@ -72,11 +79,11 @@ data class MediaItemTrack(
 
         val EMPTY_TRACK = MediaItemTrack(TRACK_NOT_FOUND)
 
-        /** The pattern representing a downloaded track on the file system */
-        val cachedFilePattern = Regex("\\d*\\..+")
+        /** The pattern representing a downloaded track on the file system - now format is "plex:123.mp3" */
+        val cachedFilePattern = Regex("[^.]+\\..+")
 
-        fun getTrackIdFromFileName(fileName: String): Int {
-            return fileName.substringBefore('.').toInt()
+        fun getTrackIdFromFileName(fileName: String): String {
+            return fileName.substringBefore('.')
         }
 
         /**
@@ -105,10 +112,14 @@ data class MediaItemTrack(
         }
 
         /** Create a [MediaItemTrack] from a Plex model and an index */
-        fun fromPlexModel(networkTrack: PlexDirectory): MediaItemTrack {
+        fun fromPlexModel(
+            networkTrack: PlexDirectory,
+            libraryId: String,
+        ): MediaItemTrack {
             return MediaItemTrack(
-                id = networkTrack.ratingKey.toInt(),
-                parentKey = networkTrack.parentRatingKey,
+                id = "plex:${networkTrack.ratingKey}",
+                parentKey = "plex:${networkTrack.parentRatingKey}",
+                libraryId = libraryId,
                 title = networkTrack.title,
                 artist = networkTrack.grandparentTitle,
                 thumb = networkTrack.thumb,
@@ -164,10 +175,42 @@ data class MediaItemTrack(
                 return resolvedUrl
             }
 
-            // Fall back to direct file URL
+            // Fall back to direct file URL with library-aware server resolution
             // Note: This may trigger bandwidth errors if server has limits
-            Timber.d("No pre-resolved URL for track $id, using direct file path")
-            Injector.get().plexConfig().toServerString(media)
+            Timber.d("No pre-resolved URL for track $id, using direct file path from library $libraryId")
+
+            // Use library-specific server URL if available
+            val serverUrl =
+                try {
+                    kotlinx.coroutines.runBlocking {
+                        Injector.get().serverConnectionResolver().resolve(libraryId).serverUrl
+                    }
+                } catch (e: Exception) {
+                    Timber.w(e, "Failed to resolve server for library $libraryId, using global PlexConfig")
+                    null
+                } ?: Injector.get().plexConfig().url
+
+            // Build full URL with library-specific server
+            buildServerUrl(serverUrl, media)
+        }
+    }
+
+    /**
+     * Builds a full server URL from base and relative path.
+     * Accounts for trailing/leading slashes like PlexConfig.toServerString().
+     */
+    private fun buildServerUrl(
+        baseUrl: String,
+        relativePath: String,
+    ): String {
+        val baseEndsWith = baseUrl.endsWith('/')
+        val pathStartsWith = relativePath.startsWith('/')
+        return if (baseEndsWith && pathStartsWith) {
+            "$baseUrl${relativePath.substring(1)}"
+        } else if (!baseEndsWith && !pathStartsWith) {
+            "$baseUrl/$relativePath"
+        } else {
+            "$baseUrl$relativePath"
         }
     }
 
@@ -263,7 +306,7 @@ fun List<MediaItemTrack>.getActiveTrack(): MediaItemTrack {
 /** Converts the metadata of a [MediaItemTrack] to a [MediaMetadataCompat]. */
 fun MediaItemTrack.toMediaMetadata(plexConfig: PlexConfig): MediaMetadataCompat {
     val metadataBuilder = MediaMetadataCompat.Builder()
-    metadataBuilder.id = this.id.toString()
+    metadataBuilder.id = this.id
     metadataBuilder.title = this.title
     metadataBuilder.displayTitle = this.album
     metadataBuilder.displaySubtitle = this.artist
@@ -278,33 +321,37 @@ fun MediaItemTrack.toMediaMetadata(plexConfig: PlexConfig): MediaMetadataCompat 
     return metadataBuilder.build()
 }
 
-fun List<MediaItemTrack>.asChapterList(): List<Chapter> {
+fun List<MediaItemTrack>.asChapterList(bookId: String = NO_AUDIOBOOK_FOUND_ID): List<Chapter> {
     val outList = mutableListOf<Chapter>()
     var cumStartOffset = 0L
     for (track in this) {
-        outList.add(track.asChapter(cumStartOffset))
+        outList.add(track.asChapter(cumStartOffset, bookId))
         cumStartOffset += track.duration
     }
     return outList
 }
 
-fun MediaItemTrack.asChapter(startOffset: Long): Chapter {
+fun MediaItemTrack.asChapter(
+    startOffset: Long,
+    bookId: String = NO_AUDIOBOOK_FOUND_ID,
+): Chapter {
     return Chapter(
+        uid = 0L, // Auto-generated by Room
         title = title,
-        id = id.toLong(),
+        id = id.hashCode().toLong(),
         index = index.toLong(),
         discNumber = discNumber,
         startTimeOffset = startOffset,
         endTimeOffset = startOffset + duration,
         downloaded = cached,
-        trackId = id.toLong(),
+        trackId = id,
+        bookId = bookId,
     )
 }
 
 // Produces an ID unique to a track and source
-// TODO: after merging multiple sources branch: make this a hash of source and track id
 fun MediaItemTrack.uniqueId(): Int {
-    return id
+    return id.hashCode()
 }
 
 val EMPTY_TRACK = MediaItemTrack(id = TRACK_NOT_FOUND)

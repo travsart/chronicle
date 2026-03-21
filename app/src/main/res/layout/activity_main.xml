@@ -72,6 +72,7 @@
                     android:id="@+id/currently_playing_thumb"
                     serverConnected="@{plexConfig.isConnected()}"
                     srcRounded="@{viewModel.audiobook.thumb}"
+                    libraryId="@{viewModel.audiobook.libraryId}"
                     android:contentDescription="@{viewModel.audiobook.title}"
                     android:layout_width="@dimen/app_bar_height"
                     android:layout_height="@dimen/app_bar_height"

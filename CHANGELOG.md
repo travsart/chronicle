@@ -82,12 +82,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Unified Library View**: See audiobooks from ALL your connected libraries in a single view
+  - Library, Home, and Collections screens now aggregate content from all accounts/libraries
+  - Search finds audiobooks across all libraries
+  - "Recently Listened" and "Recently Added" show books from all libraries
 - Automatic changelog generation in GitHub release workflow
 - CHANGELOG.md file to track all notable changes to the project
 
+### Changed
+- **Progress Reporting to Plex**: Overhauled for accuracy and reliability
+  - Migrated `PlexSyncScrobbleWorker` to `CoroutineWorker` for proper async handling
+  - Created `PlexProgressReporter` for thread-safe, library-aware Plex API calls
+  - Removed `duration × 2` hack — Plex dashboard now shows accurate playback progress
+  - Added immediate pause state reporting so Plex "Now Playing" updates immediately (within 500ms)
+  - Made `startMediaSession()` library-aware for multi-library setups
+  - Added retry logic with exponential backoff for failed API calls (3 attempts + WorkManager retry)
+  - Eliminated race condition when reporting progress for books from different libraries
+  - Request-scoped Retrofit instances prevent global state mutation during progress reporting
+- **OAuth Login**: Replaced WebView with Chrome Custom Tabs for improved security and social login support
+  - Enables Google/Facebook login (blocked in WebViews)
+  - Platform set to "Web" instead of "Android" to enable social authentication
+  - Deep link redirect (`chronicle://auth/callback`) returns user to app automatically
+  - Expedited polling (200ms) after browser return for faster completion
+  - New auth components: `PlexAuthCoordinator`, `PlexAuthUrlBuilder`, `PlexAuthState`, `AuthReturnActivity`, `AuthCoordinatorSingleton`
+  - Hosted redirector page at `auth.chronicleapp.net` for seamless deep link integration
+- Library sync now automatically syncs ALL connected libraries
+- Playback progress syncs to the correct Plex server based on the audiobook's library
+- Removed library switching options from Settings (no longer needed with unified view)
+- Removed "Switch Library" menu from Library and Home screens
+
+### Removed
+- "Change Library" preference from Settings
+- "Change Server" preference from Settings
+- "Change User" preference from Settings
+- Library selector menu items
+
 ### Fixed
+- **Fixed:** Chapters appearing duplicated (2-4x) in audiobook details screen due to auto-generated primary key preventing conflict detection on re-sync — `ChapterRepository.loadChapterData()` now uses delete-before-insert pattern to prevent duplicates
+- **Fixed:** Chapter and track metadata failing to load for audiobooks from non-active libraries — `BookRepository`, `TrackRepository`, and `ChapterRepository` now use library-specific server connections via `ServerConnectionResolver` and `ScopedPlexServiceFactory`
+- **Fixed:** Only last chapter displayed for multi-chapter audiobooks due to primary key conflict — Chapters now use auto-generated `uid` primary key instead of `id` (ChapterDatabase v1→v2 migration)
+- **Fixed:** Chapters missing bookId association — `PlexChapter.toChapter()` now accepts `bookId` parameter and `ChapterRepository.loadChapterData()` correctly associates chapters with their audiobook
+- **Fixed:** Thumbnail images returning 404 for non-active library books — Added `PlexConfig.makeThumbUriForLibrary()` for library-aware thumbnail URL resolution
+- Fixed Plex "Now Playing" dashboard not showing Chronicle as an active streaming client
+  - Aligned scoped interceptor headers in `PlexProgressReporter` to use consistent `X-Plex-Client-Identifier` (UUID) across all API calls
+  - Added missing `X-Plex-Session-Identifier` header to timeline updates
+  - Captured and cached `playQueueItemID` from `POST /playQueues` response for use in timeline updates
+  - Updated network progress reporting frequency to every 30 seconds
+- Fixed OAuth login getting stuck in infinite loop when transient network errors occur during PIN polling
+  - Network errors (DNS failures, timeouts, connection resets) no longer corrupt the OAuth PIN ID
+  - Only HTTP 404 errors (PIN expired/not found) now clear the PIN ID as intended
+  - Prevents infinite 404 loop that blocks users from completing login
+- Fixed playback failure for audiobooks from secondary libraries in multi-account setups
+  - Introduced `ServerConnectionResolver` for library-specific server URL and token resolution
+  - Updated `PlaybackUrlResolver` to route requests to the correct Plex server per library
+  - Updated `PlexHttpDataSourceFactory` to inject library-specific auth tokens
+  - Updated `PlexSyncScrobbleWorker` for library-aware progress scrobbling
+  - Added `serverUrl` and `authToken` fields to Library entity (database migration)
+- Fixed playback failing for audiobooks from non-active libraries due to incorrect metadata path format and wrong auth token in playback decision API calls
+  - `PlaybackUrlResolver` now strips `"plex:"` prefix from metadata paths before API calls (prevents HTTP 400 errors)
+  - Playback decision API calls now use library-scoped Retrofit instances with correct auth tokens (following `PlexProgressReporter` pattern)
 - Fixed HTTP 401 error on Android Auto cold start due to stale auth tokens in ExoPlayer DataSource
 - Fixed server connections accumulating over time - server list now refreshes every 24 hours (every startup in debug builds) and replaces stale connections instead of merging
+- Added "Strict Auto client validation" toggle in Settings → ETC (defaults to off) to resolve Google Play Store rejection caused by review tools being blocked by client signature validation
+- Fixed `PlexAuthUrlBuilder` to use standard Java URL encoding instead of Android Uri.encode() for unit test compatibility
 
 ### Improved (Playback Robustness)
 

@@ -1,11 +1,9 @@
 package local.oss.chronicle.data.sources.plex
 
 import android.content.Context
-import androidx.media3.datasource.HttpDataSource
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
-import local.oss.chronicle.data.model.PlexLibrary
 import local.oss.chronicle.data.model.ServerModel
 import local.oss.chronicle.data.sources.plex.model.PlexUser
 import org.junit.Assert.*
@@ -55,24 +53,26 @@ class PlexHttpDataSourceFactoryTest {
         val serverToken = "server-token-xyz"
         val userToken = "user-token-abc"
 
-        every { mockPlexPrefs.server } returns ServerModel(
-            name = "Test Server",
-            connections = emptyList(),
-            serverId = "server-123",
-            accessToken = serverToken,
-            owned = true
-        )
-        every { mockPlexPrefs.user } returns PlexUser(
-            id = 123L,
-            uuid = "user-uuid",
-            title = "Test User",
-            username = "testuser",
-            thumb = "",
-            hasPassword = true,
-            admin = true,
-            guest = false,
-            authToken = userToken
-        )
+        every { mockPlexPrefs.server } returns
+            ServerModel(
+                name = "Test Server",
+                connections = emptyList(),
+                serverId = "server-123",
+                accessToken = serverToken,
+                owned = true,
+            )
+        every { mockPlexPrefs.user } returns
+            PlexUser(
+                id = 123L,
+                uuid = "user-uuid",
+                title = "Test User",
+                username = "testuser",
+                thumb = "",
+                hasPassword = true,
+                admin = true,
+                guest = false,
+                authToken = userToken,
+            )
 
         val dataSource = factory.createDataSource()
         assertNotNull(dataSource)
@@ -120,17 +120,18 @@ class PlexHttpDataSourceFactoryTest {
     @Test
     fun `createDataSource handles null user token`() {
         every { mockPlexPrefs.server } returns null
-        every { mockPlexPrefs.user } returns PlexUser(
-            id = 123L,
-            uuid = "user-uuid",
-            title = "Test User",
-            username = "testuser",
-            thumb = "",
-            hasPassword = true,
-            admin = true,
-            guest = false,
-            authToken = null
-        )
+        every { mockPlexPrefs.user } returns
+            PlexUser(
+                id = 123L,
+                uuid = "user-uuid",
+                title = "Test User",
+                username = "testuser",
+                thumb = "",
+                hasPassword = true,
+                admin = true,
+                guest = false,
+                authToken = null,
+            )
         every { mockPlexPrefs.accountAuthToken } returns "fallback-token"
 
         val dataSource = factory.createDataSource()
@@ -142,13 +143,14 @@ class PlexHttpDataSourceFactoryTest {
 
     @Test
     fun `createDataSource handles null server token`() {
-        every { mockPlexPrefs.server } returns ServerModel(
-            name = "Test Server",
-            connections = emptyList(),
-            serverId = "server-123",
-            accessToken = "",
-            owned = true
-        )
+        every { mockPlexPrefs.server } returns
+            ServerModel(
+                name = "Test Server",
+                connections = emptyList(),
+                serverId = "server-123",
+                accessToken = "",
+                owned = true,
+            )
         every { mockPlexPrefs.user } returns null
         every { mockPlexPrefs.accountAuthToken } returns "fallback-token"
 

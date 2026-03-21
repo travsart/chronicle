@@ -30,6 +30,12 @@ fun Player.seekRelative(
         )
         seekTo(currentPosition + durationMillis)
     } else {
+        // Defense-in-depth: guard against empty track list
+        if (trackListStateManager.trackList.isEmpty()) {
+            Timber.w("seekRelative called with empty track list, ignoring seek")
+            return
+        }
+
         Timber.i("Seeking via trackliststatemanager")
         trackListStateManager.updatePositionBlocking(currentMediaItemIndex, currentPosition)
         trackListStateManager.seekByRelativeBlocking(durationMillis)
@@ -57,7 +63,7 @@ fun Player.skipToNext(
         val containingTrack =
             trackListStateManager.trackList
                 .firstOrNull {
-                    it.id.toLong() == nextChapter.trackId
+                    it.id == nextChapter.trackId
                 }
         val containingTrackIndex = trackListStateManager.trackList.indexOf(containingTrack)
         seekTo(containingTrackIndex, nextChapter.startTimeOffset + 300)
@@ -101,7 +107,7 @@ fun Player.skipToPrevious(
     val containingTrack =
         trackListStateManager.trackList
             .firstOrNull {
-                it.id.toLong() == previousChapter.trackId
+                it.id == previousChapter.trackId
             }
     val containingTrackIndex = trackListStateManager.trackList.indexOf(containingTrack)
     seekTo(containingTrackIndex, previousChapter.startTimeOffset)

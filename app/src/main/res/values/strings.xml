@@ -288,6 +288,8 @@
     <string name="auto_access_error_no_library_chosen">No library chosen. Please return to Chronicle and choose a library</string>
     <string name="auto_access_error_auto_is_disabled">Auto is disabled in Chronicle. Please re-enable in app settings</string>
     <string name="auto_access_error_invalid_client">Illegal Auto client signature. Only Google Assistant, WearOS, and Android Auto can access Chronicle\'s content</string>
+    <string name="settings_strict_auto_validation_title">Strict Auto client validation</string>
+    <string name="settings_strict_auto_validation_explanation">Only allow known clients (Android Auto, Google Assistant, WearOS) to access content. Disable if you experience connection issues.</string>
     
     <!-- Android Auto Voice Command Errors -->
     <string name="auto_error_no_results_for_query">No audiobooks found for \"%1$s\"</string>
@@ -305,5 +307,24 @@
     <string name="toggle_watched">Toggle Watched</string>
     <string name="settings_version_title">Version information</string>
 
+    <!-- Account Management -->
+    <string name="accounts_title">Accounts &amp; Libraries</string>
+    <string name="no_accounts_message">No accounts connected.\nAdd a Plex account to get started.</string>
+    <string name="add_account">Add account</string>
+    <string name="manage_accounts">Manage Accounts</string>
+    <string name="manage_accounts_summary">Add or remove Plex accounts</string>
+    <string name="switch_library">Switch Library</string>
+    <string name="remove_account_title">Remove Account?</string>
+    <string name="remove_account_message">This will delete the account and all associated data (books, progress, downloads). This cannot be undone.</string>
+    <string name="remove">Remove</string>
+    <string name="remove_account">Remove account</string>
+    <string name="expand_collapse">Expand/collapse</string>
+    <string name="active_library">Active library</string>
+
+    <!-- Plurals -->
+    <plurals name="library_count">
+        <item quantity="one">%d library</item>
+        <item quantity="other">%d libraries</item>
+    </plurals>
 
 </resources>

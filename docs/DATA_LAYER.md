@@ -207,6 +207,23 @@ erDiagram
 | `thumb` | String | Thumbnail path |
 | `childCount` | Int | Number of books |
 
+### 4. AccountDatabase
+
+Stores account and library information for multi-account support.
+
+| Entity | Purpose |
+|--------|---------|
+| `Account` | User account with provider type, credentials, display name |
+| `Library` | Library within an account with server URL, section ID |
+
+**Key relationships:**
+- Account has many Libraries (foreign key cascade delete)
+- Library is referenced by Audiobook and MediaItemTrack via `libraryId`
+
+**Migrations:**
+- BookDatabase v8→v9: Added `libraryId` column, converted `id` from Int to String
+- TrackDatabase v6→v7: Added `libraryId` column, converted `id`/`parentKey` from Int to String
+
 ## Repository Pattern
 
 Repositories provide a single source of truth combining local and remote data.
@@ -220,13 +237,16 @@ interface IBookRepository {
     fun getAllBooks(): LiveData<List<Audiobook>>
     fun getRecentlyAdded(bookCount: Int): LiveData<List<Audiobook>>
     fun getRecentlyListened(bookCount: Int): LiveData<List<Audiobook>>
-    fun getBook(bookId: Int): LiveData<Audiobook?>
+    fun getBook(bookId: String): LiveData<Audiobook?>
     fun search(query: String): LiveData<List<Audiobook>>
     
     suspend fun refreshDataPaginated()
-    suspend fun getAudiobookAsync(bookId: Int): Audiobook?
-    suspend fun updateCachedStatus(bookId: Int, cached: Boolean)
-    suspend fun updateTrackData(bookId: Int, progress: Long, duration: Long, trackCount: Int)
+    suspend fun getAudiobookAsync(bookId: String): Audiobook?
+    suspend fun fetchBookAsync(bookId: String, libraryId: String): Audiobook
+    suspend fun updateCachedStatus(bookId: String, cached: Boolean)
+    suspend fun updateTrackData(bookId: String, progress: Long, duration: Long, trackCount: Int)
+    suspend fun setWatched(bookId: String, libraryId: String)
+    suspend fun setUnwatched(bookId: String, libraryId: String)
 }
 ```
 
@@ -235,38 +255,57 @@ interface IBookRepository {
 ```kotlin
 class BookRepository @Inject constructor(
     private val bookDao: BookDao,
-    private val plexMediaService: PlexMediaService,
+    private val chapterDao: ChapterDao,
+    private val serverConnectionResolver: ServerConnectionResolver,
+    private val scopedPlexServiceFactory: ScopedPlexServiceFactory,
+    private val chapterRepository: IChapterRepository,
     private val plexConfig: PlexConfig,
     private val prefsRepo: PrefsRepo
 ) : IBookRepository {
 
-    // Merge network data with local, preserving local-only fields
-    override suspend fun refreshDataPaginated() {
-        var offset = 0
-        val pageSize = 100
+    // Library-aware book fetching - uses correct server per library
+    override suspend fun fetchBookAsync(bookId: String, libraryId: String): Audiobook {
+        val connection = serverConnectionResolver.resolveConnection(libraryId)
+        val plexService = scopedPlexServiceFactory.createService(connection)
         
-        do {
-            val response = plexMediaService.retrieveAlbumPage(
-                libraryId = prefsRepo.libraryId,
-                containerStart = offset,
-                containerSize = pageSize
-            )
-            
-            val networkBooks = response.container.directories.map { Audiobook.from(it) }
-            val existingBooks = bookDao.getAudiobooks().associateBy { it.id }
-            
-            val mergedBooks = networkBooks.map { network ->
-                existingBooks[network.id]?.let { local ->
-                    Audiobook.merge(network, local)
-                } ?: network
-            }
-            
-            bookDao.insertAll(mergedBooks)
-            offset += pageSize
-        } while (response.container.totalSize > offset)
+        val extractedId = bookId.removePrefix("plex:")
+        val response = plexService.retrieveAlbum(extractedId)
+        
+        val networkBook = Audiobook.from(response.container.directories.first())
+        
+        // Delegate chapter loading to ChapterRepository
+        chapterRepository.loadChaptersForAudiobook(networkBook.id, libraryId)
+        
+        return mergeWithLocal(networkBook)
+    }
+    
+    // Library-aware watched/unwatched status updates
+    override suspend fun setWatched(bookId: String, libraryId: String) {
+        val connection = serverConnectionResolver.resolveConnection(libraryId)
+        val plexService = scopedPlexServiceFactory.createService(connection)
+        val extractedId = bookId.removePrefix("plex:")
+        
+        plexService.scrobble(extractedId)
+        fetchBookAsync(bookId, libraryId) // Refresh metadata
+    }
+    
+    override suspend fun setUnwatched(bookId: String, libraryId: String) {
+        val connection = serverConnectionResolver.resolveConnection(libraryId)
+        val plexService = scopedPlexServiceFactory.createService(connection)
+        val extractedId = bookId.removePrefix("plex:")
+        
+        plexService.unscrobble(extractedId)
+        fetchBookAsync(bookId, libraryId) // Refresh metadata
     }
 }
 ```
+
+**Key changes for multi-library support:**
+- Injects `ServerConnectionResolver` and `ScopedPlexServiceFactory` for library-aware API calls
+- `fetchBookAsync()` accepts `libraryId` parameter to route requests to correct server
+- Chapter loading delegated to `ChapterRepository` (also library-aware)
+- `setWatched()`/`setUnwatched()` now library-aware for accurate progress tracking
+- Injects `IChapterRepository` and `ChapterDao` for chapter management
 
 ### ITrackRepository
 
@@ -274,15 +313,97 @@ class BookRepository @Inject constructor(
 
 ```kotlin
 interface ITrackRepository {
-    fun getTracksForAudiobook(bookId: Int): LiveData<List<MediaItemTrack>>
+    fun getTracksForAudiobook(bookId: String): LiveData<List<MediaItemTrack>>
     
     suspend fun refreshDataPaginated()
-    suspend fun getTracksForAudiobookAsync(bookId: Int): List<MediaItemTrack>
-    suspend fun updateProgress(trackId: Int, position: Long)
-    suspend fun updateCachedStatus(trackId: Int, cached: Boolean)
-    suspend fun getBookIdForTrack(trackId: Int): Int
+    suspend fun getTracksForAudiobookAsync(bookId: String): List<MediaItemTrack>
+    suspend fun fetchNetworkTracksForBook(bookId: String, libraryId: String): List<MediaItemTrack>
+    suspend fun loadTracksForAudiobook(bookId: String, libraryId: String): List<MediaItemTrack>
+    suspend fun updateProgress(trackId: String, position: Long)
+    suspend fun updateCachedStatus(trackId: String, cached: Boolean)
+    suspend fun getBookIdForTrack(trackId: String): String
 }
 ```
+
+**Implementation highlights:**
+
+```kotlin
+class TrackRepository @Inject constructor(
+    private val trackDao: TrackDao,
+    private val serverConnectionResolver: ServerConnectionResolver,
+    private val scopedPlexServiceFactory: ScopedPlexServiceFactory,
+    private val bookRepository: IBookRepository,
+    private val prefsRepo: PrefsRepo
+) : ITrackRepository {
+
+    // Library-aware track fetching - uses correct server per library
+    override suspend fun fetchNetworkTracksForBook(
+        bookId: String,
+        libraryId: String
+    ): List<MediaItemTrack> {
+        val connection = serverConnectionResolver.resolveConnection(libraryId)
+        val plexService = scopedPlexServiceFactory.createService(connection)
+        
+        val extractedId = bookId.removePrefix("plex:")
+        val response = plexService.retrieveAlbum(extractedId)
+        
+        return response.container.directories.first().tracks.map { track ->
+            MediaItemTrack.from(track, extractedId, libraryId)
+        }
+    }
+    
+    // Load tracks with library context
+    override suspend fun loadTracksForAudiobook(
+        bookId: String,
+        libraryId: String
+    ): List<MediaItemTrack> {
+        val networkTracks = fetchNetworkTracksForBook(bookId, libraryId)
+        trackDao.insertAll(networkTracks)
+        return networkTracks
+    }
+}
+```
+
+**Key changes for multi-library support:**
+- Injects `ServerConnectionResolver` and `ScopedPlexServiceFactory` for library-aware API calls
+- `fetchNetworkTracksForBook()` accepts `libraryId` parameter to route requests to correct server
+- `loadTracksForAudiobook()` accepts `libraryId` for consistent library-aware loading
+- All track IDs updated from `Int` to `String` for prefixed format (`"plex:12345"`)
+
+### ChapterRepository
+
+**Library-aware chapter management** ([`ChapterRepository.kt`](../app/src/main/java/local/oss/chronicle/data/local/ChapterRepository.kt)):
+
+```kotlin
+class ChapterRepository @Inject constructor(
+    private val chapterDao: ChapterDao,
+    private val serverConnectionResolver: ServerConnectionResolver,
+    private val scopedPlexServiceFactory: ScopedPlexServiceFactory
+) : IChapterRepository {
+
+    override suspend fun loadChapterData(bookId: String, libraryId: String) {
+        val connection = serverConnectionResolver.resolveConnection(libraryId)
+        val plexService = scopedPlexServiceFactory.createService(connection)
+        
+        val extractedId = bookId.removePrefix("plex:")
+        val response = plexService.retrieveAlbum(extractedId)
+        
+        val chapters = response.container.directories.first().chapters?.map {
+            PlexChapter.toChapter(it, bookId)  // Now accepts bookId parameter
+        } ?: emptyList()
+        
+        chapterDao.insertChapters(bookId, chapters)
+    }
+}
+```
+
+**Key features:**
+- Uses library-specific server connections via `ServerConnectionResolver`
+- `loadChapterData()` accepts `bookId` parameter to correctly associate chapters with their audiobook
+- `PlexChapter.toChapter()` conversion now accepts `bookId` to set the chapter's parent book
+- Filters out Plex transition markers when a track also has a meaningful embedded chapter, preventing duplicate `0:00` chapter rows in the UI
+- Used by `BookRepository` to delegate chapter loading
+- Ensures chapters load from correct Plex server in multi-library setups
 
 ### CollectionsRepository
 
@@ -388,15 +509,26 @@ data class MediaItemTrack(
 ### Chapter
 
 ```kotlin
+@Entity
 data class Chapter(
-    val id: Long,
-    val index: Long,
     val title: String,
+    @PrimaryKey(autoGenerate = true) val uid: Long = 0L,  // Auto-generated primary key
+    val id: Long,                                         // Plex rating key (non-unique)
+    val index: Long,
+    val discNumber: Int,
     val startTimeOffset: Long,
     val endTimeOffset: Long,
-    val downloaded: Boolean = false
+    val downloaded: Boolean,
+    val trackId: Long,
+    val bookId: String,  // Parent audiobook ID
 )
 ```
+
+**Primary Key Change (v1→v2)**: Changed from `@PrimaryKey id` to `@PrimaryKey(autoGenerate = true) uid` to prevent overwrites when multiple chapters share the same track rating key. The `id` field is retained for Plex identification but is no longer the primary key.
+
+**Database Migration**: ChapterDatabase v1→v2 was a destructive migration (dropped and recreated table) since chapters are transient data that can be refetched from the Plex server.
+
+**Transition Marker Filtering**: Some Plex audiobook responses include tiny boundary markers, often around 40-50 ms, in addition to the real chapter for the same track. Chronicle skips those marker rows when a meaningful chapter exists for that track so chapter navigation and lists do not show duplicate `0:00` entries.
 
 ## SharedPreferences
 

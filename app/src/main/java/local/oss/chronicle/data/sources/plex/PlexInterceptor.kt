@@ -39,8 +39,10 @@ class PlexInterceptor(
          *
          * Per Plex API spec, musicProfile requires: type, container, audioCodec
          * videoCodec and subtitleCodec use wildcard (*) since not applicable to audio
+         *
+         * PUBLIC: Used by PlexProgressReporter for scoped interceptor header alignment.
          */
-        private const val CLIENT_PROFILE_EXTRA =
+        const val CLIENT_PROFILE_EXTRA =
             "add-direct-play-profile(type=musicProfile&container=mp4,m4a,m4b,mp3,flac,ogg,opus&audioCodec=aac,mp3,flac,vorbis,opus&videoCodec=*&subtitleCodec=*)"
     }
 
@@ -63,15 +65,21 @@ class PlexInterceptor(
                 .header("X-Plex-Client-Profile-Extra", CLIENT_PROFILE_EXTRA)
                 .url(interceptedUrl)
 
-        val userToken = plexPrefsRepo.user?.authToken
-        val serverToken = plexPrefsRepo.server?.accessToken
-        val accountToken = plexPrefsRepo.accountAuthToken
+        // Check if URL already contains X-Plex-Token as query parameter
+        // If so, don't add it as a header to avoid auth conflicts
+        val urlHasToken = chain.request().url.queryParameter("X-Plex-Token") != null
 
-        val serviceToken = if (isLoginService) userToken else serverToken
-        val authToken = if (serviceToken.isNullOrEmpty()) accountToken else serviceToken
+        if (!urlHasToken) {
+            val userToken = plexPrefsRepo.user?.authToken
+            val serverToken = plexPrefsRepo.server?.accessToken
+            val accountToken = plexPrefsRepo.accountAuthToken
 
-        if (authToken.isNotEmpty()) {
-            requestBuilder.header("X-Plex-Token", authToken)
+            val serviceToken = if (isLoginService) userToken else serverToken
+            val authToken = if (serviceToken.isNullOrEmpty()) accountToken else serviceToken
+
+            if (authToken.isNotEmpty()) {
+                requestBuilder.header("X-Plex-Token", authToken)
+            }
         }
 
         return chain.proceed(requestBuilder.build())

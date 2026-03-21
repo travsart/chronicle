@@ -83,6 +83,7 @@
                 android:id="@+id/book_cover_img"
                 serverConnected="@{serverConnected}"
                 srcRounded="@{audiobook.thumb}"
+                libraryId="@{audiobook.libraryId}"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:contentDescription="@{audiobook.title}"
@@ -90,6 +91,15 @@
                 fresco:actualImageScaleType="centerCrop"
                 fresco:placeholderImage="@drawable/book_cover_missing_placeholder"
                 tools:src="@drawable/book_cover_missing_placeholder" />
+
+            <View
+                android:id="@+id/library_color_bar"
+                libraryBarColor="@{audiobook.libraryId}"
+                android:layout_width="match_parent"
+                android:layout_height="4dp"
+                android:layout_gravity="bottom"
+                android:elevation="6dp"
+                tools:background="#FF1976D2" />
 
         </androidx.cardview.widget.CardView>
 

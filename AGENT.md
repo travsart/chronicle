@@ -86,6 +86,17 @@ app/src/main/java/local/oss/chronicle/
 │       └── local/           # Local media source
 │
 ├── features/                # Feature modules (UI + ViewModels)
+│   ├── account/            # Account and library management
+│   │   ├── AccountListFragment.kt
+│   │   ├── AccountListViewModel.kt
+│   │   ├── AccountListAdapter.kt
+│   │   ├── AccountWithLibraries.kt
+│   │   ├── AccountManager.kt
+│   │   ├── ActiveLibraryProvider.kt
+│   │   ├── CredentialManager.kt
+│   │   ├── LegacyAccountMigration.kt
+│   │   ├── LibrarySelectorBottomSheet.kt
+│   │   └── LibrarySelectorAdapter.kt
 │   ├── login/              # OAuth, server/user/library selection
 │   ├── home/               # Recently listened, recently added
 │   ├── library/            # Full audiobook library with search
@@ -194,6 +205,8 @@ The player uses **Media3 (ExoPlayer)** with:
 - [`ChapterValidator`](app/src/main/java/local/oss/chronicle/features/player/ChapterValidator.kt) - Validates positions against chapter bounds
 - [`PlaybackUrlResolver`](app/src/main/java/local/oss/chronicle/data/sources/plex/PlaybackUrlResolver.kt) - Resolves streaming URLs with retry logic and caching
 - [`PlexHttpDataSourceFactory`](app/src/main/java/local/oss/chronicle/data/sources/plex/PlexHttpDataSourceFactory.kt) - Custom DataSource.Factory for ExoPlayer that performs lazy token injection on each HTTP request, preventing stale auth tokens
+- [`ServerConnectionResolver`](app/src/main/java/local/oss/chronicle/data/sources/plex/ServerConnectionResolver.kt) - Resolves library-specific server URLs and auth tokens for multi-library playback
+- [`PlexProgressReporter`](app/src/main/java/local/oss/chronicle/data/sources/plex/PlexProgressReporter.kt) - Thread-safe, library-aware progress reporting to Plex with request-scoped Retrofit instances
 
 All media playback follows Android's MediaSession/MediaBrowser API.
 
@@ -206,6 +219,8 @@ Chronicle uses a centralized state management pattern with [`PlaybackStateContro
 - **Reactive**: State exposed via `StateFlow` for observation
 - **Debounced Persistence**: Database writes debounced (3 seconds) to reduce I/O
 - **StateFlow → LiveData Bridge**: [`CurrentlyPlayingSingleton`](app/src/main/java/local/oss/chronicle/features/currentlyplaying/CurrentlyPlayingSingleton.kt) converts StateFlow to LiveData for UI
+- **Library-Aware Progress Reporting**: [`PlexProgressReporter`](app/src/main/java/local/oss/chronicle/data/sources/plex/PlexProgressReporter.kt) ensures progress is synced to the correct Plex server per library
+- **Play Queue Item Cache**: [`PlexProgressReporter`](app/src/main/java/local/oss/chronicle/data/sources/plex/PlexProgressReporter.kt) includes a `playQueueItemCache` for Plex dashboard activity correlation, using consistent Plex headers via `PlexPrefsRepo`
 
 See [`docs/architecture/patterns.md`](docs/architecture/patterns.md) for detailed patterns.
 
@@ -222,6 +237,10 @@ Chronicle uses **Room** (AndroidX) for local data:
 
 **Database migrations** are defined within database class files. Schema versions are stored in [`app/schemas/`](app/schemas/).
 
+**ChapterDatabase Migration v1→v2**: Changed primary key from `id` (Plex rating key) to `uid` (auto-generated) to prevent overwrites when multiple chapters share the same track rating key. This was a destructive migration since chapters are transient data that can be refetched.
+
+**Library-Aware Repositories**: [`BookRepository`](app/src/main/java/local/oss/chronicle/data/local/BookRepository.kt), [`TrackRepository`](app/src/main/java/local/oss/chronicle/data/local/TrackRepository.kt), and [`ChapterRepository`](app/src/main/java/local/oss/chronicle/data/local/ChapterRepository.kt) use [`ServerConnectionResolver`](app/src/main/java/local/oss/chronicle/data/sources/plex/ServerConnectionResolver.kt) + [`ScopedPlexServiceFactory`](app/src/main/java/local/oss/chronicle/data/sources/plex/ScopedPlexServiceFactory.kt) to fetch metadata from the correct Plex server for each library in multi-server setups.
+
 ### 6.5 Offline Playback
 
 Uses **[Fetch library](https://github.com/tonyofrancis/Fetch)** for downloads:
@@ -232,9 +251,50 @@ Uses **[Fetch library](https://github.com/tonyofrancis/Fetch)** for downloads:
 
 - **Authentication tokens expire** - Implement token refresh logic when modifying auth code
 - **Chapter detection** is complex - See [`TrackListStateManager`](app/src/main/java/local/oss/chronicle/features/player/TrackListStateManager.kt) for current implementation
-- **Playback position syncing** happens via [`PlexSyncScrobbleWorker`](app/src/main/java/local/oss/chronicle/data/sources/plex/PlexSyncScrobbleWorker.kt) using WorkManager
+- **Playback position syncing** is library-aware and thread-safe via [`PlexProgressReporter`](app/src/main/java/local/oss/chronicle/data/sources/plex/PlexProgressReporter.kt), which creates request-scoped Retrofit instances to avoid global state mutation
+- **Progress reporting worker** - [`PlexSyncScrobbleWorker`](app/src/main/java/local/oss/chronicle/data/sources/plex/PlexSyncScrobbleWorker.kt) is now a `CoroutineWorker` (not `Worker`) for proper async handling
+- **Play queue item IDs** from `POST /playQueues` responses are cached in-memory and included in timeline updates for Plex dashboard visibility
 - **Media sessions** must be properly released to avoid memory leaks
 - **Data Binding** is used throughout for UI binding - see binding adapters in [`views/`](app/src/main/java/local/oss/chronicle/views/) and feature packages
+
+### 6.7 Multi-Account System
+
+Chronicle supports multiple accounts and libraries:
+
+- **AccountDatabase** - Stores Account and Library entities
+- **AccountManager** - Coordinates account operations (add, remove, switch)
+- **ActiveLibraryProvider** - StateFlow-based current library state
+- **CredentialManager** - Encrypted credential storage using AndroidX Security
+- **LegacyAccountMigration** - Migrates single-account data on first launch
+
+**ID Format**: Content IDs use prefixed strings:
+- Audiobooks/Tracks: `"plex:{ratingKey}"` (e.g., `"plex:12345"`)
+- Libraries: `"plex:library:{sectionId}"` (e.g., `"plex:library:1"`)
+- Accounts: `"plex:account:{uuid}"` (e.g., `"plex:account:abc-123"`)
+
+#### Unified Library View
+
+Chronicle displays all libraries together in a unified view:
+- [`LibrarySyncRepository.refreshLibrary()`](app/src/main/java/local/oss/chronicle/data/local/LibrarySyncRepository.kt) syncs ALL libraries sequentially
+- [`PlexSyncScrobbleWorker`](app/src/main/java/local/oss/chronicle/data/sources/plex/PlexSyncScrobbleWorker.kt) uses `audiobook.libraryId` for contextual API calls to the correct server
+- ViewModels query all books without library filtering - unified data access
+- Library switching UI has been removed - users add/remove accounts via Settings → Manage Accounts
+- Home, Library, Collections, and Search screens aggregate content from all libraries
+
+#### Library-Aware Playback
+
+Each library stores its own `serverUrl` and `authToken` in the database. During playback,
+[`ServerConnectionResolver`](app/src/main/java/local/oss/chronicle/data/sources/plex/ServerConnectionResolver.kt)
+resolves the correct server connection for a track's library, ensuring multi-server setups work correctly.
+
+Progress reporting and `startMediaSession()` now use per-library server connections via [`PlexProgressReporter`](app/src/main/java/local/oss/chronicle/data/sources/plex/PlexProgressReporter.kt),
+eliminating race conditions when reporting progress for books from different libraries.
+
+The data layer repositories ([`BookRepository`](app/src/main/java/local/oss/chronicle/data/local/BookRepository.kt), [`TrackRepository`](app/src/main/java/local/oss/chronicle/data/local/TrackRepository.kt), and [`ChapterRepository`](app/src/main/java/local/oss/chronicle/data/local/ChapterRepository.kt)) all use the same library-aware pattern via `ServerConnectionResolver` and `ScopedPlexServiceFactory` to fetch metadata from the correct server per library.
+
+**Library-Aware Thumbnail URLs**: [`PlexConfig.makeThumbUriForLibrary()`](app/src/main/java/local/oss/chronicle/data/sources/plex/PlexConfig.kt) resolves library-specific server URLs for thumbnail images, preventing 404 errors when displaying books from non-active libraries. UI layouts pass `libraryId` to [`BindingAdapters.bindImageRounded()`](app/src/main/java/local/oss/chronicle/views/BindingAdapters.kt) for library-aware image loading.
+
+See [`docs/architecture/library-aware-playback.md`](docs/architecture/library-aware-playback.md) for architecture details.
 
 ## 7. Documentation Index
 
@@ -244,6 +304,7 @@ Uses **[Fetch library](https://github.com/tonyofrancis/Fetch)** for downloads:
 - [`docs/architecture/dependency-injection.md`](docs/architecture/dependency-injection.md) - Dagger 2 DI component hierarchy and modules
 - [`docs/architecture/patterns.md`](docs/architecture/patterns.md) - Architectural patterns (Repository, MVVM, State Machines, etc.)
 - [`docs/architecture/plex-integration.md`](docs/architecture/plex-integration.md) - Plex API integration details (client profile, headers, OAuth)
+- [`docs/architecture/library-aware-playback.md`](docs/architecture/library-aware-playback.md) - Multi-library server resolution for playback
 
 ### Data Layer
 - [`docs/DATA_LAYER.md`](docs/DATA_LAYER.md) - Database and repository patterns
@@ -260,6 +321,7 @@ Uses **[Fetch library](https://github.com/tonyofrancis/Fetch)** for downloads:
 - [`docs/features/downloads.md`](docs/features/downloads.md) - Download management documentation
 - [`docs/features/android-auto.md`](docs/features/android-auto.md) - Android Auto integration documentation
 - [`docs/features/settings.md`](docs/features/settings.md) - Settings/preferences documentation
+- [`docs/features/account-ui-design.md`](docs/features/account-ui-design.md) - Multi-account UI design
 
 ### API Integration
 - [`docs/API_FLOWS.md`](docs/API_FLOWS.md) - Plex API integration details
@@ -366,6 +428,9 @@ Test-driven development is encouraged - write tests before or during implementat
 - [`TrackListStateManagerTest.kt`](app/src/test/java/local/oss/chronicle/features/player/TrackListStateManagerTest.kt) - Player state management testing
 - [`ChapterDetectionRealWorldTest.kt`](app/src/test/java/local/oss/chronicle/features/player/ChapterDetectionRealWorldTest.kt) - Complex chapter detection logic
 - [`AudiobookDetailsViewModelTest.kt`](app/src/test/java/local/oss/chronicle/features/bookdetails/AudiobookDetailsViewModelTest.kt) - ViewModel testing with Mockito
+- [`TrackRepositoryTest.kt`](app/src/test/java/local/oss/chronicle/data/local/TrackRepositoryTest.kt) - Library-aware repository testing with ServerConnectionResolver
+- [`ChapterPrimaryKeyTest.kt`](app/src/test/java/local/oss/chronicle/data/local/ChapterPrimaryKeyTest.kt) - Chapter primary key validation
+- [`ChapterRepositoryTest.kt`](app/src/test/java/local/oss/chronicle/data/local/ChapterRepositoryTest.kt) - Library-aware chapter loading and bookId association
 
 **Testing approach:**
 - Mock repositories and dependencies with Mockito
@@ -464,7 +529,7 @@ For reported and confirmed bugs a test recreating the scenario is required. The 
 - **Ktlint failures:** Run `./gradlew ktlintFormat` before committing
 - **Missing keystore:** Copy [`keystore.properties.example`](keystore.properties.example) to `keystore.properties` for release builds
 - **Room schema errors:** Delete `app/schemas/` and rebuild to regenerate
-
+- **failing tests:** Rerun the tests with `--stacktrace` to get more details on the cause of the issue
 ### Runtime Issues
 - **Playback fails:** Check `X-Plex-Client-Profile-Extra` header in [`PlexInterceptor`](app/src/main/java/local/oss/chronicle/data/sources/plex/PlexInterceptor.kt)
 - **Authentication errors:** Verify token is valid and server URL is correct in [`PlexConfig`](app/src/main/java/local/oss/chronicle/data/sources/plex/PlexConfig.kt)
@@ -478,5 +543,5 @@ For reported and confirmed bugs a test recreating the scenario is required. The 
 
 ---
 
-**Last Updated:** 2026-01-25
+**Last Updated:** 2026-02-25
 **Project Version:** Check [`CHANGELOG.md`](CHANGELOG.md) for current version

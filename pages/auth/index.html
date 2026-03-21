@@ -1,0 +1,222 @@
+---
+layout: null
+---
+<!--
+  Legacy OAuth callback redirector page.
+  
+  This page is kept for backward compatibility but is no longer the primary callback target.
+  The primary flow now uses https://auth.chronicleapp.net/callback via Android App Links,
+  which auto-closes Chrome Custom Tabs on redirect.
+  
+  This root page (/) is only used as a fallback for non-Android platforms or legacy clients.
+-->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Returning to Chronicle…</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      color: #e0e0e0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      line-height: 1.6;
+    }
+
+    .card {
+      background: rgba(30, 30, 46, 0.95);
+      border-radius: 16px;
+      padding: 40px;
+      max-width: 480px;
+      width: 100%;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      text-align: center;
+    }
+
+    h1 {
+      font-size: 28px;
+      font-weight: 600;
+      color: #ffffff;
+      margin-bottom: 20px;
+    }
+
+    p {
+      font-size: 16px;
+      color: #b0b0b0;
+      margin-bottom: 16px;
+    }
+
+    button {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #ffffff;
+      border: none;
+      padding: 14px 32px;
+      font-size: 16px;
+      font-weight: 600;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+      margin: 8px 0;
+    }
+
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+
+    .muted {
+      font-size: 14px;
+      color: #808080;
+      margin-top: 24px;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 3px solid rgba(255, 255, 255, 0.3);
+      border-top-color: #667eea;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    @media (max-width: 480px) {
+      .card {
+        padding: 30px 20px;
+      }
+
+      h1 {
+        font-size: 24px;
+      }
+
+      p {
+        font-size: 15px;
+      }
+
+      button {
+        width: 100%;
+        padding: 16px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1><span class="spinner"></span>Returning to Chronicle…</h1>
+    <p>If the app doesn't open automatically, tap the button below.</p>
+    <p><button id="openBtn">Open Chronicle</button></p>
+    <p class="muted">You can close this tab after the app opens.</p>
+  </div>
+
+  <script>
+    (function() {
+      'use strict';
+
+      /**
+       * Collects all parameters from both query string and hash fragment
+       * @returns {URLSearchParams} Combined parameters
+       */
+      function collectParams() {
+        const params = new URLSearchParams();
+        
+        // Collect from query string (?key=value)
+        const searchParams = new URLSearchParams(window.location.search);
+        for (const [key, value] of searchParams) {
+          params.append(key, value);
+        }
+        
+        // Collect from hash fragment (#key=value or #?key=value)
+        const hash = window.location.hash.substring(1); // Remove leading #
+        if (hash) {
+          // Handle both #key=value and #?key=value formats
+          const hashParams = new URLSearchParams(hash.startsWith('?') ? hash.substring(1) : hash);
+          for (const [key, value] of hashParams) {
+            // Avoid duplicates - hash params take precedence
+            if (!params.has(key)) {
+              params.append(key, value);
+            }
+          }
+        }
+        
+        return params;
+      }
+
+      /**
+       * Builds the deep link URL for Chronicle app
+       * @returns {string} The chronicle://auth/callback URL with params
+       */
+      function buildDeepLink() {
+        const params = collectParams();
+        const deepLinkBase = 'chronicle://auth/callback';
+        
+        // If we have params, append them to the deep link
+        const paramString = params.toString();
+        if (paramString) {
+          return deepLinkBase + '?' + paramString;
+        }
+        
+        return deepLinkBase;
+      }
+
+      /**
+       * Attempts to open the Chronicle app via deep link
+       */
+      function openApp() {
+        const deepLink = buildDeepLink();
+        
+        try {
+          // Try to open the deep link
+          window.location.href = deepLink;
+        } catch (e) {
+          console.error('Failed to open deep link:', e);
+        }
+      }
+
+      // Set up manual button
+      const openBtn = document.getElementById('openBtn');
+      if (openBtn) {
+        openBtn.addEventListener('click', function(e) {
+          e.preventDefault();
+          openApp();
+        });
+      }
+
+      // Auto-redirect on page load with multiple attempts for browser compatibility
+      // Some browsers need a slight delay before attempting the redirect
+      
+      // Immediate attempt
+      setTimeout(openApp, 100);
+      
+      // Backup attempt after 500ms (in case first attempt was too quick)
+      setTimeout(openApp, 500);
+      
+      // Final attempt after 1 second
+      setTimeout(openApp, 1000);
+    })();
+  </script>
+</body>
+</html>

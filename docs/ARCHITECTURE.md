@@ -17,6 +17,8 @@ This document provides a high-level overview of Chronicle's architecture. For de
 | [Architectural Patterns](architecture/patterns.md) | Key patterns: Repository, MVVM, MediaBrowserService, State Machines |
 | [Plex Integration](architecture/plex-integration.md) | Plex API integration, server connection selection, client profiles, bandwidth-aware playback |
 | [Lazy Token Injection](architecture/lazy-token-injection.md) | ExoPlayer HTTP DataSource lazy token injection pattern to prevent stale auth tokens |
+| [Library-Aware Playback](architecture/library-aware-playback.md) | Multi-library server resolution for playback |
+| [Progress Reporting Overhaul](architecture/progress-reporting-overhaul.md) | Thread-safe, library-aware progress reporting with PlexProgressReporter |
 
 ---
 
@@ -163,6 +165,19 @@ Chronicle integrates with Plex Media Server for:
 - Playback position sync
 
 → See [Plex Integration](architecture/plex-integration.md) for API details, server connection selection, and implementation.
+
+---
+
+## Account Management
+
+Chronicle supports multiple Plex accounts and libraries:
+- **Multi-account support** - Store and switch between multiple Plex accounts
+- **Library isolation** - Each library maintains separate audiobook collections and progress
+- **Encrypted credentials** - Secure storage using AndroidX Security library
+- **Seamless switching** - Switch libraries via library selector bottom sheet
+- **Legacy migration** - Automatic migration from single-account to multi-account system
+
+→ See [Account UI Design](../docs/features/account-ui-design.md) for implementation details.
 
 ---
 

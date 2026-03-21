@@ -3,6 +3,10 @@ package local.oss.chronicle.data.sources.plex
 import android.net.Uri
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import local.oss.chronicle.data.model.PlexLibrary
 import local.oss.chronicle.data.model.ServerModel
 import local.oss.chronicle.data.sources.plex.IPlexLoginRepo.LoginState
@@ -12,8 +16,10 @@ import local.oss.chronicle.data.sources.plex.PlexInterceptor.Companion.PRODUCT
 import local.oss.chronicle.data.sources.plex.model.OAuthResponse
 import local.oss.chronicle.data.sources.plex.model.PlexUser
 import local.oss.chronicle.data.sources.plex.model.UsersResponse
+import local.oss.chronicle.features.account.AccountManager
 import local.oss.chronicle.util.Event
 import local.oss.chronicle.util.postEvent
+import retrofit2.HttpException
 import timber.log.Timber
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -76,10 +82,14 @@ class PlexLoginRepo
         private val plexPrefsRepo: PlexPrefsRepo,
         private val plexLoginService: PlexLoginService,
         private val plexConfig: PlexConfig,
+        private val accountManager: AccountManager,
     ) : IPlexLoginRepo {
         private var _loginState = MutableLiveData<Event<LoginState>>()
         override val loginEvent: LiveData<Event<LoginState>>
             get() = _loginState
+
+        // Coroutine scope for database operations (uses SupervisorJob to prevent cancellation cascading)
+        private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
         override suspend fun postOAuthPin(): OAuthResponse? {
             return try {
@@ -124,7 +134,10 @@ class PlexLoginRepo
                 try {
                     plexLoginService.getAuthPin(plexPrefsRepo.oAuthTempId).authToken ?: ""
                 } catch (t: Throwable) {
-                    plexPrefsRepo.oAuthTempId = -1L
+                    // Only clear PIN ID if the PIN is truly expired (404), not on transient network errors
+                    if (t is HttpException && t.code() == 404) {
+                        plexPrefsRepo.oAuthTempId = -1L
+                    }
                     Timber.i("Failed to get OAuth access token: ${t.message}")
                     ""
                 }
@@ -160,7 +173,61 @@ class PlexLoginRepo
         override fun chooseLibrary(plexLibrary: PlexLibrary) {
             Timber.i("User chose library: $plexLibrary")
             plexPrefsRepo.library = plexLibrary
-            _loginState.postEvent(LOGGED_IN_FULLY)
+
+            // Save account to multi-account database
+            val user = plexPrefsRepo.user
+            val server = plexPrefsRepo.server
+            val accountToken = plexPrefsRepo.accountAuthToken
+
+            if (user != null && server != null && accountToken.isNotEmpty()) {
+                scope.launch {
+                    try {
+                        // CRITICAL: Ensure PlexConfig.url is resolved for the current server
+                        // before saving to the database. This prevents stale URLs from
+                        // previous accounts being saved for new accounts.
+                        // See: LibrarySyncRepository.syncLibrary() for reference pattern
+                        val connectionSuccess =
+                            plexConfig.updateServerForSync(
+                                server.connections,
+                                server.accessToken,
+                            )
+                        if (!connectionSuccess) {
+                            Timber.e("Failed to connect to server for library ${plexLibrary.name}")
+                            // Still navigate on connection error to avoid blocking user
+                            _loginState.postEvent(LOGGED_IN_FULLY)
+                            return@launch
+                        }
+
+                        Timber.i("Successfully resolved server URL: ${plexConfig.url}")
+
+                        val userToken = user.authToken?.takeIf { it.isNotEmpty() } ?: accountToken
+                        accountManager.addPlexAccountWithLibrary(
+                            userUuid = user.uuid,
+                            username = user.username ?: user.title,
+                            userThumb = user.thumb.takeIf { it.isNotEmpty() } ?: "",
+                            serverId = server.serverId,
+                            serverName = server.name,
+                            libraryId = plexLibrary.id,
+                            libraryName = plexLibrary.name,
+                            libraryType = "artist",
+                            userAuthToken = userToken,
+                            serverAccessToken = server.accessToken,
+                            serverUrl = plexConfig.url,
+                        )
+                        Timber.i("Account saved to database: ${user.uuid}, library: ${plexLibrary.id}")
+                        // ✅ Navigate ONLY after save completes
+                        _loginState.postEvent(LOGGED_IN_FULLY)
+                    } catch (e: Exception) {
+                        Timber.e(e, "Failed to save account to database")
+                        // Still navigate on error to avoid blocking user
+                        _loginState.postEvent(LOGGED_IN_FULLY)
+                    }
+                }
+            } else {
+                Timber.w("Cannot save account: user=$user, server=$server, token=${accountToken.isNotEmpty()}")
+                // No save needed, navigate immediately
+                _loginState.postEvent(LOGGED_IN_FULLY)
+            }
         }
 
         init {

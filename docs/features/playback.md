@@ -334,21 +334,51 @@ Chronicle syncs playback progress to Plex server for:
 
 ```mermaid
 sequenceDiagram
-    participant Player
+    participant Player as MediaPlayerService
     participant ProgressUpdater
-    participant Plex
+    participant PlexProgressReporter
+    participant Worker as PlexSyncScrobbleWorker
+    participant Plex as Plex Server
+    
+    Player->>Player: onIsPlayingChanged(false)
+    Note over Player: Debounce 500ms
+    Player->>ProgressUpdater: Report pause state
+    ProgressUpdater->>Worker: Schedule immediate work
+    Worker->>PlexProgressReporter: reportProgress(state=paused)
+    PlexProgressReporter->>PlexProgressReporter: Create request-scoped Retrofit
+    PlexProgressReporter->>Plex: GET /:/timeline (state=paused)
+    Note over Plex: Updates "Now Playing"<br/>immediately
     
     loop Every 10 seconds during playback
         Player->>ProgressUpdater: Current position
-        ProgressUpdater->>Plex: POST /:/timeline
-        Plex-->>ProgressUpdater: OK
+        ProgressUpdater->>Worker: Schedule work
+        Worker->>PlexProgressReporter: reportProgress(state=playing)
+        PlexProgressReporter->>PlexProgressReporter: Resolve server connection<br/>for audiobook's library
+        PlexProgressReporter->>Plex: GET /:/timeline (accurate duration)
+        Plex-->>PlexProgressReporter: OK
     end
-    
-    Player->>ProgressUpdater: Playback stopped
-    ProgressUpdater->>Plex: Final position update
 ```
 
-**Implementation**: [`ProgressUpdater`](../../app/src/main/java/local/oss/chronicle/features/player/ProgressUpdater.kt)
+### Key Features
+
+- **Library-Aware**: Uses [`PlexProgressReporter`](../../app/src/main/java/local/oss/chronicle/data/sources/plex/PlexProgressReporter.kt) to route requests to the correct Plex server per library
+- **Thread-Safe**: Request-scoped Retrofit instances prevent global state mutation
+- **Immediate Pause State**: Pause events reported within 500ms (debounced)
+- **Accurate Durations**: Reports true track duration (no more `duration × 2` hack)
+- **Retry Logic**:
+  - Inner retry: 3 attempts with exponential backoff via `RetryHandler.withRetry()`
+  - Outer retry: WorkManager `BackoffPolicy.EXPONENTIAL`
+- **Network Constraint**: Worker only runs when network is available
+
+### HTTP Method Note
+
+Progress reporting uses **`GET /:/timeline`** (not POST). Parameters are sent as query parameters.
+
+### Implementation
+
+- [`ProgressUpdater`](../../app/src/main/java/local/oss/chronicle/features/player/ProgressUpdater.kt) - Schedules WorkManager tasks
+- [`PlexSyncScrobbleWorker`](../../app/src/main/java/local/oss/chronicle/data/sources/plex/PlexSyncScrobbleWorker.kt) - `CoroutineWorker` that handles async progress sync
+- [`PlexProgressReporter`](../../app/src/main/java/local/oss/chronicle/data/sources/plex/PlexProgressReporter.kt) - Library-aware, thread-safe API calls with request-scoped Retrofit instances
 
 ---
 

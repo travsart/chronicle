@@ -42,7 +42,8 @@ class PlaybackResumeLogicTest {
     // Test audiobook data
     private val testAudiobook =
         Audiobook(
-            id = 1,
+            id = "plex:1",
+            libraryId = "plex:library:1",
             source = 1L,
             title = "Test Audiobook",
             author = "Test Author",
@@ -52,12 +53,14 @@ class PlaybackResumeLogicTest {
     private val testTracks =
         listOf(
             MediaItemTrack(
-                id = 1,
+                id = "plex:1",
+                libraryId = "plex:library:1",
                 duration = 1800000, // 30 minutes
                 index = 1,
             ),
             MediaItemTrack(
-                id = 2,
+                id = "plex:2",
+                libraryId = "plex:library:1",
                 duration = 1800000, // 30 minutes
                 index = 2,
             ),
@@ -67,8 +70,8 @@ class PlaybackResumeLogicTest {
         listOf(
             Chapter(
                 id = 1,
-                bookId = 1,
-                trackId = 1,
+                bookId = "plex:1",
+                trackId = "plex:1",
                 index = 1,
                 title = "Chapter 1",
                 startTimeOffset = 0L,
@@ -76,8 +79,8 @@ class PlaybackResumeLogicTest {
             ),
             Chapter(
                 id = 2,
-                bookId = 1,
-                trackId = 1,
+                bookId = "plex:1",
+                trackId = "plex:1",
                 index = 2,
                 title = "Chapter 2",
                 startTimeOffset = 900000L, // 15 minutes

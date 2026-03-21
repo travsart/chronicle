@@ -67,9 +67,67 @@ To provide a cleaner user interface, Chronicle conditionally shows browse tree t
 
 ### Client Validation
 
-Chronicle validates that the connecting client is an authorized Android Auto client:
+Chronicle can optionally validate that the connecting client is an authorized Android Auto client:
 
 - [`PackageValidator`](../../app/src/main/java/local/oss/chronicle/util/PackageValidator.kt) - Validates Auto client signatures
+
+**Strict Auto Client Validation Toggle:**
+
+Chronicle includes a "Strict Auto client validation" setting (Settings → ETC) that controls how the MediaBrowserService validates connecting clients.
+
+**Background:**
+
+Google Play Store uses internal testing tools to verify that apps properly implement MediaBrowser APIs. These testing tools have different package signatures than production Android Auto, Google Assistant, or WearOS clients. If an app uses strict client signature validation (via [`PackageValidator`](../../app/src/main/java/local/oss/chronicle/util/PackageValidator.kt)), Google's review tools will be blocked from connecting, causing the app to be **rejected during review**.
+
+**Solution:**
+
+The `strictAutoValidation` setting (default: **OFF**) provides a configurable validation strategy:
+
+| Setting | Client Validation | Use Case |
+|---------|-------------------|----------|
+| **OFF (Default)** | All clients can connect | Production builds, Google Play submission |
+| **ON** | Only whitelisted clients (Auto/Assistant/WearOS) | Enhanced security for specific deployments |
+
+**Important Notes:**
+
+- **Default must remain OFF** for Google Play Store compatibility
+- Content access is still gated by the `allowAndroidAuto` setting (Settings → Android Auto)
+- When `allowAndroidAuto` is disabled, the MediaBrowserService returns an empty root, preventing content browsing regardless of client validation
+- The validation toggle was added specifically to resolve Google Play Store rejection issues
+
+**Implementation:**
+
+```kotlin
+override fun onGetRoot(
+    clientPackageName: String,
+    clientUid: Int,
+    rootHints: Bundle?
+): BrowserRoot? {
+    // Check strict validation setting
+    val strictValidation = prefsRepo.strictAutoValidation
+    
+    if (strictValidation) {
+        // Strict mode: validate client signatures
+        if (!packageValidator.isKnownCaller(clientPackageName, clientUid)) {
+            Timber.w("[AndroidAuto] Rejected unknown caller: $clientPackageName")
+            return null // Reject connection
+        }
+    }
+    
+    // Check if Auto is enabled
+    if (!prefsRepo.allowAndroidAuto) {
+        return BrowserRoot(EMPTY_MEDIA_ROOT_ID, null)
+    }
+    
+    return BrowserRoot(CHRONICLE_MEDIA_ROOT_ID, null)
+}
+```
+
+**References:**
+- Implementation: [`MediaPlayerService.onGetRoot()`](../../app/src/main/java/local/oss/chronicle/features/player/MediaPlayerService.kt)
+- Setting storage: [`SharedPreferencesPrefsRepo.strictAutoValidation`](../../app/src/main/java/local/oss/chronicle/data/local/SharedPreferencesPrefsRepo.kt)
+- Validation logic: [`PackageValidator`](../../app/src/main/java/local/oss/chronicle/util/PackageValidator.kt)
+- UI: [`SettingsFragment`](../../app/src/main/java/local/oss/chronicle/features/settings/SettingsFragment.kt) and [`SettingsViewModel`](../../app/src/main/java/local/oss/chronicle/features/settings/SettingsViewModel.kt)
 
 ---
 

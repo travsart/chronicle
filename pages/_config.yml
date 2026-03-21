@@ -10,6 +10,10 @@ plugins:
   - jekyll-feed
   - jekyll-seo-tag
 
+# Include dotfiles/directories (needed for .well-known)
+include:
+  - .well-known
+
 # Exclude from processing
 exclude:
   - Gemfile

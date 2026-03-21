@@ -14,15 +14,15 @@ class PlaybackStateTest {
     // Test data - 3 tracks of 60 seconds each (180 seconds total)
     private val testTracks =
         listOf(
-            MediaItemTrack(id = 1, title = "Track 1", duration = 60_000L, index = 1),
-            MediaItemTrack(id = 2, title = "Track 2", duration = 60_000L, index = 2),
-            MediaItemTrack(id = 3, title = "Track 3", duration = 60_000L, index = 3),
+            MediaItemTrack(id = "plex:1", libraryId = "plex:lib:1", title = "Track 1", duration = 60_000L, index = 1),
+            MediaItemTrack(id = "plex:2", libraryId = "plex:lib:1", title = "Track 2", duration = 60_000L, index = 2),
+            MediaItemTrack(id = "plex:3", libraryId = "plex:lib:1", title = "Track 3", duration = 60_000L, index = 3),
         )
 
-    // Test chapters across the book
-    // Chapter 1: 0-90s (tracks 1-2)
-    // Chapter 2: 90-150s (track 2-3)
-    // Chapter 3: 150-180s (track 3)
+    // Test chapters with TRACK-RELATIVE offsets (real-world Plex structure)
+    // Track 1 (60s): Chapter 1 (0-60s)
+    // Track 2 (60s): Chapter 2 (0-30s), Chapter 3 (30-60s)
+    // Track 3 (60s): Chapter 4 (0-60s)
     private val testChapters =
         listOf(
             Chapter(
@@ -30,30 +30,43 @@ class PlaybackStateTest {
                 title = "Chapter 1",
                 index = 1,
                 startTimeOffset = 0L,
-                endTimeOffset = 90_000L,
-                bookId = 100L,
+                endTimeOffset = 60_000L,
+                trackId = "plex:1",
+                bookId = "plex:100",
             ),
             Chapter(
                 id = 2,
                 title = "Chapter 2",
                 index = 2,
-                startTimeOffset = 90_000L,
-                endTimeOffset = 150_000L,
-                bookId = 100L,
+                startTimeOffset = 0L,
+                endTimeOffset = 30_000L,
+                trackId = "plex:2",
+                bookId = "plex:100",
             ),
             Chapter(
                 id = 3,
                 title = "Chapter 3",
                 index = 3,
-                startTimeOffset = 150_000L,
-                endTimeOffset = 180_000L,
-                bookId = 100L,
+                startTimeOffset = 30_000L,
+                endTimeOffset = 60_000L,
+                trackId = "plex:2",
+                bookId = "plex:100",
+            ),
+            Chapter(
+                id = 4,
+                title = "Chapter 4",
+                index = 4,
+                startTimeOffset = 0L,
+                endTimeOffset = 60_000L,
+                trackId = "plex:3",
+                bookId = "plex:100",
             ),
         )
 
     private val testAudiobook =
         Audiobook(
-            id = 100,
+            id = "plex:100",
+            libraryId = "plex:lib:1",
             source = PlexMediaSource.MEDIA_SOURCE_ID_PLEX,
             title = "Test Audiobook",
             author = "Test Author",
@@ -329,27 +342,25 @@ class PlaybackStateTest {
 
     @Test
     fun `currentChapter detects second chapter at boundary`() {
-        // Position: 90s (start of chapter 2)
+        // Track 2, position 0s (start of chapter 2)
         val state =
             PlaybackState(
                 tracks = testTracks,
                 chapters = testChapters,
                 currentTrackIndex = 1,
-                // 60s + 30s = 90s
-                currentTrackPositionMs = 30_000L,
+                currentTrackPositionMs = 0L,
             )
         assertThat(state.currentChapter, `is`(testChapters[1]))
     }
 
     @Test
     fun `currentChapter detects third chapter`() {
-        // Position: 165s (in chapter 3)
+        // Track 2, position 45s (in chapter 3 which starts at 30s)
         val state =
             PlaybackState(
                 tracks = testTracks,
                 chapters = testChapters,
-                currentTrackIndex = 2,
-                // 120s + 45s = 165s
+                currentTrackIndex = 1,
                 currentTrackPositionMs = 45_000L,
             )
         assertThat(state.currentChapter, `is`(testChapters[2]))
@@ -384,8 +395,7 @@ class PlaybackStateTest {
                 tracks = testTracks,
                 chapters = testChapters,
                 currentTrackIndex = 1,
-                // 100s total
-                currentTrackPositionMs = 40_000L,
+                currentTrackPositionMs = 15_000L, // In Chapter 2 (track 2, 0-30s)
             )
         assertThat(state.currentChapterIndex, `is`(1))
     }
@@ -396,9 +406,8 @@ class PlaybackStateTest {
             PlaybackState(
                 tracks = testTracks,
                 chapters = testChapters,
-                currentTrackIndex = 2,
-                // 170s total
-                currentTrackPositionMs = 50_000L,
+                currentTrackIndex = 1,
+                currentTrackPositionMs = 50_000L, // In Chapter 3 (track 2, 30-60s)
             )
         assertThat(state.currentChapterIndex, `is`(2))
     }
@@ -422,7 +431,7 @@ class PlaybackStateTest {
                 currentTrackIndex = 0,
                 currentTrackPositionMs = 0L,
             )
-        assertThat(state.currentChapterDurationMs, `is`(90_000L))
+        assertThat(state.currentChapterDurationMs, `is`(60_000L))
     }
 
     @Test
@@ -432,9 +441,9 @@ class PlaybackStateTest {
                 tracks = testTracks,
                 chapters = testChapters,
                 currentTrackIndex = 1,
-                currentTrackPositionMs = 40_000L,
+                currentTrackPositionMs = 15_000L, // In Chapter 2 (0-30s)
             )
-        assertThat(state.currentChapterDurationMs, `is`(60_000L))
+        assertThat(state.currentChapterDurationMs, `is`(30_000L))
     }
 
     @Test
@@ -444,9 +453,9 @@ class PlaybackStateTest {
                 tracks = testTracks,
                 chapters = testChapters,
                 currentTrackIndex = 2,
-                currentTrackPositionMs = 50_000L,
+                currentTrackPositionMs = 50_000L, // In Chapter 4
             )
-        assertThat(state.currentChapterDurationMs, `is`(30_000L))
+        assertThat(state.currentChapterDurationMs, `is`(60_000L))
     }
 
     @Test
@@ -469,20 +478,20 @@ class PlaybackStateTest {
 
     @Test
     fun `currentChapterPositionMs calculates position in second chapter`() {
-        // Book position: 100s, Chapter 2 starts at 90s, position in chapter: 10s
+        // Track 2, position 10s into Chapter 2 (which starts at 0s)
         val state =
             PlaybackState(
                 tracks = testTracks,
                 chapters = testChapters,
                 currentTrackIndex = 1,
-                currentTrackPositionMs = 40_000L,
+                currentTrackPositionMs = 10_000L,
             )
         assertThat(state.currentChapterPositionMs, `is`(10_000L))
     }
 
     @Test
     fun `currentChapterPositionMs calculates position at chapter boundary`() {
-        // Book position: 90s, Chapter 2 starts at 90s, position in chapter: 0s
+        // Track 2, position 30s - at start of Chapter 3
         val state =
             PlaybackState(
                 tracks = testTracks,
@@ -589,36 +598,33 @@ class PlaybackStateTest {
                 tracks = testTracks,
                 chapters = testChapters,
                 currentTrackIndex = 1,
-                // 90s - start of chapter 2
-                currentTrackPositionMs = 30_000L,
+                currentTrackPositionMs = 30_000L, // Start of Chapter 3
             )
         assertThat(state.chapterProgress.toDouble(), `is`(closeTo(0.0, 0.001)))
     }
 
     @Test
     fun `chapterProgress at 50 percent of chapter`() {
-        // Chapter 2: 90-150s (60s duration), position at 120s = 50%
+        // Chapter 3: 30-60s (30s duration), position at 45s = 15s/30s = 50%
         val state =
             PlaybackState(
                 tracks = testTracks,
                 chapters = testChapters,
-                currentTrackIndex = 2,
-                // 120s book position
-                currentTrackPositionMs = 0L,
+                currentTrackIndex = 1,
+                currentTrackPositionMs = 45_000L,
             )
         assertThat(state.chapterProgress.toDouble(), `is`(closeTo(0.5, 0.001)))
     }
 
     @Test
     fun `chapterProgress near end of chapter`() {
-        // Chapter 3: 150-180s (30s duration), position at 165s = 15s/30s = 50%
+        // Chapter 1: 0-60s (60s duration), position at 30s = 30s/60s = 50%
         val state =
             PlaybackState(
                 tracks = testTracks,
                 chapters = testChapters,
-                currentTrackIndex = 2,
-                // 165s book position
-                currentTrackPositionMs = 45_000L,
+                currentTrackIndex = 0,
+                currentTrackPositionMs = 30_000L,
             )
         assertThat(state.chapterProgress.toDouble(), `is`(closeTo(0.5, 0.001)))
     }
@@ -743,7 +749,7 @@ class PlaybackStateTest {
             )
         val state2 =
             PlaybackState(
-                audiobook = testAudiobook.copy(id = 999),
+                audiobook = testAudiobook.copy(id = "plex:999"),
                 tracks = testTracks,
                 currentTrackIndex = 0,
                 currentTrackPositionMs = 10_000L,
@@ -897,5 +903,481 @@ class PlaybackStateTest {
         val state = PlaybackState.EMPTY
         val str = state.toString()
         assertThat(str.contains("None"), `is`(true))
+    }
+
+    // =====================
+    // Chapter Transition Marker Tests
+    // =====================
+
+    /**
+     * Test that chapter detection filters out very short chapters (transition markers).
+     * This reproduces the bug where "02:33/00:00" is displayed because the transition marker
+     * with ~44ms duration is selected instead of the content chapter with meaningful duration.
+     *
+     * Real-world scenario from logs:
+     * - Content chapter: Chapter 1, duration=1054550ms (~17.5 minutes)
+     * - Transition marker: Chapter 2, duration=50ms (at same start position)
+     * When playback is at 5138ms, we should select the long chapter, not the 50ms marker.
+     */
+    @Test
+    fun `currentChapter prefers content chapters over transition markers`() {
+        // Create a realistic scenario based on logs/miscalc.log where both chapters
+        // start at position 0 (one is content, one is a very short transition marker)
+        val chaptersWithTransitionMarkers =
+            listOf(
+                // Content chapter - Chapter 1: 0 to 30 seconds (meaningful duration)
+                Chapter(
+                    id = 1,
+                    title = "Chapter 1",
+                    index = 1,
+                    startTimeOffset = 0L,
+                    endTimeOffset = 30_000L,
+                    trackId = "plex:1",
+                    bookId = "plex:100",
+                ),
+                // Transition marker - very short (~50ms) at same start position
+                Chapter(
+                    id = 2,
+                    title = "Chapter 1 Marker",
+                    index = 2,
+                    startTimeOffset = 0L,
+                    endTimeOffset = 50L,
+                    trackId = "plex:1",
+                    bookId = "plex:100",
+                ),
+            )
+
+        // Position 5138ms is within the range of both chapters, but only one has meaningful duration
+        val state =
+            PlaybackState(
+                tracks = testTracks,
+                chapters = chaptersWithTransitionMarkers,
+                currentTrackIndex = 0,
+                currentTrackPositionMs = 5_138L,
+            )
+
+        // Should select the content chapter with meaningful duration, NOT the <1s transition marker
+        val selectedChapter = state.currentChapter
+        assertThat("Expected content chapter to be selected", selectedChapter, `is`(chaptersWithTransitionMarkers[0]))
+        assertThat("Expected chapter with long duration", selectedChapter?.title, `is`("Chapter 1"))
+
+        // Verify the chapter has meaningful duration (not ~50ms like transition markers)
+        val duration = state.currentChapterDurationMs
+        assertThat("Expected content chapter duration (30s), not transition marker (<1s)", duration >= 30_000L, `is`(true))
+    }
+
+    @Test
+    fun `currentChapter handles position at transition marker boundary`() {
+        // Create tracks with longer duration to match chapter offsets
+        val longTracks =
+            listOf(
+                MediaItemTrack(id = "plex:65798", libraryId = "plex:lib:1", title = "Track 1", duration = 1_100_000L, index = 1),
+            )
+        
+        val chaptersWithTransitionMarkers =
+            listOf(
+                // Content chapter (index=1) - track-relative
+                Chapter(
+                    id = 4041,
+                    title = "Chapter 1",
+                    index = 1,
+                    startTimeOffset = 0L,
+                    endTimeOffset = 1_054_550L,
+                    trackId = "plex:65798",
+                    bookId = "plex:65797",
+                ),
+                // Transition marker (index=2) at exact end of Chapter 1 - track-relative
+                Chapter(
+                    id = 4042,
+                    title = "Chapter 2",
+                    index = 2,
+                    startTimeOffset = 1_054_550L,
+                    endTimeOffset = 1_054_600L,
+                    trackId = "plex:65798",
+                    bookId = "plex:65797",
+                ),
+            )
+
+        // Position exactly at transition marker start - should still prefer content chapter
+        val state =
+            PlaybackState(
+                tracks = longTracks,
+                chapters = chaptersWithTransitionMarkers,
+                currentTrackIndex = 0,
+                currentTrackPositionMs = 1_054_550L,
+            )
+
+        // At the boundary between chapters: position 1_054_550L is >= Chapter 1 end
+        // So we're technically in the transition marker, but it's filtered out
+        // The fallback should select the last content chapter
+        val selectedChapter = state.currentChapter
+        assertThat("Expected content chapter, not transition marker", selectedChapter?.index, `is`(1L))
+    }
+
+    @Test
+    fun `currentChapter falls back to any chapter when no content chapters exist`() {
+        // Create tracks with longer duration
+        val longTracks =
+            listOf(
+                MediaItemTrack(id = "plex:65798", libraryId = "plex:lib:1", title = "Track 1", duration = 1_100_000L, index = 1),
+            )
+        
+        // Edge case: only transition markers available (shouldn't happen in practice)
+        val onlyTransitionMarkers =
+            listOf(
+                Chapter(
+                    id = 4041,
+                    title = "Chapter 2",
+                    index = 2,
+                    startTimeOffset = 1_054_550L,
+                    endTimeOffset = 1_054_600L,
+                    trackId = "plex:65798",
+                    bookId = "plex:65797",
+                ),
+            )
+
+        val state =
+            PlaybackState(
+                tracks = longTracks,
+                chapters = onlyTransitionMarkers,
+                currentTrackIndex = 0,
+                currentTrackPositionMs = 1_054_550L,
+            )
+
+        // Should still return something rather than null for backward compatibility
+        val selectedChapter = state.currentChapter
+        assertThat("Should return a chapter even if only transition markers exist", selectedChapter, `is`(onlyTransitionMarkers[0]))
+    }
+
+    // =====================
+    // Multi-Track Chapter Detection Tests (Track-Relative Offsets)
+    // =====================
+
+    /**
+     * Tests chapter detection with TRACK-RELATIVE offsets (real-world scenario).
+     * This reproduces the bug where comparing book-relative position against
+     * track-relative chapter offsets causes the wrong chapter to be selected.
+     *
+     * Setup:
+     * - Track 1 (60s): Chapter 1 (0-40s), Chapter 2 (40-60s)
+     * - Track 2 (60s): Chapter 3 (0-30s), Chapter 4 (30-60s)
+     * - Track 3 (60s): Chapter 5 (0-60s)
+     *
+     * Bug scenario: When playing Track 2 at position 15s:
+     * - bookPositionMs = 60000 + 15000 = 75000ms
+     * - currentTrackPositionMs = 15000ms
+     * - All chapters match (75000 >= all startTimeOffsets which are track-relative 0-60s)
+     * - lastOrNull returns Chapter 5 (the last chapter) instead of Chapter 3
+     */
+    @Test
+    fun `currentChapter with track-relative offsets selects correct chapter from current track`() {
+        // Track-relative chapters (real-world scenario)
+        val trackRelativeChapters =
+            listOf(
+                // Track 1 chapters
+                Chapter(
+                    id = 1,
+                    title = "Chapter 1",
+                    index = 1,
+                    startTimeOffset = 0L,
+                    endTimeOffset = 40_000L,
+                    trackId = "plex:1",
+                    bookId = "plex:100",
+                ),
+                Chapter(
+                    id = 2,
+                    title = "Chapter 2",
+                    index = 2,
+                    startTimeOffset = 40_000L,
+                    endTimeOffset = 60_000L,
+                    trackId = "plex:1",
+                    bookId = "plex:100",
+                ),
+                // Track 2 chapters
+                Chapter(
+                    id = 3,
+                    title = "Chapter 3",
+                    index = 3,
+                    startTimeOffset = 0L,
+                    endTimeOffset = 30_000L,
+                    trackId = "plex:2",
+                    bookId = "plex:100",
+                ),
+                Chapter(
+                    id = 4,
+                    title = "Chapter 4",
+                    index = 4,
+                    startTimeOffset = 30_000L,
+                    endTimeOffset = 60_000L,
+                    trackId = "plex:2",
+                    bookId = "plex:100",
+                ),
+                // Track 3 chapters
+                Chapter(
+                    id = 5,
+                    title = "Chapter 5",
+                    index = 5,
+                    startTimeOffset = 0L,
+                    endTimeOffset = 60_000L,
+                    trackId = "plex:3",
+                    bookId = "plex:100",
+                ),
+            )
+
+        // Playing Track 2 (index=1) at 15 seconds
+        val state =
+            PlaybackState(
+                tracks = testTracks,
+                chapters = trackRelativeChapters,
+                currentTrackIndex = 1, // Track 2
+                currentTrackPositionMs = 15_000L, // 15s into track 2
+            )
+
+        // Should select Chapter 3 (from track 2, which contains position 15s)
+        val selectedChapter = state.currentChapter
+        assertThat("Expected Chapter 3 from current track", selectedChapter?.title, `is`("Chapter 3"))
+        assertThat("Expected Chapter 3", selectedChapter?.id, `is`(3L))
+    }
+
+    @Test
+    fun `currentChapter with track-relative offsets at track boundary`() {
+        val trackRelativeChapters =
+            listOf(
+                Chapter(
+                    id = 1,
+                    title = "Chapter 1",
+                    index = 1,
+                    startTimeOffset = 40_000L,
+                    endTimeOffset = 60_000L,
+                    trackId = "plex:1",
+                    bookId = "plex:100",
+                ),
+                Chapter(
+                    id = 2,
+                    title = "Chapter 2",
+                    index = 2,
+                    startTimeOffset = 0L,
+                    endTimeOffset = 30_000L,
+                    trackId = "plex:2",
+                    bookId = "plex:100",
+                ),
+            )
+
+        // At start of Track 2 (index=1)
+        val state =
+            PlaybackState(
+                tracks = testTracks,
+                chapters = trackRelativeChapters,
+                currentTrackIndex = 1, // Track 2
+                currentTrackPositionMs = 0L, // Start of track 2
+            )
+
+        // Should select Chapter 2 (from track 2, position 0)
+        val selectedChapter = state.currentChapter
+        assertThat("Expected Chapter 2 at start of track 2", selectedChapter?.title, `is`("Chapter 2"))
+    }
+
+    @Test
+    fun `currentChapter with track-relative offsets in middle of second chapter`() {
+        val trackRelativeChapters =
+            listOf(
+                Chapter(
+                    id = 1,
+                    title = "Chapter 1",
+                    index = 1,
+                    startTimeOffset = 0L,
+                    endTimeOffset = 30_000L,
+                    trackId = "plex:2",
+                    bookId = "plex:100",
+                ),
+                Chapter(
+                    id = 2,
+                    title = "Chapter 2",
+                    index = 2,
+                    startTimeOffset = 30_000L,
+                    endTimeOffset = 60_000L,
+                    trackId = "plex:2",
+                    bookId = "plex:100",
+                ),
+            )
+
+        // Playing Track 2 at 45 seconds (in Chapter 2)
+        val state =
+            PlaybackState(
+                tracks = testTracks,
+                chapters = trackRelativeChapters,
+                currentTrackIndex = 1, // Track 2
+                currentTrackPositionMs = 45_000L,
+            )
+
+        val selectedChapter = state.currentChapter
+        assertThat("Expected Chapter 2", selectedChapter?.title, `is`("Chapter 2"))
+    }
+
+    @Test
+    fun `currentChapterIndex with track-relative offsets returns correct index`() {
+        val trackRelativeChapters =
+            listOf(
+                Chapter(
+                    id = 1,
+                    title = "Chapter 1",
+                    index = 1,
+                    startTimeOffset = 0L,
+                    endTimeOffset = 60_000L,
+                    trackId = "plex:1",
+                    bookId = "plex:100",
+                ),
+                Chapter(
+                    id = 2,
+                    title = "Chapter 2",
+                    index = 2,
+                    startTimeOffset = 0L,
+                    endTimeOffset = 30_000L,
+                    trackId = "plex:2",
+                    bookId = "plex:100",
+                ),
+                Chapter(
+                    id = 3,
+                    title = "Chapter 3",
+                    index = 3,
+                    startTimeOffset = 30_000L,
+                    endTimeOffset = 60_000L,
+                    trackId = "plex:2",
+                    bookId = "plex:100",
+                ),
+            )
+
+        // Playing Track 2, Chapter 3
+        val state =
+            PlaybackState(
+                tracks = testTracks,
+                chapters = trackRelativeChapters,
+                currentTrackIndex = 1,
+                currentTrackPositionMs = 45_000L,
+            )
+
+        assertThat("Expected chapter index 2 (0-based)", state.currentChapterIndex, `is`(2))
+    }
+
+    @Test
+    fun `currentChapterDurationMs with track-relative offsets calculates correctly`() {
+        val trackRelativeChapters =
+            listOf(
+                Chapter(
+                    id = 1,
+                    title = "Chapter 1",
+                    index = 1,
+                    startTimeOffset = 0L,
+                    endTimeOffset = 60_000L,
+                    trackId = "plex:1",
+                    bookId = "plex:100",
+                ),
+                Chapter(
+                    id = 2,
+                    title = "Chapter 2",
+                    index = 2,
+                    startTimeOffset = 0L,
+                    endTimeOffset = 30_000L,
+                    trackId = "plex:2",
+                    bookId = "plex:100",
+                ),
+                Chapter(
+                    id = 3,
+                    title = "Chapter 3",
+                    index = 3,
+                    startTimeOffset = 30_000L,
+                    endTimeOffset = 60_000L,
+                    trackId = "plex:2",
+                    bookId = "plex:100",
+                ),
+            )
+
+        // Playing Track 2, Chapter 2 (duration should be 30s)
+        val state =
+            PlaybackState(
+                tracks = testTracks,
+                chapters = trackRelativeChapters,
+                currentTrackIndex = 1,
+                currentTrackPositionMs = 15_000L,
+            )
+
+        assertThat("Expected Chapter 2 duration of 30s", state.currentChapterDurationMs, `is`(30_000L))
+    }
+
+    @Test
+    fun `currentChapterPositionMs with track-relative offsets calculates correctly`() {
+        val trackRelativeChapters =
+            listOf(
+                Chapter(
+                    id = 1,
+                    title = "Chapter 1",
+                    index = 1,
+                    startTimeOffset = 0L,
+                    endTimeOffset = 30_000L,
+                    trackId = "plex:2",
+                    bookId = "plex:100",
+                ),
+                Chapter(
+                    id = 2,
+                    title = "Chapter 2",
+                    index = 2,
+                    startTimeOffset = 30_000L,
+                    endTimeOffset = 60_000L,
+                    trackId = "plex:2",
+                    bookId = "plex:100",
+                ),
+            )
+
+        // Playing Track 2 at 45s (15s into Chapter 2)
+        val state =
+            PlaybackState(
+                tracks = testTracks,
+                chapters = trackRelativeChapters,
+                currentTrackIndex = 1,
+                currentTrackPositionMs = 45_000L,
+            )
+
+        assertThat("Expected 15s into Chapter 2", state.currentChapterPositionMs, `is`(15_000L))
+    }
+
+    @Test
+    fun `currentChapter with track-relative offsets and transition markers prefers content chapters`() {
+        val trackRelativeChapters =
+            listOf(
+                // Content chapter on track 2
+                Chapter(
+                    id = 1,
+                    title = "Chapter 1",
+                    index = 1,
+                    startTimeOffset = 0L,
+                    endTimeOffset = 30_000L,
+                    trackId = "plex:2",
+                    bookId = "plex:100",
+                ),
+                // Transition marker on track 2
+                Chapter(
+                    id = 2,
+                    title = "Chapter 1 Marker",
+                    index = 2,
+                    startTimeOffset = 0L,
+                    endTimeOffset = 50L,
+                    trackId = "plex:2",
+                    bookId = "plex:100",
+                ),
+            )
+
+        // Playing Track 2 at 5s
+        val state =
+            PlaybackState(
+                tracks = testTracks,
+                chapters = trackRelativeChapters,
+                currentTrackIndex = 1,
+                currentTrackPositionMs = 5_000L,
+            )
+
+        // Should prefer content chapter over transition marker
+        val selectedChapter = state.currentChapter
+        assertThat("Expected content chapter", selectedChapter?.title, `is`("Chapter 1"))
+        assertThat("Expected meaningful duration", state.currentChapterDurationMs >= 30_000L, `is`(true))
     }
 }

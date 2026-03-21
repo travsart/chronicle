@@ -41,6 +41,8 @@ import local.oss.chronicle.data.local.ITrackRepository
 import local.oss.chronicle.data.local.ITrackRepository.Companion.TRACK_NOT_FOUND
 import local.oss.chronicle.data.local.LibrarySyncRepository
 import local.oss.chronicle.data.local.PrefsRepo
+import local.oss.chronicle.data.model.EMPTY_AUDIOBOOK
+import local.oss.chronicle.data.model.EMPTY_CHAPTER
 import local.oss.chronicle.data.model.MediaItemTrack
 import local.oss.chronicle.data.model.getActiveTrack
 import local.oss.chronicle.data.model.getProgress
@@ -48,15 +50,15 @@ import local.oss.chronicle.data.model.toMediaItem
 import local.oss.chronicle.data.sources.plex.*
 import local.oss.chronicle.data.sources.plex.IPlexLoginRepo.LoginState.*
 import local.oss.chronicle.data.sources.plex.model.getDuration
-import local.oss.chronicle.util.Event
-import local.oss.chronicle.util.SecurityUtils
 import local.oss.chronicle.features.currentlyplaying.CurrentlyPlaying
 import local.oss.chronicle.features.player.SleepTimer.Companion.ARG_SLEEP_TIMER_ACTION
 import local.oss.chronicle.features.player.SleepTimer.Companion.ARG_SLEEP_TIMER_DURATION_MILLIS
 import local.oss.chronicle.features.player.SleepTimer.SleepTimerAction
 import local.oss.chronicle.injection.components.DaggerServiceComponent
 import local.oss.chronicle.injection.modules.ServiceModule
+import local.oss.chronicle.util.Event
 import local.oss.chronicle.util.PackageValidator
+import local.oss.chronicle.util.SecurityUtils
 import local.oss.chronicle.util.ServiceUtils
 import timber.log.Timber
 import javax.inject.Inject
@@ -159,7 +161,7 @@ class MediaPlayerService :
         const val KEY_SEEK_TO_TRACK_WITH_ID = "MediaPlayerService.key_seek_to_track_with_id"
 
         // Value indicating to begin playback at the most recently listened position
-        const val ACTIVE_TRACK = Long.MIN_VALUE + 22233L
+        const val ACTIVE_TRACK = "__ACTIVE_TRACK__"
         const val USE_SAVED_TRACK_PROGRESS = Long.MIN_VALUE + 22250L
 
         private const val CHRONICLE_MEDIA_ROOT_ID = "chronicle_media_root_id"
@@ -224,6 +226,10 @@ class MediaPlayerService :
     private var sessionCustomActions: List<PlaybackStateCompat.CustomAction> = emptyList()
     private val timelineWindow = Timeline.Window()
 
+    /** Track last pause update time for debouncing */
+    private var lastPauseUpdateTime = 0L
+    private val PAUSE_UPDATE_DEBOUNCE_MS = 500L
+
     override fun onCreate() {
         super.onCreate()
 
@@ -243,7 +249,7 @@ class MediaPlayerService :
         val accountTokenHash = SecurityUtils.hashToken(plexPrefs.accountAuthToken)
         Timber.d(
             "[TokenInjection] Post-injection token check: " +
-                "serverToken=$serverTokenHash, userToken=$userTokenHash, accountToken=$accountTokenHash"
+                "serverToken=$serverTokenHash, userToken=$userTokenHash, accountToken=$accountTokenHash",
         )
 
         ServiceUtils.notifyServiceStarted(this)
@@ -442,41 +448,43 @@ class MediaPlayerService :
             }
         }
 
-    private val loginStateObserver = Observer<Event<IPlexLoginRepo.LoginState>> { event ->
-        event.peekContent().let { loginState ->
-            Timber.d("[AndroidAuto] Login state changed: $loginState")
-            
-            // Clear Android Auto error messages when login completes successfully
-            if (loginState == LOGGED_IN_FULLY && isErrorState) {
-                Timber.d("[AndroidAuto] Login successful - clearing error state")
-                // Set playback state to STOPPED to clear any displayed error messages
-                mediaSession.setPlaybackState(
-                    PlaybackStateCompat.Builder()
-                        .setState(
-                            PlaybackStateCompat.STATE_STOPPED,
-                            PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN,
-                            0f,
-                        )
-                        .build(),
-                )
-                isErrorState = false
-                sessionErrorMessage = null
-            }
-            
-            notifyChildrenChanged(CHRONICLE_MEDIA_ROOT_ID)
-        }
-    }
+    private val loginStateObserver =
+        Observer<Event<IPlexLoginRepo.LoginState>> { event ->
+            event.peekContent().let { loginState ->
+                Timber.d("[AndroidAuto] Login state changed: $loginState")
 
-    private val librarySyncObserver = Observer<Boolean> { isRefreshing ->
-        if (!isRefreshing) {
-            Timber.d("[AndroidAuto] Library sync completed, refreshing browse tree")
-            notifyChildrenChanged(CHRONICLE_MEDIA_ROOT_ID)
-            notifyChildrenChanged(getString(R.string.auto_category_recently_added))
-            notifyChildrenChanged(getString(R.string.auto_category_library))
-            notifyChildrenChanged(getString(R.string.auto_category_recently_listened))
-            notifyChildrenChanged(getString(R.string.auto_category_offline))
+                // Clear Android Auto error messages when login completes successfully
+                if (loginState == LOGGED_IN_FULLY && isErrorState) {
+                    Timber.d("[AndroidAuto] Login successful - clearing error state")
+                    // Set playback state to STOPPED to clear any displayed error messages
+                    mediaSession.setPlaybackState(
+                        PlaybackStateCompat.Builder()
+                            .setState(
+                                PlaybackStateCompat.STATE_STOPPED,
+                                PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN,
+                                0f,
+                            )
+                            .build(),
+                    )
+                    isErrorState = false
+                    sessionErrorMessage = null
+                }
+
+                notifyChildrenChanged(CHRONICLE_MEDIA_ROOT_ID)
+            }
         }
-    }
+
+    private val librarySyncObserver =
+        Observer<Boolean> { isRefreshing ->
+            if (!isRefreshing) {
+                Timber.d("[AndroidAuto] Library sync completed, refreshing browse tree")
+                notifyChildrenChanged(CHRONICLE_MEDIA_ROOT_ID)
+                notifyChildrenChanged(getString(R.string.auto_category_recently_added))
+                notifyChildrenChanged(getString(R.string.auto_category_library))
+                notifyChildrenChanged(getString(R.string.auto_category_recently_listened))
+                notifyChildrenChanged(getString(R.string.auto_category_offline))
+            }
+        }
 
     /**
      * Change the tracks in the player to refer to the new server url. Because [PlexConfig] is a
@@ -488,7 +496,7 @@ class MediaPlayerService :
                 mediaSessionCallback.onPlayFromMediaId(
                     trackListManager.trackList.map { it.id }.firstOrNull { true }.toString(),
                     Bundle().apply {
-                        putLong(KEY_SEEK_TO_TRACK_WITH_ID, ACTIVE_TRACK)
+                        putString(KEY_SEEK_TO_TRACK_WITH_ID, ACTIVE_TRACK)
                         putLong(KEY_START_TIME_TRACK_OFFSET, USE_SAVED_TRACK_PROGRESS)
                     },
                 )
@@ -497,7 +505,7 @@ class MediaPlayerService :
                 mediaSessionCallback.onPrepareFromMediaId(
                     trackListManager.trackList.map { it.id }.firstOrNull { true }.toString(),
                     Bundle().apply {
-                        putLong(KEY_SEEK_TO_TRACK_WITH_ID, ACTIVE_TRACK)
+                        putString(KEY_SEEK_TO_TRACK_WITH_ID, ACTIVE_TRACK)
                         putLong(KEY_START_TIME_TRACK_OFFSET, USE_SAVED_TRACK_PROGRESS)
                     },
                 )
@@ -545,9 +553,10 @@ class MediaPlayerService :
 
         // Calculate chapter-relative position for the progress bar
         val trackPosition = if (player.playbackState == Player.STATE_IDLE) 0L else player.currentPosition
-        val chapter = currentlyPlaying.chapter.value
+        // Read from synchronous state source to avoid race condition with async updates
+        val chapter = playbackStateController.state.value.currentChapter ?: EMPTY_CHAPTER
         val position =
-            if (chapter != local.oss.chronicle.data.model.EMPTY_CHAPTER) {
+            if (chapter != EMPTY_CHAPTER) {
                 // Chapter-scoped position: current position minus chapter start
                 kotlin.math.max(0L, trackPosition - chapter.startTimeOffset)
             } else {
@@ -558,7 +567,7 @@ class MediaPlayerService :
         // Calculate chapter-relative buffered position
         val trackBufferedPosition = player.bufferedPosition
         val bufferedPosition =
-            if (chapter != local.oss.chronicle.data.model.EMPTY_CHAPTER) {
+            if (chapter != EMPTY_CHAPTER) {
                 kotlin.math.max(0L, trackBufferedPosition - chapter.startTimeOffset)
             } else {
                 trackBufferedPosition
@@ -632,14 +641,16 @@ class MediaPlayerService :
                 ?: extractDescriptionFromTimeline(player)
 
         if (description != null) {
-            // Get current chapter information
-            val chapter = currentlyPlaying.chapter.value
-            val book = currentlyPlaying.book.value
-            val track = currentlyPlaying.track.value
+            // Read from synchronous state source to avoid race condition with async updates
+            // This ensures metadata is always up-to-date, even during multi-library playback
+            val state = playbackStateController.state.value
+            val chapter = state.currentChapter ?: EMPTY_CHAPTER
+            val book = state.audiobook ?: EMPTY_AUDIOBOOK
+            val track = state.currentTrack ?: MediaItemTrack.EMPTY_TRACK
 
             // Build metadata with chapter-scoped information
             val metadata =
-                if (chapter != local.oss.chronicle.data.model.EMPTY_CHAPTER) {
+                if (chapter != EMPTY_CHAPTER) {
                     // Chapter exists: use chapter title and duration
                     val metadataBuilder =
                         MediaMetadataCompat.Builder()
@@ -689,22 +700,22 @@ class MediaPlayerService :
 
     override fun onDestroy() {
         Timber.i("Service destroyed")
-        
+
         // Release TTS resources
         voiceCommandBridgeAudio.release()
-        
+
         plexLoginRepo.loginEvent.removeObserver(loginStateObserver)
         librarySyncRepository.isRefreshing.removeObserver(librarySyncObserver)
-        
+
         // Send one last update to local/remote servers that playback has stopped
         val metadata = mediaController.metadata
         val trackId = metadata?.id
         Timber.d("onDestroy: metadata=${if (metadata != null) "present" else "null"}, trackId=$trackId")
-        if (trackId != null && trackId.toInt() != TRACK_NOT_FOUND) {
+        if (trackId != null && trackId != TRACK_NOT_FOUND) {
             val finalPosition = currentPlayer?.currentPosition ?: 0L
             Timber.d("onDestroy: Sending final progress update for trackId=$trackId, position=$finalPosition")
             progressUpdater.updateProgress(
-                trackId.toInt(),
+                trackId,
                 PLEX_STATE_STOPPED,
                 finalPosition,
                 true,
@@ -1017,7 +1028,7 @@ class MediaPlayerService :
     ): BrowserRoot? {
         Timber.i("[AndroidAuto] onGetRoot: package=$clientPackageName, uid=$clientUid")
 
-        val isClientLegal = packageValidator.isKnownCaller(clientPackageName, clientUid) || BuildConfig.DEBUG
+        val isClientLegal = packageValidator.isKnownCaller(clientPackageName, clientUid) || BuildConfig.DEBUG || !prefsRepo.strictAutoValidation
 
         val extras =
             Bundle().apply {
@@ -1095,6 +1106,12 @@ class MediaPlayerService :
                 if (isPlaying) {
                     voiceCommandBridgeAudio.stop()
                     mediaSessionCallback.logVoiceCommandLatencyIfPending()
+                } else {
+                    // Playback paused - send immediate update to Plex
+                    // Only send if user explicitly paused (playWhenReady = false), not during buffering
+                    if (!exoPlayer.playWhenReady) {
+                        sendImmediatePauseUpdate()
+                    }
                 }
             }
 
@@ -1118,18 +1135,18 @@ class MediaPlayerService :
                         Timber.i("Playing next track")
                         // Update track progress
                         val trackId = mediaController.metadata.id
-                        if (trackId != null && trackId != TRACK_NOT_FOUND.toString()) {
+                        if (trackId != null && trackId != TRACK_NOT_FOUND) {
                             val plexState = PLEX_STATE_PLAYING
                             withContext(Dispatchers.IO) {
-                                val bookId = trackRepository.getBookIdForTrack(trackId.toInt())
-                                val track = trackRepository.getTrackAsync(trackId.toInt())
+                                val bookId = trackRepository.getBookIdForTrack(trackId)
+                                val track = trackRepository.getTrackAsync(trackId)
                                 val tracks = trackRepository.getTracksForAudiobookAsync(bookId)
 
                                 if (tracks.getDuration() == tracks.getProgress()) {
                                     mediaController.transportControls.stop()
                                 }
                                 progressUpdater.updateProgress(
-                                    trackId.toInt(),
+                                    trackId,
                                     plexState,
                                     track?.duration ?: 0L,
                                     true,
@@ -1230,6 +1247,56 @@ class MediaPlayerService :
             @Suppress("DEPRECATION")
             stopForeground(removeNotification)
         }
+    }
+
+    /**
+     * Sends an immediate progress update to Plex when playback pauses.
+     * This ensures the Plex "Now Playing" dashboard shows the correct paused state
+     * without waiting for the next regular polling interval.
+     *
+     * Includes debouncing to prevent rapid play/pause toggles from flooding the server.
+     */
+    private fun sendImmediatePauseUpdate() {
+        val currentTime = System.currentTimeMillis()
+
+        // Debounce: skip if we just sent a pause update recently
+        if (currentTime - lastPauseUpdateTime < PAUSE_UPDATE_DEBOUNCE_MS) {
+            Timber.d("Skipping pause update - debounced (last update ${currentTime - lastPauseUpdateTime}ms ago)")
+            return
+        }
+
+        lastPauseUpdateTime = currentTime
+
+        val currentTrack = mediaController.metadata?.id
+        if (currentTrack == null || currentTrack == TRACK_NOT_FOUND) {
+            Timber.d("Skipping pause update - no valid track")
+            return
+        }
+
+        // Get current position (same logic as ProgressUpdater)
+        val absolutePositionFromExtras =
+            mediaController.playbackState?.extras
+                ?.getLong(EXTRA_ABSOLUTE_TRACK_POSITION) ?: 0L
+        val chapterRelativePosition = mediaController.playbackState?.currentPlayBackPosition ?: 0L
+        // Read from synchronous state source to avoid race condition with async updates
+        val chapter = playbackStateController.state.value.currentChapter ?: EMPTY_CHAPTER
+
+        val playerPosition =
+            if (chapter != EMPTY_CHAPTER && chapterRelativePosition >= 0) {
+                chapter.startTimeOffset + chapterRelativePosition
+            } else {
+                absolutePositionFromExtras
+            }
+
+        // Force immediate network update (forceNetworkUpdate = true)
+        progressUpdater.updateProgress(
+            trackId = currentTrack,
+            playbackState = PLEX_STATE_PAUSED,
+            progress = playerPosition,
+            forceNetworkUpdate = true,
+        )
+
+        Timber.i("Sent immediate pause update to Plex: position=${playerPosition}ms")
     }
 
     override fun onChapterChange(chapter: local.oss.chronicle.data.model.Chapter) {

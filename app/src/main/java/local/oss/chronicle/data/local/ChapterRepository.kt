@@ -6,8 +6,10 @@ import local.oss.chronicle.BuildConfig
 import local.oss.chronicle.data.model.Chapter
 import local.oss.chronicle.data.model.MediaItemTrack
 import local.oss.chronicle.data.model.asChapter
-import local.oss.chronicle.data.sources.plex.PlexMediaService
+import local.oss.chronicle.data.model.filterTransitionMarkers
 import local.oss.chronicle.data.sources.plex.PlexPrefsRepo
+import local.oss.chronicle.data.sources.plex.ScopedPlexServiceFactory
+import local.oss.chronicle.data.sources.plex.ServerConnectionResolver
 import local.oss.chronicle.data.sources.plex.model.toChapter
 import timber.log.Timber
 import javax.inject.Inject
@@ -26,6 +28,7 @@ interface IChapterRepository {
      * by [BookRepository] or [TrackRepository] and saves results to the DB
      */
     suspend fun loadChapterData(
+        bookId: String,
         isAudiobookCached: Boolean,
         tracks: List<MediaItemTrack>,
     )
@@ -38,18 +41,44 @@ class ChapterRepository
         private val chapterDao: ChapterDao,
         private val prefsRepo: PrefsRepo,
         private val plexPrefsRepo: PlexPrefsRepo,
-        private val plexMediaService: PlexMediaService,
+        private val scopedPlexServiceFactory: ScopedPlexServiceFactory,
+        private val serverConnectionResolver: ServerConnectionResolver,
     ) : IChapterRepository {
         override suspend fun loadChapterData(
+            bookId: String,
             isAudiobookCached: Boolean,
             tracks: List<MediaItemTrack>,
         ) = withContext(Dispatchers.IO) {
-            Timber.i("Loading chapter data for tracks: $tracks")
+            Timber.i("Loading chapter data for book $bookId with tracks: $tracks")
             val chapters: List<Chapter> =
                 try {
                     tracks.flatMap { track ->
+                        // Extract numeric ID for Plex API call
+                        val numericTrackId =
+                            track.id.removePrefix("plex:").toIntOrNull()
+                                ?: return@flatMap emptyList()
+
+                        // Get libraryId from the track
+                        val libraryId = track.libraryId
+                        if (libraryId.isEmpty()) {
+                            Timber.w("Track ${track.id} has no libraryId, skipping chapter load")
+                            return@flatMap emptyList()
+                        }
+
+                        // Resolve the server connection for this library
+                        val connection = serverConnectionResolver.resolve(libraryId)
+
+                        // Validate connection has required fields
+                        if (connection.serverUrl == null || connection.authToken == null) {
+                            Timber.e("No valid server connection for library $libraryId (track ${track.id})")
+                            return@flatMap emptyList()
+                        }
+
+                        // Get/create a scoped PlexMediaService for this server
+                        val scopedService = scopedPlexServiceFactory.getOrCreateService(connection)
+
                         val networkChapters =
-                            plexMediaService.retrieveChapterInfo(track.id)
+                            scopedService.retrieveChapterInfo(numericTrackId)
                                 .plexMediaContainer.metadata.firstOrNull()?.plexChapters
                         if (BuildConfig.DEBUG) {
                             // prevent networkChapters from toString()ing and being slow even if timber
@@ -59,16 +88,21 @@ class ChapterRepository
                         // If no chapters for this track, make a chapter from the current track
                         networkChapters?.map { plexChapter ->
                             plexChapter.toChapter(
-                                track.id.toLong(),
-                                track.discNumber,
-                                isAudiobookCached,
+                                trackId = track.id,
+                                trackDiscNumber = track.discNumber,
+                                downloaded = isAudiobookCached,
+                                bookId = bookId,
                             )
-                        }.takeIf { !it.isNullOrEmpty() } ?: listOf(track.asChapter(0L))
+                        }?.filterTransitionMarkers().takeIf { !it.isNullOrEmpty() }
+                            ?: listOf(track.asChapter(0L, bookId))
                     }.sorted()
                 } catch (t: Throwable) {
                     Timber.e("Failed to load chapters: $t")
                     emptyList()
                 }
+            // Delete existing chapters for this book to prevent duplicates
+            // (uid auto-generation means OnConflictStrategy.REPLACE won't detect duplicates)
+            chapterDao.deleteByBookId(bookId)
             chapterDao.insertAll(chapters)
         }
     }

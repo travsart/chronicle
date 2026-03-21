@@ -6,7 +6,6 @@ import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import androidx.lifecycle.MutableLiveData
-import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import io.mockk.MockKAnnotations
 import io.mockk.coEvery
@@ -25,11 +24,11 @@ import local.oss.chronicle.data.local.ITrackRepository
 import local.oss.chronicle.data.local.PrefsRepo
 import local.oss.chronicle.data.model.Audiobook
 import local.oss.chronicle.data.model.EMPTY_AUDIOBOOK
-import local.oss.chronicle.data.model.MediaItemTrack
 import local.oss.chronicle.data.sources.plex.IPlexLoginRepo
 import local.oss.chronicle.data.sources.plex.IPlexLoginRepo.LoginState
 import local.oss.chronicle.data.sources.plex.PlaybackUrlResolver
 import local.oss.chronicle.data.sources.plex.PlexConfig
+import local.oss.chronicle.data.sources.plex.PlexHttpDataSourceFactory
 import local.oss.chronicle.data.sources.plex.PlexPrefsRepo
 import local.oss.chronicle.features.currentlyplaying.CurrentlyPlaying
 import local.oss.chronicle.util.Event
@@ -66,7 +65,7 @@ class VoiceSearchFallbackTest {
     private lateinit var mediaController: MediaControllerCompat
 
     @RelaxedMockK
-    private lateinit var dataSourceFactory: DefaultHttpDataSource.Factory
+    private lateinit var dataSourceFactory: PlexHttpDataSourceFactory
 
     @RelaxedMockK
     private lateinit var trackRepository: ITrackRepository
@@ -106,6 +105,9 @@ class VoiceSearchFallbackTest {
 
     @RelaxedMockK
     private lateinit var voiceCommandBridgeAudio: VoiceCommandBridgeAudio
+
+    @RelaxedMockK
+    private lateinit var plexProgressReporter: local.oss.chronicle.data.sources.plex.PlexProgressReporter
 
     @RelaxedMockK
     private lateinit var defaultPlayer: ExoPlayer
@@ -157,6 +159,7 @@ class VoiceSearchFallbackTest {
                 playbackStateController = playbackStateController,
                 voiceCommandBridgeAudio = voiceCommandBridgeAudio,
                 coroutineExceptionHandler = testExceptionHandler,
+                plexProgressReporter = plexProgressReporter,
                 defaultPlayer = defaultPlayer,
             )
     }
@@ -180,7 +183,8 @@ class VoiceSearchFallbackTest {
             // Given: A recently played book exists
             val recentBook =
                 Audiobook(
-                    id = 42,
+                    id = "plex:42",
+                    libraryId = "plex:library:1",
                     source = 1L,
                     title = "Recently Played Book",
                     author = "Test Author",
@@ -189,8 +193,8 @@ class VoiceSearchFallbackTest {
                     viewCount = 5,
                 )
             coEvery { bookRepository.getMostRecentlyPlayed() } returns recentBook
-            coEvery { trackRepository.getTracksForAudiobookAsync(42) } returns emptyList()
-            coEvery { bookRepository.getAudiobookAsync(42) } returns recentBook
+            coEvery { trackRepository.getTracksForAudiobookAsync("plex:42") } returns emptyList()
+            coEvery { bookRepository.getAudiobookAsync("plex:42") } returns recentBook
 
             // When: Voice search is performed with no results
             callback.onPlayFromSearch("nonexistent query", null)
@@ -231,15 +235,16 @@ class VoiceSearchFallbackTest {
             // Given: A random book is available
             val randomBook =
                 Audiobook(
-                    id = 100,
+                    id = "plex:100",
+                    libraryId = "plex:library:1",
                     source = 1L,
                     title = "Random Book",
                     author = "Random Author",
                     duration = 5400000,
                 )
             coEvery { bookRepository.getRandomBookAsync() } returns randomBook
-            coEvery { trackRepository.getTracksForAudiobookAsync(100) } returns emptyList()
-            coEvery { bookRepository.getAudiobookAsync(100) } returns randomBook
+            coEvery { trackRepository.getTracksForAudiobookAsync("plex:100") } returns emptyList()
+            coEvery { bookRepository.getAudiobookAsync("plex:100") } returns randomBook
 
             // When: Voice search is performed with no results
             callback.onPlayFromSearch("nonexistent query", null)
@@ -342,15 +347,16 @@ class VoiceSearchFallbackTest {
             // Given: Search returns matching results
             val matchingBook =
                 Audiobook(
-                    id = 200,
+                    id = "plex:200",
+                    libraryId = "plex:library:1",
                     source = 1L,
                     title = "Matching Book Title",
                     author = "Matching Author",
                     duration = 7200000,
                 )
             coEvery { bookRepository.searchAsync("matching query") } returns listOf(matchingBook)
-            coEvery { trackRepository.getTracksForAudiobookAsync(200) } returns emptyList()
-            coEvery { bookRepository.getAudiobookAsync(200) } returns matchingBook
+            coEvery { trackRepository.getTracksForAudiobookAsync("plex:200") } returns emptyList()
+            coEvery { bookRepository.getAudiobookAsync("plex:200") } returns matchingBook
 
             // When: Voice search is performed with a successful query
             callback.onPlayFromSearch("matching query", null)

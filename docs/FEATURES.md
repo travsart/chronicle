@@ -11,6 +11,7 @@ Chronicle is a feature-rich Android audiobook player that integrates with Plex M
 | Document | Description |
 |----------|-------------|
 | [Login & Authentication](features/login.md) | OAuth flow, user selection, server selection, library selection |
+| [Account Management](features/account-ui-design.md) | Multi-account and library switching UI |
 | [Library & Browsing](features/library.md) | Home screen, library view, search, collections, audiobook details |
 | [Media Playback](features/playback.md) | Player architecture, sleep timer, speed control, progress sync, notifications |
 | [Chapter System](features/chapters.md) | Chapter data flow, detection algorithm, track-to-chapter mapping, navigation |
@@ -73,12 +74,33 @@ Chronicle uses Plex's OAuth 2.0 PIN-based authentication flow. Users can select 
 
 ---
 
+### Account Management
+Chronicle supports multiple Plex accounts and libraries with a **Unified Library View** that displays content from ALL connected accounts and libraries in a single interface.
+
+#### Unified Library View
+Chronicle aggregates audiobooks from all connected accounts and libraries:
+- **Library Screen** - Shows all audiobooks from all libraries, sorted alphabetically
+- **Home Screen** - "Recently Listened" and "Recently Added" aggregate across all libraries
+- **Collections Screen** - Shows all collections from all libraries
+- **Search** - Finds audiobooks across all connected libraries
+
+#### Multi-Account Support
+- Add multiple Plex accounts via **Settings → Manage Accounts**
+- Each account can have multiple libraries, and all content is shown together
+- All libraries sync automatically when refreshing
+- Playback progress syncs to the correct server for each audiobook
+- Remove accounts individually via Manage Accounts
+
+→ See [Account Management](features/account-ui-design.md) for multi-account UI details.
+
+---
+
 ### Library & Browsing
-The app provides multiple ways to browse audiobooks:
-- **Home Screen** - Recently listened and recently added
-- **Library View** - Full library with sorting/filtering
-- **Collections** - Plex collection support
-- **Search** - Real-time search across titles and authors
+The app provides multiple ways to browse audiobooks from **all your connected libraries**:
+- **Home Screen** - Recently listened and recently added from all libraries
+- **Library View** - Full library with sorting/filtering across all libraries
+- **Collections** - All Plex collections from all libraries
+- **Search** - Real-time search across titles and authors from all libraries
 
 → See [Library & Browsing](features/library.md) for browsing features and audiobook details.
 
@@ -100,6 +122,7 @@ Chronicle uses Media3 (ExoPlayer) for background audio playback with:
 ### Chapter System
 Chronicle supports chapter navigation for M4B audiobooks and multi-file audiobooks:
 - Chapters sourced from Plex API or synthesized from track files
+- Sub-second Plex transition markers are skipped so duplicate `0:00` chapter rows are not shown
 - Chapter-scoped seekbar and progress display
 - Skip to next/previous chapter navigation
 - Chapter list with active chapter highlighting
@@ -164,6 +187,7 @@ graph TD
 
 ### Feature Details
 - [Login & Authentication](features/login.md) - OAuth and server selection
+- [Account Management](features/account-ui-design.md) - Multi-account and library switching
 - [Library & Browsing](features/library.md) - Library and collections
 - [Media Playback](features/playback.md) - Player and controls
 - [Chapter System](features/chapters.md) - Chapter detection and navigation

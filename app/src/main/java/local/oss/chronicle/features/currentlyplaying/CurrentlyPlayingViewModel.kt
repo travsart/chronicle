@@ -118,8 +118,15 @@ class CurrentlyPlayingViewModel(
 
     // Used to cache tracks.asChapterList when tracks changes
     private val tracksAsChaptersCache: LiveData<List<Chapter>> =
-        mapAsync(tracks, viewModelScope) {
-            it.asChapterList()
+        DoubleLiveData(
+            audiobookId,
+            tracks,
+        ) { bookId: String?, trackList: List<MediaItemTrack>? ->
+            if (bookId != null && trackList != null) {
+                trackList.asChapterList(bookId)
+            } else {
+                emptyList()
+            }
         }
 
     val chapters: DoubleLiveData<Audiobook?, List<Chapter>, List<Chapter>> =
@@ -129,7 +136,7 @@ class CurrentlyPlayingViewModel(
         ) { _audiobook: Audiobook?, _tracksAsChapters: List<Chapter>? ->
             if (_audiobook?.chapters?.isNotEmpty() == true) {
                 // We would really prefer this because it doesn't have to be computed
-                _audiobook.chapters
+                _audiobook.chapters.filterTransitionMarkers()
             } else {
                 _tracksAsChapters ?: emptyList()
             }
@@ -154,9 +161,9 @@ class CurrentlyPlayingViewModel(
     val showModalBottomSheetSpeedChooser: LiveData<Event<Unit>>
         get() = _showModalBottomSheetSpeedChooser
 
-    val activeTrackId: LiveData<Int> =
+    val activeTrackId: LiveData<String> =
         mediaServiceConnection.nowPlaying.map { metadata ->
-            metadata.takeIf { !it.id.isNullOrEmpty() }?.id?.toInt() ?: TRACK_NOT_FOUND
+            metadata.takeIf { !it.id.isNullOrEmpty() }?.id ?: TRACK_NOT_FOUND
         }
 
     val currentTrack: LiveData<MediaItemTrack> =
@@ -274,7 +281,7 @@ class CurrentlyPlayingViewModel(
 
             if (!_tracks.isNullOrEmpty() && !_chapters.isNullOrEmpty()) {
                 val activeTrack = _tracks.getActiveTrack()
-                _chapters.getChapterAt(activeTrack.id.toLong(), activeTrack.progress)
+                _chapters.getChapterAt(activeTrack.id, activeTrack.progress)
             } else {
                 EMPTY_CHAPTER
             }
@@ -332,11 +339,11 @@ class CurrentlyPlayingViewModel(
     private val playbackObserver =
         Observer<MediaMetadataCompat> { metadata ->
             if (metadata.id?.isEmpty() == false) {
-                setAudiobook(metadata.id!!.toInt())
+                setAudiobook(metadata.id!!)
             }
         }
 
-    private fun setAudiobook(trackId: Int) {
+    private fun setAudiobook(trackId: String) {
         val previousAudiobookId = audiobook.value?.id ?: NO_AUDIOBOOK_FOUND_ID
         viewModelScope.launch(Injector.get().unhandledExceptionHandler()) {
             // only update [audiobookId] when we see a new audiobook
@@ -355,7 +362,7 @@ class CurrentlyPlayingViewModel(
         prefsRepo.registerPrefsListener(prefsChangeListener)
     }
 
-    private fun refreshTracks(bookId: Int) {
+    private fun refreshTracks(bookId: String) {
         if (bookId == NO_AUDIOBOOK_FOUND_ID) {
             return
         }
@@ -365,7 +372,16 @@ class CurrentlyPlayingViewModel(
                 if (tracks.value?.size == null) {
                     _isLoadingTracks.value = true
                 }
-                val tracks = trackRepository.loadTracksForAudiobook(bookId)
+
+                // Get the audiobook first to access libraryId
+                val audiobookData = audiobook.value
+                if (audiobookData == null) {
+                    Timber.w("Cannot refresh tracks for $bookId: audiobook not loaded yet")
+                    _isLoadingTracks.value = false
+                    return@launch
+                }
+
+                val tracks = trackRepository.loadTracksForAudiobook(bookId, audiobookData.libraryId)
                 if (tracks is Ok) {
                     bookRepository.updateTrackData(
                         bookId,
@@ -373,9 +389,7 @@ class CurrentlyPlayingViewModel(
                         tracks.value.getDuration(),
                         tracks.value.size,
                     )
-                    audiobook.value?.let {
-                        bookRepository.syncAudiobook(it, tracks.value)
-                    }
+                    bookRepository.syncAudiobook(audiobookData, tracks.value)
                 }
                 _isLoadingTracks.value = false
             } catch (e: Throwable) {
@@ -397,7 +411,7 @@ class CurrentlyPlayingViewModel(
             pausePlay(
                 bookId = audiobook.value!!.id.toString(),
                 trackId = ACTIVE_TRACK,
-                startTimeOffset = ACTIVE_TRACK,
+                startTimeOffset = USE_SAVED_TRACK_PROGRESS,
                 forcePlay = false,
             )
         }
@@ -407,14 +421,14 @@ class CurrentlyPlayingViewModel(
         bookId: String,
         startTimeOffset: Long = USE_SAVED_TRACK_PROGRESS,
         forcePlay: Boolean = false,
-        trackId: Long = ACTIVE_TRACK,
+        trackId: String = ACTIVE_TRACK,
     ) {
         val transportControls = mediaServiceConnection.transportControls
 
         val extras =
             Bundle().apply {
                 putLong(KEY_START_TIME_TRACK_OFFSET, startTimeOffset)
-                putLong(KEY_SEEK_TO_TRACK_WITH_ID, trackId)
+                putString(KEY_SEEK_TO_TRACK_WITH_ID, trackId)
             }
         if (transportControls != null) {
             mediaServiceConnection.playbackState.value?.let { playbackState ->
@@ -559,7 +573,7 @@ class CurrentlyPlayingViewModel(
     /** Jumps to a given track with [MediaItemTrack.id] == [trackId] */
     fun jumpToChapter(
         startTimeOffset: Long = 0,
-        trackId: Int = TRACK_NOT_FOUND,
+        trackId: String = TRACK_NOT_FOUND,
         hasUserConfirmation: Boolean = false,
     ) {
         if (!hasUserConfirmation) {
@@ -594,7 +608,7 @@ class CurrentlyPlayingViewModel(
                 pausePlay(
                     book.id.toString(),
                     startTimeOffset = startTimeOffset,
-                    trackId = trackId.toLong(),
+                    trackId = trackId,
                     forcePlay = true,
                 )
             }
@@ -799,13 +813,13 @@ class CurrentlyPlayingViewModel(
     }
 
     fun seekTo(percentProgress: Double) {
-        val id: String = (audiobookId.value ?: TRACK_NOT_FOUND).toString()
+        val id: String = audiobookId.value ?: NO_AUDIOBOOK_FOUND_ID
         if (currentChapter.value == EMPTY_CHAPTER) {
             // Seeking by track length
             currentTrack.value?.let { curr ->
                 val extras =
                     Bundle().apply {
-                        putLong(KEY_SEEK_TO_TRACK_WITH_ID, curr.id.toLong())
+                        putString(KEY_SEEK_TO_TRACK_WITH_ID, curr.id)
                     }
                 mediaServiceConnection.transportControls?.playFromMediaId(id, extras)
             }

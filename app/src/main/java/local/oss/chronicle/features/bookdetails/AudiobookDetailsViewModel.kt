@@ -97,7 +97,7 @@ class AudiobookDetailsViewModel(
     // Used to cache tracks.asChapterList when tracks changes
     private val tracksAsChaptersCache: LiveData<List<Chapter>> =
         mapAsync(tracks, viewModelScope) {
-            it.asChapterList()
+            it.asChapterList(inputAudiobook.id)
         }
 
     val chapters: DoubleLiveData<Audiobook?, List<Chapter>, List<Chapter>> =
@@ -105,11 +105,18 @@ class AudiobookDetailsViewModel(
             audiobook,
             tracksAsChaptersCache,
         ) { _audiobook: Audiobook?, _tracksAsChapters: List<Chapter>? ->
-            Timber.i("Chapter data updated! ")
-            if (_audiobook?.chapters?.isNotEmpty() == true) {
-                _audiobook.chapters
-            } else {
-                _tracksAsChapters ?: emptyList()
+            Timber.i(
+                "Chapter data updated! audiobook chapters: ${_audiobook?.chapters?.size}, tracksAsChapters: ${_tracksAsChapters?.size}",
+            )
+
+            val audiobookChapters = _audiobook?.chapters.orEmpty().filterTransitionMarkers()
+            val trackChapters = _tracksAsChapters.orEmpty()
+
+            // Prefer the source with more chapters (real Plex chapters > track fallbacks)
+            when {
+                audiobookChapters.size >= trackChapters.size -> audiobookChapters
+                trackChapters.isNotEmpty() -> trackChapters
+                else -> emptyList()
             }
         }
 
@@ -125,7 +132,7 @@ class AudiobookDetailsViewModel(
         DoubleLiveData(
             cachedFileManager.activeBookDownloads,
             audiobook,
-        ) { activeDownloadIDs: Set<Int>?, _audiobook: Audiobook? ->
+        ) { activeDownloadIDs: Set<String>?, _audiobook: Audiobook? ->
             Timber.i("Active downloads: $activeDownloadIDs")
             return@DoubleLiveData when {
                 _audiobook?.isCached == true -> CACHED
@@ -265,7 +272,7 @@ class AudiobookDetailsViewModel(
                 val activeTrack = _tracks.getActiveTrack()
                 val bookProgress = _tracks.getProgress()
                 // Use getChapterAt to find the correct chapter based on track ID and progress
-                _chapters.getChapterAt(activeTrack.id.toLong(), activeTrack.progress)
+                _chapters.getChapterAt(activeTrack.id, activeTrack.progress)
             } else {
                 EMPTY_CHAPTER
             }
@@ -298,7 +305,7 @@ class AudiobookDetailsViewModel(
      * Refresh details for the current audiobook. Mostly important because we want to refresh the
      * progress in the audiobook is there has been new playback
      */
-    private fun loadBookDetails(bookId: Int) {
+    private fun loadBookDetails(bookId: String) {
         Timber.i("Refreshing tracks!")
         viewModelScope.launch {
             try {
@@ -309,13 +316,19 @@ class AudiobookDetailsViewModel(
                 delay(50)
                 val noExistingChapters = chapters.value.isNullOrEmpty()
                 _isLoadingTracks.value = noExistingChapters
-                val trackRequest = trackRepository.loadTracksForAudiobook(bookId)
+
+                // Get the audiobook first to access libraryId
+                val audiobook = bookRepository.getAudiobookAsync(bookId)
+                if (audiobook == null) {
+                    Timber.e("Failed to load audiobook $bookId")
+                    _isLoadingTracks.value = false
+                    return@launch
+                }
+
+                val trackRequest = trackRepository.loadTracksForAudiobook(bookId, audiobook.libraryId)
                 if (trackRequest is Ok) {
-                    val audiobook = bookRepository.getAudiobookAsync(bookId)
-                    audiobook?.let {
-                        trackRepository.syncTracksInBook(audiobook.id)
-                        bookRepository.syncAudiobook(audiobook, trackRequest.value)
-                    }
+                    trackRepository.syncTracksInBook(audiobook.id)
+                    bookRepository.syncAudiobook(audiobook, trackRequest.value)
                 }
                 _isLoadingTracks.value = false
             } catch (e: Throwable) {
@@ -420,7 +433,7 @@ class AudiobookDetailsViewModel(
     private fun pausePlay(
         bookId: String,
         startTimeOffset: Long = USE_SAVED_TRACK_PROGRESS,
-        trackId: Long = ACTIVE_TRACK,
+        trackId: String = ACTIVE_TRACK,
         forcePlayFromMediaId: Boolean = false,
     ) {
         if (mediaServiceConnection.isConnected.value != true) {
@@ -434,7 +447,7 @@ class AudiobookDetailsViewModel(
         val extras =
             Bundle().apply {
                 putLong(KEY_START_TIME_TRACK_OFFSET, startTimeOffset)
-                putLong(KEY_SEEK_TO_TRACK_WITH_ID, trackId)
+                putString(KEY_SEEK_TO_TRACK_WITH_ID, trackId)
             }
         Timber.i(
             "is this book playing? ${isBookInViewPlaying.value}, this this book active? ${isBookInViewActive.value}",
@@ -459,7 +472,7 @@ class AudiobookDetailsViewModel(
             } else {
                 Timber.i("Currently playing is $currentlyPlayingTrackId")
                 tracks.value?.let { trackList ->
-                    trackList.none { it.id == currentlyPlayingTrackId.toInt() }
+                    trackList.none { it.id == currentlyPlayingTrackId }
                 } ?: false
             }
 
@@ -467,7 +480,7 @@ class AudiobookDetailsViewModel(
             if (!currentlyPlayingTrackId.isNullOrEmpty()) {
                 mediaServiceConnection.playbackState.value?.let { state ->
                     progressUpdater.updateProgress(
-                        currentlyPlayingTrackId.toInt(),
+                        currentlyPlayingTrackId,
                         PLEX_STATE_STOPPED,
                         state.extras?.getLong(EXTRA_ABSOLUTE_TRACK_POSITION)
                             ?: state.currentPlayBackPosition,
@@ -481,7 +494,7 @@ class AudiobookDetailsViewModel(
     /** Jumps to a chapter starting [offset] milliseconds into the audiobook */
     fun jumpToChapter(
         offset: Long = 0,
-        trackId: Long = TRACK_NOT_FOUND.toLong(),
+        trackId: String = TRACK_NOT_FOUND,
         hasUserConfirmation: Boolean = false,
     ) {
         if (!hasUserConfirmation) {

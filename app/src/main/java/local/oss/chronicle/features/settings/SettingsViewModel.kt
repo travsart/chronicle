@@ -25,6 +25,7 @@ import local.oss.chronicle.data.sources.plex.PlexPrefsRepo
 import local.oss.chronicle.features.download.MoveSyncLocationWorker
 import local.oss.chronicle.features.player.MediaServiceConnection
 import local.oss.chronicle.features.settings.SettingsViewModel.NavigationDestination.*
+import local.oss.chronicle.navigation.Navigator
 import local.oss.chronicle.util.Event
 import local.oss.chronicle.util.bytesAvailable
 import local.oss.chronicle.util.postEvent
@@ -55,6 +56,7 @@ class SettingsViewModel(
     private val workManager: WorkManager,
     private val plexPrefs: PlexPrefsRepo,
     private val collectionsRepository: CollectionsRepository,
+    private val navigator: Navigator,
 ) : ViewModel() {
     @Suppress("UNCHECKED_CAST")
     class Factory
@@ -70,6 +72,7 @@ class SettingsViewModel(
             private val workManager: WorkManager,
             private val plexPrefs: PlexPrefsRepo,
             private val collectionsRepository: CollectionsRepository,
+            private val navigator: Navigator,
         ) : ViewModelProvider.Factory {
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
                 if (modelClass.isAssignableFrom(SettingsViewModel::class.java)) {
@@ -84,6 +87,7 @@ class SettingsViewModel(
                         workManager = workManager,
                         plexPrefs = plexPrefs,
                         collectionsRepository = collectionsRepository,
+                        navigator = navigator,
                     ) as T
                 } else {
                     throw IllegalArgumentException(
@@ -681,134 +685,12 @@ class SettingsViewModel(
                 ),
                 PreferenceModel(
                     PreferenceType.CLICKABLE,
-                    title = FormattableString.from(R.string.settings_change_library),
-                    explanation =
-                        FormattableString.ResourceString(
-                            R.string.settings_current_library,
-                            listOf(plexPrefs.library?.name ?: ""),
-                        ),
+                    title = FormattableString.from(R.string.manage_accounts),
+                    explanation = FormattableString.from(R.string.manage_accounts_summary),
                     click =
                         object : PreferenceClick {
                             override fun onClick() {
-                                viewModelScope.launch {
-                                    if (!cachedFileManager.hasUserCachedTracks()) {
-                                        clearConfig(RETURN_TO_LIBRARY_CHOOSER)
-                                        return@launch
-                                    }
-                                    showOptionsMenu(
-                                        title =
-                                            FormattableString.from(
-                                                R.string.prompt_clear_downloads_allow_retain,
-                                            ),
-                                        options =
-                                            listOf(
-                                                FormattableString.yes,
-                                                FormattableString.no,
-                                            ),
-                                        listener =
-                                            object : BottomChooserItemListener() {
-                                                override fun onItemClicked(formattableString: FormattableString) {
-                                                    check(
-                                                        formattableString is FormattableString.ResourceString,
-                                                    )
-                                                    if (formattableString.stringRes == R.string.yes) {
-                                                        // Keep downloaded
-                                                        clearConfig(
-                                                            RETURN_TO_LIBRARY_CHOOSER,
-                                                            clearDownloads = false,
-                                                        )
-                                                    } else {
-                                                        // Delete downloaded
-                                                        clearConfig(
-                                                            RETURN_TO_LIBRARY_CHOOSER,
-                                                            clearDownloads = true,
-                                                        )
-                                                    }
-                                                    setBottomSheetVisibility(false)
-                                                }
-                                            },
-                                    )
-                                }
-                            }
-                        },
-                ),
-                PreferenceModel(
-                    PreferenceType.CLICKABLE,
-                    title = FormattableString.from(R.string.settings_change_server),
-                    explanation =
-                        FormattableString.ResourceString(
-                            R.string.settings_current_server,
-                            listOf(plexPrefs.server?.name ?: ""),
-                        ),
-                    click =
-                        object : PreferenceClick {
-                            override fun onClick() {
-                                viewModelScope.launch {
-                                    if (!cachedFileManager.hasUserCachedTracks()) {
-                                        clearConfig(RETURN_TO_SERVER_CHOOSER)
-                                        return@launch
-                                    }
-                                    showOptionsMenu(
-                                        title =
-                                            FormattableString.from(
-                                                R.string.settings_clear_downloads_warning,
-                                            ),
-                                        options =
-                                            listOf(
-                                                FormattableString.yes,
-                                                FormattableString.no,
-                                            ),
-                                        listener =
-                                            object : BottomChooserItemListener() {
-                                                override fun onItemClicked(formattableString: FormattableString) {
-                                                    if (formattableString == FormattableString.yes) {
-                                                        clearConfig(RETURN_TO_SERVER_CHOOSER)
-                                                    }
-                                                    setBottomSheetVisibility(false)
-                                                }
-                                            },
-                                    )
-                                }
-                            }
-                        },
-                ),
-                PreferenceModel(
-                    PreferenceType.CLICKABLE,
-                    title = FormattableString.from(R.string.settings_change_user),
-                    explanation =
-                        FormattableString.ResourceString(
-                            R.string.settings_current_user,
-                            listOf(plexPrefs.user?.username ?: ""),
-                        ),
-                    click =
-                        object : PreferenceClick {
-                            override fun onClick() {
-                                viewModelScope.launch {
-                                    if (!cachedFileManager.hasUserCachedTracks()) {
-                                        clearConfig(RETURN_TO_USER_CHOOSER)
-                                        return@launch
-                                    }
-                                    showOptionsMenu(
-                                        title =
-                                            FormattableString.from(
-                                                R.string.settings_clear_downloads_warning,
-                                            ),
-                                        options =
-                                            listOf(
-                                                FormattableString.yes,
-                                                FormattableString.no,
-                                            ),
-                                        listener =
-                                            object : BottomChooserItemListener() {
-                                                override fun onItemClicked(formattableString: FormattableString) {
-                                                    if (formattableString == FormattableString.yes) {
-                                                        clearConfig(RETURN_TO_USER_CHOOSER)
-                                                    }
-                                                    setBottomSheetVisibility(false)
-                                                }
-                                            },
-                                    )
-                                }
+                                navigator.showAccountList()
                             }
                         },
                 ),
@@ -859,6 +741,13 @@ class SettingsViewModel(
                 PreferenceModel(
                     PreferenceType.TITLE,
                     FormattableString.from(R.string.settings_category_etc),
+                ),
+                PreferenceModel(
+                    PreferenceType.BOOLEAN,
+                    FormattableString.from(R.string.settings_strict_auto_validation_title),
+                    explanation = FormattableString.from(R.string.settings_strict_auto_validation_explanation),
+                    key = PrefsRepo.KEY_STRICT_AUTO_VALIDATION,
+                    defaultValue = prefsRepo.strictAutoValidation,
                 ),
                 PreferenceModel(
                     type = PreferenceType.CLICKABLE,

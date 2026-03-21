@@ -1,0 +1,14 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "local.oss.chronicle",
+      "sha256_cert_fingerprints": [
+        "FE:ED:88:66:69:18:47:6F:60:16:FD:06:CD:F8:D0:FA:96:99:26:7C:94:01:77:19:03:40:0C:5B:CC:FB:20:3F",
+        "64:B1:BC:D5:57:CB:CD:5A:37:6B:3B:CB:86:EB:60:36:99:D7:19:9A:7B:51:91:59:BA:83:C2:E0:E1:31:C0:ED",
+        "A6:93:09:9E:4F:A3:AA:F0:92:CD:F4:49:20:7E:A3:AE:BF:38:75:19:1E:12:FB:40:BC:C8:B4:37:B3:CE:66:0A"
+      ]
+    }
+  }
+]

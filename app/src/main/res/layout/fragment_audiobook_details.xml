@@ -64,6 +64,7 @@
                         android:id="@+id/details_artwork"
                         serverConnected="@{plexConfig.isConnected()}"
                         srcRounded="@{viewModel.audiobook.thumb}"
+                        libraryId="@{viewModel.audiobook.libraryId}"
                         android:layout_width="@dimen/details_artwork_size"
                         android:layout_height="@dimen/details_artwork_size"
                         android:layout_marginTop="@dimen/app_bar_height"

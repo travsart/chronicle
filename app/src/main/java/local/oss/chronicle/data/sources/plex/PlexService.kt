@@ -117,8 +117,10 @@ interface PlexMediaService {
      * for a media item identified by a server and ID combination. This session can be updated using
      * the [progress] function
      *
-     * Note: Initial exploration indicates that this call is required in order for [progress]
-     * updates to register in Plex, although I haven't confirmed it 100%
+     * The playQueueItemID values in the response MUST be captured and sent
+     * in subsequent GET /:/timeline calls for Plex dashboard activity to work.
+     *
+     * @return PlayQueueResponseWrapper containing playQueueItemID for each track
      */
     @POST("/playQueues")
     suspend fun startMediaSession(
@@ -128,7 +130,7 @@ interface PlexMediaService {
         @Query("repeat") shouldRepeat: Boolean = false,
         @Query("own") isOwnedByUser: Boolean = true,
         @Query("includeChapters") shouldIncludeChapters: Boolean = true,
-    )
+    ): PlayQueueResponseWrapper
 
     /** Loads all [MediaType.TRACK]s available in the server */
     @GET("/library/sections/{libraryId}/all?type=$MEDIA_TYPE_TRACK")
