@@ -167,7 +167,7 @@ data class MediaItemTrack(
     fun getTrackSource(): String {
         return if (cached) {
             // Use local file if downloaded
-            File(Injector.get().prefsRepo().cachedMediaDir, getCachedFileName()).absolutePath
+            File(Injector.get().prefsRepo().cachedMediaDir, getCachedFileName()).toURI().toString()
         } else {
             // Check for pre-resolved streaming URL (bandwidth-aware)
             streamingUrlCache[id]?.let { resolvedUrl ->
