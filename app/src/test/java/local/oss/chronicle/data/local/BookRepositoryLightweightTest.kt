@@ -24,7 +24,6 @@ import org.junit.Test
  */
 @ExperimentalCoroutinesApi
 class BookRepositoryLightweightTest {
-
     @get:Rule
     val instantTaskExecutorRule = InstantTaskExecutorRule()
 
@@ -49,16 +48,17 @@ class BookRepositoryLightweightTest {
         serverConnectionResolver = mockk(relaxed = true)
         scopedPlexServiceFactory = mockk(relaxed = true)
 
-        bookRepository = BookRepository(
-            bookDao = bookDao,
-            prefsRepo = prefsRepo,
-            plexPrefsRepo = plexPrefsRepo,
-            plexMediaService = plexMediaService,
-            chapterRepository = chapterRepository,
-            chapterDao = chapterDao,
-            serverConnectionResolver = serverConnectionResolver,
-            scopedPlexServiceFactory = scopedPlexServiceFactory
-        )
+        bookRepository =
+            BookRepository(
+                bookDao = bookDao,
+                prefsRepo = prefsRepo,
+                plexPrefsRepo = plexPrefsRepo,
+                plexMediaService = plexMediaService,
+                chapterRepository = chapterRepository,
+                chapterDao = chapterDao,
+                serverConnectionResolver = serverConnectionResolver,
+                scopedPlexServiceFactory = scopedPlexServiceFactory,
+            )
     }
 
     @Test

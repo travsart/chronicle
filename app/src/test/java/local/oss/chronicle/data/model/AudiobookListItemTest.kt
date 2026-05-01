@@ -9,7 +9,6 @@ import org.junit.Test
  * Verifies that the lightweight projection can be constructed with required fields.
  */
 class AudiobookListItemTest {
-
     @Test
     fun `AudiobookListItem can be constructed with all required fields`() {
         // Arrange & Act
@@ -28,7 +27,7 @@ class AudiobookListItemTest {
             viewCount = 1L,
             addedAt = 1234567890L,
             year = 2024,
-            viewedLeafCount = 5L
+            viewedLeafCount = 5L,
         )
 
         // Assert
@@ -68,7 +67,7 @@ class AudiobookListItemTest {
             viewCount = 0L,
             addedAt = 0L,
             year = 0,
-            viewedLeafCount = 0L
+            viewedLeafCount = 0L,
         )
 
         // These are the fields used in list layouts:

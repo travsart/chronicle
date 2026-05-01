@@ -9,7 +9,6 @@ import org.junit.Test
  * when Material Slider's validateValues() is called.
  */
 class CurrentlyPlayingBindingAdaptersTest {
-
     @Test
     fun `computeSafeValueTo returns minimum safe value when valueTo is zero`() {
         // Given: valueTo is 0 (invalid for slider)

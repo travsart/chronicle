@@ -166,7 +166,7 @@ interface BookDao {
         FROM Audiobook
         WHERE isCached >= :offlineModeActive
         ORDER BY titleSort
-        """
+        """,
     )
     fun getAllRowsLightweight(offlineModeActive: Boolean): LiveData<List<AudiobookListItem>>
 
@@ -180,7 +180,7 @@ interface BookDao {
         FROM Audiobook
         WHERE isCached >= :offlineModeActive
         ORDER BY titleSort ASC
-        """
+        """,
     )
     fun getAllBooksLightweightAsync(offlineModeActive: Boolean): List<AudiobookListItem>
 

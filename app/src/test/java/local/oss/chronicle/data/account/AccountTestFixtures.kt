@@ -56,7 +56,8 @@ object AccountTestFixtures {
         serverId: String = "server-${UUID.randomUUID().toString().take(8)}",
         serverName: String = "Test Plex Server",
         name: String = "Audiobooks",
-        type: String = "artist", // Plex uses "artist" type for music/audiobooks
+        // Plex uses "artist" type for music/audiobooks
+        type: String = "artist",
         lastSyncedAt: Long? = null,
         itemCount: Int = 0,
         isActive: Boolean = false,
@@ -110,7 +111,8 @@ object AccountTestFixtures {
                 createPlexLibrary(
                     accountId = account.id,
                     name = "Library $index",
-                    isActive = index == 1, // First library is active
+                    // First library is active
+                    isActive = index == 1,
                 )
             }
         return account to libraries

@@ -59,7 +59,8 @@ class LibraryScopedBookDaoTest {
                 )
             val book2 =
                 createTestAudiobook(
-                    id = "plex:library:2:12345", // Different compound ID
+                    // Different compound ID
+                    id = "plex:library:2:12345",
                     libraryId = "plex:library:2",
                     title = "Book from Library 2",
                 )
@@ -106,7 +107,8 @@ class LibraryScopedBookDaoTest {
                 createTestAudiobook(
                     id = "plex:2",
                     libraryId = "lib2",
-                    title = "Harry Potter", // Same title, different library
+                    // Same title, different library
+                    title = "Harry Potter",
                 )
 
             bookDao.update(lib1Book)
@@ -156,7 +158,8 @@ class LibraryScopedBookDaoTest {
                 createTestAudiobook(
                     id = "plex:2",
                     libraryId = "lib2",
-                    lastViewedAt = 2000L, // More recent
+                    // More recent
+                    lastViewedAt = 2000L,
                 )
 
             bookDao.update(lib1Book)
