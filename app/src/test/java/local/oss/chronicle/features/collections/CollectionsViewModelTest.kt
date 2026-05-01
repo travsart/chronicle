@@ -242,7 +242,8 @@ class CollectionsViewModelTest {
                         source = PlexMediaSource.MEDIA_SOURCE_ID_PLEX,
                         title = "Collection A",
                         childCount = 2L,
-                        thumb = "/library/1/collections/10/thumb", // Library 1
+                        thumb = "/library/1/collections/10/thumb",
+                        // Library 1
                         childIds = listOf(100, 101),
                     ),
                     Collection(
@@ -250,7 +251,8 @@ class CollectionsViewModelTest {
                         source = PlexMediaSource.MEDIA_SOURCE_ID_PLEX,
                         title = "Collection B",
                         childCount = 3L,
-                        thumb = "/library/2/collections/20/thumb", // Library 2
+                        thumb = "/library/2/collections/20/thumb",
+                        // Library 2
                         childIds = listOf(200, 201, 202),
                     ),
                     Collection(
@@ -258,7 +260,8 @@ class CollectionsViewModelTest {
                         source = PlexMediaSource.MEDIA_SOURCE_ID_PLEX,
                         title = "Collection C",
                         childCount = 1L,
-                        thumb = "/library/3/collections/30/thumb", // Library 3
+                        thumb = "/library/3/collections/30/thumb",
+                        // Library 3
                         childIds = listOf(300),
                     ),
                 )

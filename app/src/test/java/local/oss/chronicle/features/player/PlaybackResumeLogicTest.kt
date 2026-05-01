@@ -47,7 +47,8 @@ class PlaybackResumeLogicTest {
             source = 1L,
             title = "Test Audiobook",
             author = "Test Author",
-            duration = 3600000, // 1 hour
+            duration = 3600000,
+            // 1 hour
         )
 
     private val testTracks =
@@ -55,13 +56,15 @@ class PlaybackResumeLogicTest {
             MediaItemTrack(
                 id = "plex:1",
                 libraryId = "plex:library:1",
-                duration = 1800000, // 30 minutes
+                duration = 1800000,
+                // 30 minutes
                 index = 1,
             ),
             MediaItemTrack(
                 id = "plex:2",
                 libraryId = "plex:library:1",
-                duration = 1800000, // 30 minutes
+                duration = 1800000,
+                // 30 minutes
                 index = 2,
             ),
         )
@@ -75,7 +78,8 @@ class PlaybackResumeLogicTest {
                 index = 1,
                 title = "Chapter 1",
                 startTimeOffset = 0L,
-                endTimeOffset = 900000L, // 15 minutes
+                endTimeOffset = 900000L,
+                // 15 minutes
             ),
             Chapter(
                 id = 2,
@@ -83,8 +87,10 @@ class PlaybackResumeLogicTest {
                 trackId = "plex:1",
                 index = 2,
                 title = "Chapter 2",
-                startTimeOffset = 900000L, // 15 minutes
-                endTimeOffset = 1800000L, // 30 minutes
+                startTimeOffset = 900000L,
+                // 15 minutes
+                endTimeOffset = 1800000L,
+                // 30 minutes
             ),
         )
 
@@ -332,7 +338,8 @@ class PlaybackResumeLogicTest {
                 tracks = testTracks,
                 chapters = testChapters,
                 startTrackIndex = 0,
-                startPositionMs = 1795000L, // Near end of first track (30min track)
+                startPositionMs = 1795000L,
+                // Near end of first track (30min track)
             )
 
             // When: Position moves to second track

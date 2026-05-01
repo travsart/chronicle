@@ -202,7 +202,7 @@ class SimpleProgressUpdater
                 // Validate that we're updating the correct track (edge case: rapid track switching)
                 // If there's a mismatch, check if it's a legitimate track transition within the same audiobook
                 val trackIndex = tracks.indexOfFirst { it.id == trackId }
-                
+
                 if (stateCurrentTrack == null || stateCurrentTrack.id != trackId) {
                     if (trackIndex == -1) {
                         // Track not found in current audiobook - this is likely a library switch or different audiobook
@@ -228,7 +228,7 @@ class SimpleProgressUpdater
 
                 // Get the actual track we're updating (either from state or from track list if transitioning)
                 val track = if (trackIndex >= 0) tracks[trackIndex] else null
-                
+
                 if (track == null) {
                     Timber.w("Track $trackId not found in track list, skipping update")
                     return@launch

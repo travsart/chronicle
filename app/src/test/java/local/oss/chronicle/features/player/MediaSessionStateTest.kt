@@ -60,8 +60,10 @@ class MediaSessionStateTest {
             PlaybackStateCompat.Builder()
                 .setState(
                     PlaybackStateCompat.STATE_PAUSED,
-                    10_000L, // Position at 10 seconds
-                    1.0f, // Normal playback rate
+                    10_000L,
+                    // Position at 10 seconds
+                    1.0f,
+                    // Normal playback rate
                 )
                 .setActions(PlaybackStateCompat.ACTION_PLAY or PlaybackStateCompat.ACTION_PAUSE)
                 .build()

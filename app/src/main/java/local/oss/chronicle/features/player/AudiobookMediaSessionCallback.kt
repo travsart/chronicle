@@ -411,10 +411,9 @@ class AudiobookMediaSessionCallback
                     if (playWhenReady) {
                         Timber.d("[VoiceCommandTrace] Calling onPlayFromMediaId with bookId: $result")
                         onPlayFromMediaId(result, null)
-                    } else
-                        {
-                            onPrepareFromMediaId(result, null)
-                        }
+                    } else {
+                        onPrepareFromMediaId(result, null)
+                    }
                 } else {
                     Timber.w("[AndroidAuto] No matching books found for query: $query")
 

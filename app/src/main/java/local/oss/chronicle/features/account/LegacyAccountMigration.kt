@@ -66,7 +66,8 @@ class LegacyAccountMigration
                         providerType = ProviderType.PLEX,
                         displayName = plexPrefsRepo.user?.title ?: "Plex User",
                         avatarUrl = plexPrefsRepo.user?.thumb,
-                        credentials = "", // Stored separately
+                        credentials = "",
+                        // Stored separately
                         createdAt = now,
                         lastUsedAt = now,
                     )
@@ -93,12 +94,14 @@ class LegacyAccountMigration
                         serverId = plexPrefsRepo.server?.serverId ?: "legacy-server",
                         serverName = plexPrefsRepo.server?.name ?: "Plex Server",
                         name = selectedLibrary?.name ?: "Library",
-                        type = "artist", // Plex audiobook library type
+                        type = "artist",
+                        // Plex audiobook library type
                         lastSyncedAt = now,
                         itemCount = 0,
                         isActive = true,
                         serverUrl = plexConfig.url,
-                        authToken = legacyToken, // Store legacy auth token for library-aware playback
+                        authToken = legacyToken,
+                        // Store legacy auth token for library-aware playback
                     )
 
                 libraryRepository.addLibrary(library)

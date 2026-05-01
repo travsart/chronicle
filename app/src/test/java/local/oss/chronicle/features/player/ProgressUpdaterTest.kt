@@ -23,7 +23,6 @@ import org.junit.runner.RunWith
 import org.mockito.Mock
 import org.mockito.MockitoAnnotations
 import org.mockito.kotlin.any
-import org.mockito.kotlin.eq
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
@@ -253,7 +252,8 @@ class ProgressUpdaterTest {
             val book =
                 Audiobook(
                     id = bookId,
-                    libraryId = library1Id, // Book is in library 1
+                    libraryId = library1Id,
+                    // Book is in library 1
                     source = PlexMediaSource.MEDIA_SOURCE_ID_PLEX,
                     title = "Book in Library 1",
                 )
@@ -304,7 +304,8 @@ class ProgressUpdaterTest {
             val bookInLibrary2 =
                 Audiobook(
                     id = bookId,
-                    libraryId = library2Id, // Now in library 2
+                    libraryId = library2Id,
+                    // Now in library 2
                     source = PlexMediaSource.MEDIA_SOURCE_ID_PLEX,
                     title = "Book in Library 2",
                 )
@@ -349,7 +350,6 @@ class ProgressUpdaterTest {
 // When track mismatch detected, it checks if requested trackId exists in tracks list.
 // If found (trackIndex != -1), the update proceeds. If not found, it's skipped.
 // This allows legitimate track transitions while blocking cross-audiobook race conditions.
-
 
     @Test
     fun `updateProgress skips update when track from different audiobook`() =

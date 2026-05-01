@@ -203,7 +203,8 @@ class TrackListStateManagerTest {
             // Then: should clamp to last valid index instead of throwing
             assertThat(
                 manager.currentTrackIndex,
-                `is`(2), // Last valid index for 3 tracks
+                `is`(2),
+                // Last valid index for 3 tracks
             )
             assertThat(
                 manager.currentTrackProgress,
@@ -256,7 +257,8 @@ class TrackListStateManagerTest {
         // Then: should clamp to last valid index instead of throwing
         assertThat(
             manager.currentTrackIndex,
-            `is`(2), // Last valid index for 3 tracks
+            `is`(2),
+            // Last valid index for 3 tracks
         )
         assertThat(
             manager.currentTrackProgress,

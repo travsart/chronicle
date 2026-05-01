@@ -1,10 +1,10 @@
 package local.oss.chronicle.data.local
 
 import androidx.lifecycle.LiveData
+import androidx.lifecycle.map
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import local.oss.chronicle.data.model.*
-import androidx.lifecycle.map
 import local.oss.chronicle.data.sources.MediaSource
 import local.oss.chronicle.data.sources.plex.PlexMediaService
 import local.oss.chronicle.data.sources.plex.PlexPrefsRepo
@@ -187,7 +187,7 @@ class BookRepository
                 items.toAudiobooks()
             }
         }
-    
+
         override fun getAllBooksLightweight(): LiveData<List<AudiobookListItem>> {
             return bookDao.getAllRowsLightweight(prefsRepo.offlineMode)
         }
@@ -488,7 +488,7 @@ class BookRepository
                 bookDao.getAllBooksLightweightAsync(prefsRepo.offlineMode).toAudiobooks()
             }
         }
-    
+
         override suspend fun getAllBooksLightweightAsync(): List<AudiobookListItem> {
             return withContext(Dispatchers.IO) {
                 bookDao.getAllBooksLightweightAsync(prefsRepo.offlineMode)

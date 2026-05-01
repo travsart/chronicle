@@ -85,7 +85,8 @@ class AudiobookDetailsFragment : Fragment() {
         viewModelFactory.inputAudiobook =
             Audiobook(
                 id = inputId,
-                libraryId = "", // Not needed for fragment initialization
+                libraryId = "",
+                // Not needed for fragment initialization
                 title = bookTitle,
                 source = MediaSource.NO_SOURCE_FOUND,
                 isCached = inputCached,

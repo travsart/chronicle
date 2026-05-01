@@ -162,7 +162,8 @@ class AccountManagerTest {
                 listOf(
                     Library(
                         id = "plex:library:1",
-                        accountId = "", // Should be overwritten
+                        accountId = "",
+                        // Should be overwritten
                         serverId = "server1",
                         serverName = "Server 1",
                         name = "Library 1",
@@ -173,7 +174,8 @@ class AccountManagerTest {
                     ),
                     Library(
                         id = "plex:library:2",
-                        accountId = "", // Should be overwritten
+                        accountId = "",
+                        // Should be overwritten
                         serverId = "server1",
                         serverName = "Server 1",
                         name = "Library 2",

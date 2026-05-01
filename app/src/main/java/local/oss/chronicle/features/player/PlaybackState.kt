@@ -125,8 +125,8 @@ data class PlaybackState(
             // Find the index by matching id, trackId, and startTimeOffset for uniqueness
             return chapters.indexOfFirst {
                 it.id == chapter.id &&
-                it.trackId == chapter.trackId &&
-                it.startTimeOffset == chapter.startTimeOffset
+                    it.trackId == chapter.trackId &&
+                    it.startTimeOffset == chapter.startTimeOffset
             }.takeIf { it >= 0 } ?: 0
         }
 

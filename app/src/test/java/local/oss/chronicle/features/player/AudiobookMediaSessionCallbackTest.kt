@@ -575,7 +575,8 @@ class AudiobookMediaSessionCallbackTest {
                 Audiobook(
                     id = "plex:123",
                     libraryId = "plex:library:1",
-                    source = 1L, // Plex source
+                    source = 1L,
+                    // Plex source
                     title = "Test Book",
                     author = "Author Name",
                     duration = 3600000,
@@ -678,7 +679,8 @@ class AudiobookMediaSessionCallbackTest {
                 Audiobook(
                     id = "plex:456",
                     libraryId = "plex:library:1",
-                    source = 1L, // Plex source
+                    source = 1L,
+                    // Plex source
                     title = "Valid Book",
                     author = "Author Name",
                     duration = 3600000,
@@ -754,7 +756,8 @@ class AudiobookMediaSessionCallbackTest {
                 Audiobook(
                     id = "plex:789",
                     libraryId = "plex:library:1",
-                    source = 1L, // Plex source
+                    source = 1L,
+                    // Plex source
                     title = "Recent Book",
                     author = "Author Name",
                     duration = 3600000,

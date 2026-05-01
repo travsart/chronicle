@@ -1,7 +1,6 @@
 package local.oss.chronicle.data.model
 
 import androidx.room.ColumnInfo
-import local.oss.chronicle.data.sources.MediaSource
 
 /**
  * Lightweight projection of [Audiobook] containing only fields needed for list display.
@@ -13,48 +12,34 @@ import local.oss.chronicle.data.sources.MediaSource
 data class AudiobookListItem(
     @ColumnInfo(name = "id")
     val id: String,
-
     @ColumnInfo(name = "libraryId")
     val libraryId: String,
-
     @ColumnInfo(name = "source")
     val source: Long,
-
     @ColumnInfo(name = "title")
     val title: String,
-
     @ColumnInfo(name = "titleSort")
     val titleSort: String,
-
     @ColumnInfo(name = "author")
     val author: String,
-
     @ColumnInfo(name = "thumb")
     val thumb: String,
-
     @ColumnInfo(name = "duration")
     val duration: Long,
-
     @ColumnInfo(name = "progress")
     val progress: Long,
-
     @ColumnInfo(name = "isCached")
     val isCached: Boolean,
-
     @ColumnInfo(name = "lastViewedAt")
     val lastViewedAt: Long,
-
     @ColumnInfo(name = "viewCount")
     val viewCount: Long,
-
     @ColumnInfo(name = "addedAt")
     val addedAt: Long,
-
     @ColumnInfo(name = "year")
     val year: Int,
-
     @ColumnInfo(name = "viewedLeafCount")
-    val viewedLeafCount: Long
+    val viewedLeafCount: Long,
 ) {
     /**
      * Converts this lightweight item to a full [Audiobook] with default values for heavy fields.
@@ -84,7 +69,7 @@ data class AudiobookListItem(
             updatedAt = 0L,
             favorited = false,
             leafCount = 0L,
-            chapters = emptyList()
+            chapters = emptyList(),
         )
     }
 }

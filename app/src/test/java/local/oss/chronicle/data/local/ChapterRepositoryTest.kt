@@ -194,7 +194,8 @@ class ChapterRepositoryTest {
             val trackWithoutLibrary =
                 createMockTrack(
                     trackId = testTrackId,
-                    libraryId = "", // Empty libraryId
+                    libraryId = "",
+                    // Empty libraryId
                 )
 
             // When: loadChapterData is called

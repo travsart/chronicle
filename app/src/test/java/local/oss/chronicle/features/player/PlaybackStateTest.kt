@@ -395,7 +395,8 @@ class PlaybackStateTest {
                 tracks = testTracks,
                 chapters = testChapters,
                 currentTrackIndex = 1,
-                currentTrackPositionMs = 15_000L, // In Chapter 2 (track 2, 0-30s)
+                currentTrackPositionMs = 15_000L,
+                // In Chapter 2 (track 2, 0-30s)
             )
         assertThat(state.currentChapterIndex, `is`(1))
     }
@@ -407,7 +408,8 @@ class PlaybackStateTest {
                 tracks = testTracks,
                 chapters = testChapters,
                 currentTrackIndex = 1,
-                currentTrackPositionMs = 50_000L, // In Chapter 3 (track 2, 30-60s)
+                currentTrackPositionMs = 50_000L,
+                // In Chapter 3 (track 2, 30-60s)
             )
         assertThat(state.currentChapterIndex, `is`(2))
     }
@@ -441,7 +443,8 @@ class PlaybackStateTest {
                 tracks = testTracks,
                 chapters = testChapters,
                 currentTrackIndex = 1,
-                currentTrackPositionMs = 15_000L, // In Chapter 2 (0-30s)
+                currentTrackPositionMs = 15_000L,
+                // In Chapter 2 (0-30s)
             )
         assertThat(state.currentChapterDurationMs, `is`(30_000L))
     }
@@ -453,7 +456,8 @@ class PlaybackStateTest {
                 tracks = testTracks,
                 chapters = testChapters,
                 currentTrackIndex = 2,
-                currentTrackPositionMs = 50_000L, // In Chapter 4
+                currentTrackPositionMs = 50_000L,
+                // In Chapter 4
             )
         assertThat(state.currentChapterDurationMs, `is`(60_000L))
     }
@@ -598,7 +602,8 @@ class PlaybackStateTest {
                 tracks = testTracks,
                 chapters = testChapters,
                 currentTrackIndex = 1,
-                currentTrackPositionMs = 30_000L, // Start of Chapter 3
+                currentTrackPositionMs = 30_000L,
+                // Start of Chapter 3
             )
         assertThat(state.chapterProgress.toDouble(), `is`(closeTo(0.0, 0.001)))
     }
@@ -973,7 +978,7 @@ class PlaybackStateTest {
             listOf(
                 MediaItemTrack(id = "plex:65798", libraryId = "plex:lib:1", title = "Track 1", duration = 1_100_000L, index = 1),
             )
-        
+
         val chaptersWithTransitionMarkers =
             listOf(
                 // Content chapter (index=1) - track-relative
@@ -1021,7 +1026,7 @@ class PlaybackStateTest {
             listOf(
                 MediaItemTrack(id = "plex:65798", libraryId = "plex:lib:1", title = "Track 1", duration = 1_100_000L, index = 1),
             )
-        
+
         // Edge case: only transition markers available (shouldn't happen in practice)
         val onlyTransitionMarkers =
             listOf(
@@ -1129,8 +1134,10 @@ class PlaybackStateTest {
             PlaybackState(
                 tracks = testTracks,
                 chapters = trackRelativeChapters,
-                currentTrackIndex = 1, // Track 2
-                currentTrackPositionMs = 15_000L, // 15s into track 2
+                currentTrackIndex = 1,
+                // Track 2
+                currentTrackPositionMs = 15_000L,
+                // 15s into track 2
             )
 
         // Should select Chapter 3 (from track 2, which contains position 15s)
@@ -1168,8 +1175,10 @@ class PlaybackStateTest {
             PlaybackState(
                 tracks = testTracks,
                 chapters = trackRelativeChapters,
-                currentTrackIndex = 1, // Track 2
-                currentTrackPositionMs = 0L, // Start of track 2
+                currentTrackIndex = 1,
+                // Track 2
+                currentTrackPositionMs = 0L,
+                // Start of track 2
             )
 
         // Should select Chapter 2 (from track 2, position 0)
@@ -1206,7 +1215,8 @@ class PlaybackStateTest {
             PlaybackState(
                 tracks = testTracks,
                 chapters = trackRelativeChapters,
-                currentTrackIndex = 1, // Track 2
+                currentTrackIndex = 1,
+                // Track 2
                 currentTrackPositionMs = 45_000L,
             )
 

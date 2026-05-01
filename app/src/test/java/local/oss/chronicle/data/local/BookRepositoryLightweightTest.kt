@@ -92,35 +92,38 @@ class BookRepositoryLightweightTest {
     }
 
     @Test
-    fun `getAllBooksLightweightAsync returns list from DAO`() = runTest {
-        // Arrange
-        val expectedList = listOf(
-            AudiobookListItem(
-                id = "plex:1",
-                libraryId = "plex:library:1",
-                source = 1L,
-                title = "Book 1",
-                titleSort = "Book 1",
-                author = "Author 1",
-                thumb = "/thumb1",
-                duration = 1000L,
-                progress = 0L,
-                isCached = false,
-                lastViewedAt = 0L,
-                viewCount = 0L,
-                addedAt = 1234567890L,
-                year = 2024,
-                viewedLeafCount = 0L
-            )
-        )
-        every { prefsRepo.offlineMode } returns false
-        every { bookDao.getAllBooksLightweightAsync(any()) } returns expectedList
+    fun `getAllBooksLightweightAsync returns list from DAO`() =
+        runTest {
+            // Arrange
+            val expectedList =
+                listOf(
+                    AudiobookListItem(
+                        id = "plex:1",
+                        libraryId = "plex:library:1",
+                        source = 1L,
+                        title = "Book 1",
+                        titleSort = "Book 1",
+                        author = "Author 1",
+                        thumb = "/thumb1",
+                        duration = 1000L,
+                        progress = 0L,
+                        isCached = false,
+                        lastViewedAt = 0L,
+                        viewCount = 0L,
+                        addedAt = 1234567890L,
+                        year = 2024,
+                        viewedLeafCount = 0L,
+                    ),
+                )
+            every { prefsRepo.offlineMode } returns false
+            every { bookDao.getAllBooksLightweightAsync(any()) } returns expectedList
 
-        // Act
-        val result = bookRepository.getAllBooksLightweightAsync()
+            // Act
+            val result =
+                bookRepository.getAllBooksLightweightAsync()
 
-        // Assert
-        assertEquals(expectedList, result)
-        verify { bookDao.getAllBooksLightweightAsync(false) }
-    }
+            // Assert
+            assertEquals(expectedList, result)
+            verify { bookDao.getAllBooksLightweightAsync(false) }
+        }
 }

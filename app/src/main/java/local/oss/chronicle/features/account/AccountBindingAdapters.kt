@@ -13,12 +13,18 @@ import kotlin.math.abs
  */
 private val LIBRARY_COLORS =
     listOf(
-        0xFF1976D2.toInt(), // Blue
-        0xFF388E3C.toInt(), // Green
-        0xFFF57C00.toInt(), // Orange
-        0xFF7B1FA2.toInt(), // Purple
-        0xFFD32F2F.toInt(), // Red
-        0xFF00796B.toInt(), // Teal
+        0xFF1976D2.toInt(),
+        // Blue
+        0xFF388E3C.toInt(),
+        // Green
+        0xFFF57C00.toInt(),
+        // Orange
+        0xFF7B1FA2.toInt(),
+        // Purple
+        0xFFD32F2F.toInt(),
+        // Red
+        0xFF00796B.toInt(),
+        // Teal
     )
 
 /**

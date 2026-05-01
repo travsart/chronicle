@@ -12,7 +12,6 @@ package local.oss.chronicle.features.currentlyplaying
  * These functions ensure all constraints are met.
  */
 object SliderSafetyHelper {
-
     /**
      * Minimum safe value for valueTo to prevent IllegalStateException.
      * Must be greater than the default valueFrom of 0.
@@ -27,7 +26,10 @@ object SliderSafetyHelper {
      * @param valueFrom The minimum value for the slider (defaults to 0f)
      * @return A safe valueTo that is guaranteed to be > valueFrom
      */
-    fun computeSafeValueTo(valueTo: Int, valueFrom: Float = 0f): Float {
+    fun computeSafeValueTo(
+        valueTo: Int,
+        valueFrom: Float = 0f,
+    ): Float {
         val valueToFloat = valueTo.toFloat()
         return if (valueToFloat <= valueFrom) {
             MIN_SAFE_VALUE_TO
@@ -45,7 +47,11 @@ object SliderSafetyHelper {
      * @param valueTo The maximum value for the slider
      * @return A safe value clamped within [valueFrom, valueTo]
      */
-    fun computeSafeValue(value: Int, valueFrom: Float, valueTo: Float): Float {
+    fun computeSafeValue(
+        value: Int,
+        valueFrom: Float,
+        valueTo: Float,
+    ): Float {
         val valueFloat = value.toFloat()
         return when {
             valueFloat < valueFrom -> valueFrom

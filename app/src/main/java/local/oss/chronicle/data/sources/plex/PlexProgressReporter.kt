@@ -52,8 +52,10 @@ class PlexProgressReporter
             private val PROGRESS_RETRY_CONFIG =
                 RetryConfig(
                     maxAttempts = 3,
-                    initialDelayMs = 1000L, // 1 second
-                    maxDelayMs = 5000L, // Max 5 seconds
+                    initialDelayMs = 1000L,
+                    // 1 second
+                    maxDelayMs = 5000L,
+                    // Max 5 seconds
                     multiplier = 2.0,
                 )
         }

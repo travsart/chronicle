@@ -100,19 +100,20 @@ class TrackListStateManager {
         }
 
         // Defensive: clamp index to valid range instead of throwing
-        val clampedIndex = when {
-            activeTrackIndex < 0 -> {
-                Timber.w("updatePosition called with negative index $activeTrackIndex, clamping to 0")
-                0
+        val clampedIndex =
+            when {
+                activeTrackIndex < 0 -> {
+                    Timber.w("updatePosition called with negative index $activeTrackIndex, clamping to 0")
+                    0
+                }
+                activeTrackIndex >= _state.trackList.size -> {
+                    Timber.w(
+                        "updatePosition called with out-of-bounds index $activeTrackIndex (trackList.size=${_state.trackList.size}), clamping to ${_state.trackList.size - 1}",
+                    )
+                    _state.trackList.size - 1
+                }
+                else -> activeTrackIndex
             }
-            activeTrackIndex >= _state.trackList.size -> {
-                Timber.w(
-                    "updatePosition called with out-of-bounds index $activeTrackIndex (trackList.size=${_state.trackList.size}), clamping to ${_state.trackList.size - 1}",
-                )
-                _state.trackList.size - 1
-            }
-            else -> activeTrackIndex
-        }
 
         _state =
             _state.copy(

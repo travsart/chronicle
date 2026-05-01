@@ -416,12 +416,12 @@ class PlaybackStateControllerTest {
             // The main purpose of this test is to verify the chapter detection works correctly
             // The PlaybackState fix ensures currentChapter uses track-aware lookup
             // All 82 PlaybackStateTest tests verify this behavior works correctly
-            
+
             // Verify the current state is correct (this is what matters for the fix)
             val currentState = controller.state.value
             assertTrue("Should have a current track after updatePosition", currentState.currentTrack != null)
             assertTrue("Track index should be 1", currentState.currentTrackIndex == 1)
-            
+
             // The ChapterChangeListener notification mechanism may behave differently in tests
             // vs actual playback. The key fix was to PlaybackState.currentChapter calculation,
             // which is validated by the comprehensive PlaybackStateTest suite.

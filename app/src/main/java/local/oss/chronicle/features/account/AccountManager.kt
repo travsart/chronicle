@@ -55,7 +55,8 @@ class AccountManager
                     providerType = ProviderType.PLEX,
                     displayName = displayName,
                     avatarUrl = avatarUrl,
-                    credentials = "", // Stored separately for security
+                    credentials = "",
+                    // Stored separately for security
                     createdAt = now,
                     lastUsedAt = now,
                 )
@@ -109,7 +110,8 @@ class AccountManager
                     providerType = ProviderType.PLEX,
                     displayName = username.ifEmpty { "Plex User" },
                     avatarUrl = userThumb.takeIf { it.isNotEmpty() },
-                    credentials = "", // Stored separately for security
+                    credentials = "",
+                    // Stored separately for security
                     createdAt = now,
                     lastUsedAt = now,
                 )
@@ -132,9 +134,11 @@ class AccountManager
                     type = libraryType,
                     lastSyncedAt = null,
                     itemCount = 0,
-                    isActive = false, // Set via switch
+                    isActive = false,
+                    // Set via switch
                     serverUrl = serverUrl,
-                    authToken = serverAccessToken, // Store server access token for library-aware playback
+                    authToken = serverAccessToken,
+                    // Store server access token for library-aware playback
                 )
 
             // Save library

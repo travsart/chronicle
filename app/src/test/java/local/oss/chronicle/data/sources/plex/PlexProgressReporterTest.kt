@@ -419,7 +419,8 @@ class PlexProgressReporterTest {
                 Library(
                     id = "plex:library:3",
                     accountId = "plex:account:3",
-                    serverId = "", // Empty serverId
+                    serverId = "",
+                    // Empty serverId
                     serverName = "Server",
                     name = "Library",
                     type = "artist",

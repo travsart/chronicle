@@ -65,8 +65,10 @@ class HomeViewModelTest {
                 libraryId = "plex:library:1",
                 thumb = "",
                 duration = 3600000L,
-                progress = 1800000L, // 50% progress
-                lastViewedAt = System.currentTimeMillis() - 3600000L, // 1 hour ago
+                progress = 1800000L,
+                // 50% progress
+                lastViewedAt = System.currentTimeMillis() - 3600000L,
+                // 1 hour ago
             ),
             Audiobook(
                 id = "plex:2",
@@ -77,8 +79,10 @@ class HomeViewModelTest {
                 libraryId = "plex:library:2",
                 thumb = "",
                 duration = 7200000L,
-                progress = 3600000L, // 50% progress
-                lastViewedAt = System.currentTimeMillis() - 7200000L, // 2 hours ago
+                progress = 3600000L,
+                // 50% progress
+                lastViewedAt = System.currentTimeMillis() - 7200000L,
+                // 2 hours ago
             ),
         )
 
@@ -94,7 +98,8 @@ class HomeViewModelTest {
                 thumb = "",
                 duration = 5400000L,
                 progress = 0L,
-                addedAt = System.currentTimeMillis() - 86400000L, // 1 day ago
+                addedAt = System.currentTimeMillis() - 86400000L,
+                // 1 day ago
             ),
             Audiobook(
                 id = "plex:4",
@@ -106,7 +111,8 @@ class HomeViewModelTest {
                 thumb = "",
                 duration = 9000000L,
                 progress = 0L,
-                addedAt = System.currentTimeMillis() - 172800000L, // 2 days ago
+                addedAt = System.currentTimeMillis() - 172800000L,
+                // 2 days ago
             ),
         )
 

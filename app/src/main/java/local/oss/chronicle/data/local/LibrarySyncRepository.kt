@@ -231,7 +231,8 @@ class LibrarySyncRepository
             val plexLibrary =
                 PlexLibrary(
                     name = library.name,
-                    type = MediaType.ARTIST, // Plex uses "artist" type for audiobook libraries
+                    type = MediaType.ARTIST,
+                    // Plex uses "artist" type for audiobook libraries
                     id = numericLibraryId,
                 )
             val previousLibrary = plexPrefsRepo.library
