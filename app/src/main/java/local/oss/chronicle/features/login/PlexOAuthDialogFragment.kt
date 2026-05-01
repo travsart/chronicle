@@ -77,6 +77,7 @@ class PlexOAuthDialogFragment : DialogFragment() {
     }
 
     @SuppressLint("SetJavaScriptEnabled")
+    @Suppress("DEPRECATION")
     override fun onViewCreated(
         view: View,
         savedInstanceState: Bundle?,

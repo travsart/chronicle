@@ -249,7 +249,7 @@ class AudiobookDetailsViewModel(
     @InternalCoroutinesApi
     fun connectToServer() {
         viewModelScope.launch(Dispatchers.IO) {
-            plexConfig.connectToServer(plexMediaService)
+            plexConfig.connectToServerWithRetry(plexMediaService)
         }
     }
 

@@ -85,7 +85,7 @@ class ChooseLibraryViewModel
                 // chooseViableConnections must be called here because it won't be called in
                 // ChronicleApplication if we have just logged in
                 try {
-                    plexConfig.connectToServer(plexMediaService)
+                    plexConfig.connectToServerWithRetry(plexMediaService)
                 } catch (t: Throwable) {
                     Timber.i("Failed to return result!")
                 }

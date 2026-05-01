@@ -225,7 +225,9 @@ open class ChronicleApplication : Application() {
                 object :
                     ConnectivityManager.NetworkCallback() {
                     override fun onAvailable(network: Network) {
-                        connectToServer()
+                        applicationScope.launch {
+                            connectToServerWithRetry()
+                        }
                         super.onAvailable(network)
                     }
 
@@ -300,7 +302,7 @@ open class ChronicleApplication : Application() {
 
                     try {
                         Timber.i("Connection to server!")
-                        plexConfig.connectToServer(plexMediaService)
+                        plexConfig.connectToServerWithRetry(plexMediaService)
                     } catch (t: Throwable) {
                         Timber.e("Exception in chooseViableConnections in ChronicleApplication: $t")
                     }
@@ -311,7 +313,7 @@ open class ChronicleApplication : Application() {
                 applicationScope.launch(unhandledExceptionHandler) {
                     try {
                         Timber.i("Connection to server!")
-                        plexConfig.connectToServer(plexMediaService)
+                        plexConfig.connectToServerWithRetry(plexMediaService)
                     } catch (t: Throwable) {
                         Timber.e("Exception in chooseViableConnections in ChronicleApplication: $t")
                     }
@@ -330,7 +332,7 @@ open class ChronicleApplication : Application() {
                 applicationScope.launch {
                     if (context != null && intent != null) {
                         plexConfig.connectionHasBeenLost()
-                        connectToServer()
+                        connectToServerWithRetry()
                     }
                 }
             }
@@ -338,8 +340,8 @@ open class ChronicleApplication : Application() {
 
     // Connect to the first connection which can establish a connection
     @InternalCoroutinesApi
-    private fun connectToServer() {
-        plexConfig.connectToServer(plexMediaService)
+    suspend private fun connectToServerWithRetry() {
+        plexConfig.connectToServerWithRetry(plexMediaService)
     }
 
     override fun onTrimMemory(level: Int) {

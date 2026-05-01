@@ -567,7 +567,7 @@ class AudiobookMediaSessionCallback
             // pos is chapter-relative from MediaSession seekbar (published by buildPlaybackState())
             val chapter = currentlyPlaying.chapter.value
             val absolutePosition =
-                if (chapter != null && chapter != EMPTY_CHAPTER) {
+                if (chapter != EMPTY_CHAPTER) {
                     // Convert chapter-relative to absolute track position
                     chapter.startTimeOffset + pos
                 } else {
