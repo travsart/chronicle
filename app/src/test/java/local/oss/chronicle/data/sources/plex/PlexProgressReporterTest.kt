@@ -89,6 +89,12 @@ class PlexProgressReporterTest {
     }
 
     @Test
+    fun `Plex query flags use integer zero and one values`() {
+        assertThat(true.toPlexQueryFlag()).isEqualTo(1)
+        assertThat(false.toPlexQueryFlag()).isEqualTo(0)
+    }
+
+    @Test
     fun `ID stripping handles IDs without prefix`() {
         // Given: ID without prefix
         val id = "99999"

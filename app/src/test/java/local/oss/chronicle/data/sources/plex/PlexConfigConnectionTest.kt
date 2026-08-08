@@ -2,6 +2,7 @@ package local.oss.chronicle.data.sources.plex
 
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import io.mockk.*
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.InternalCoroutinesApi
@@ -140,6 +141,23 @@ class PlexConfigConnectionTest {
             // Assert
             assertFalse("Connection should fail immediately", result)
             // Should only attempt once for non-retryable error
+            coVerify(exactly = 1) { plexMediaService.checkServer(any()) }
+        }
+
+    @Test
+    fun `connectToServerWithRetry rethrows cancellation instead of treating it as a connection failure`() =
+        runTest {
+            coEvery { plexMediaService.checkServer(any()) } throws CancellationException("Cancelled by previous job")
+
+            val threwCancellation =
+                try {
+                    plexConfig.connectToServerWithRetry(plexMediaService)
+                    false
+                } catch (e: CancellationException) {
+                    true
+                }
+
+            assertTrue("Cancellation should propagate instead of being reported as a failed connection", threwCancellation)
             coVerify(exactly = 1) { plexMediaService.checkServer(any()) }
         }
 

@@ -127,9 +127,9 @@ interface PlexMediaService {
         /** [serverUri] is in the form: "server://<MACHINE_IDENTIFIER>/com.plexapp.plugins.library/library/metadata/<BOOK_ID> */
         @Query("uri") serverUri: String,
         @Query("type") mediaType: String = MediaType.AUDIO_STRING,
-        @Query("repeat") shouldRepeat: Boolean = false,
-        @Query("own") isOwnedByUser: Boolean = true,
-        @Query("includeChapters") shouldIncludeChapters: Boolean = true,
+        @Query("repeat") shouldRepeat: Int = false.toPlexQueryFlag(),
+        @Query("own") isOwnedByUser: Int = true.toPlexQueryFlag(),
+        @Query("includeChapters") shouldIncludeChapters: Int = true.toPlexQueryFlag(),
     ): PlayQueueResponseWrapper
 
     /** Loads all [MediaType.TRACK]s available in the server */

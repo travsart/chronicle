@@ -1,5 +1,6 @@
 package local.oss.chronicle.util
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlin.math.min
 import kotlin.math.pow
@@ -56,6 +57,8 @@ suspend fun <T> withRetry(
         try {
             val result = block(attempt + 1)
             return RetryResult.Success(result, attempt + 1)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Throwable) {
             lastError = e
 
