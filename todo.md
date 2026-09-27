@@ -2,7 +2,7 @@
 
 ## Internal
 
- - [ ] Update billing version by November
+ - [X] Update billing version by November
  - [ ] Constructor inject `Dispatchers`, remove `GlobalScope` usages (okay in Singletons?)
  - [ ] Refactor repositories to expose `StateFlow`s instead of `LiveData`?
     - [ ] Need to learn good merging techniques/extensions first
