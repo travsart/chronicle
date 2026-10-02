@@ -24,6 +24,7 @@ import local.oss.chronicle.injection.components.AppComponent
 import local.oss.chronicle.injection.components.DaggerAppComponent
 import local.oss.chronicle.injection.modules.AppModule
 import timber.log.Timber
+import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -112,6 +113,12 @@ open class ChronicleApplication : Application() {
         }
 
         appComponent.inject(this)
+        Timber.plant(
+            WarningErrorFileTree(
+                File(prefsRepo.cachedMediaDir, WarningErrorFileTree.LOG_FILE_NAME),
+                { prefsRepo.getBoolean(PrefsRepo.KEY_WARNING_ERROR_LOGGING_ENABLED) },
+            ),
+        )
         logAccountsAndLibraries() // DEBUG: Log database state
         setupNetwork(plexPrefs)
         updateDownloadedFileState()

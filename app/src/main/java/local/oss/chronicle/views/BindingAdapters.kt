@@ -31,6 +31,10 @@ fun bindImageRounded(
     if ((draweeView.context as Activity).isDestroyed) {
         return
     }
+    if (src.isNullOrBlank() || src.equals("null", ignoreCase = true)) {
+        draweeView.setImageURI(Uri.EMPTY)
+        return
+    }
 
     val imageSize =
         draweeView.resources.getDimension(R.dimen.currently_playing_artwork_max_size).toInt()
@@ -41,6 +45,10 @@ fun bindImageRounded(
         CoroutineScope(Dispatchers.Main).launch {
             try {
                 val url = config.makeThumbUriForLibrary(src ?: "", libraryId)
+                if (url == Uri.EMPTY) {
+                    draweeView.setImageURI(Uri.EMPTY)
+                    return@launch
+                }
                 val request = ImageRequest.fromUri(url)
                 val controller =
                     Fresco.newDraweeControllerBuilder()

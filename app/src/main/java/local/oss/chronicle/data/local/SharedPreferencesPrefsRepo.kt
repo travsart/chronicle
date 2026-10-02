@@ -168,6 +168,7 @@ interface PrefsRepo {
         const val KEY_LIBRARY_MEDIA_TYPE = "key_media_type"
         const val KEY_LIBRARY_VIEW_STYLE = "key_library_view_style"
         const val KEY_STRICT_AUTO_VALIDATION = "key_strict_auto_validation"
+        const val KEY_WARNING_ERROR_LOGGING_ENABLED = "key_warning_error_logging_enabled"
         const val VIEW_STYLE_COVER_GRID = "view_style_cover_grid"
         const val VIEW_STYLE_TEXT_LIST = "view_style_text_list"
         const val VIEW_STYLE_DETAILS_LIST = "view_style_details_list"

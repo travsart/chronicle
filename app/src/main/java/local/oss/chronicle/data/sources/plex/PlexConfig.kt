@@ -268,6 +268,8 @@ class PlexConfig
         }
 
         fun makeThumbUri(part: String): Uri {
+            if (part.isBlank() || part.equals("null", ignoreCase = true) || url == PLACEHOLDER_URL) return Uri.EMPTY
+
             val appContext = Injector.get().applicationContext()
             val imageSize = appContext.resources.getDimension(R.dimen.audiobook_image_width).toInt()
             val plexThumbPart = "photo/:/transcode?width=$imageSize&height=$imageSize&url=$part"
@@ -292,6 +294,8 @@ class PlexConfig
             part: String,
             libraryId: String,
         ): Uri {
+            if (part.isBlank() || part.equals("null", ignoreCase = true)) return Uri.EMPTY
+
             val appContext = Injector.get().applicationContext()
             val imageSize = appContext.resources.getDimension(R.dimen.audiobook_image_width).toInt()
             val plexThumbPart = "photo/:/transcode?width=$imageSize&height=$imageSize&url=$part"
@@ -301,7 +305,7 @@ class PlexConfig
             val connection = serverConnectionResolver.resolve(libraryId)
 
             // Build the URL using the library's server
-            val baseUrl = connection.serverUrl ?: url
+            val baseUrl = (connection.serverUrl ?: url).takeUnless { it == PLACEHOLDER_URL } ?: return Uri.EMPTY
             val fullUrl =
                 if (baseUrl.endsWith('/') && plexThumbPart.startsWith('/')) {
                     "$baseUrl${plexThumbPart.substring(1)}"

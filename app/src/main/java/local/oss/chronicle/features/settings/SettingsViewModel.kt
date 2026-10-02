@@ -750,6 +750,13 @@ class SettingsViewModel(
                     defaultValue = prefsRepo.strictAutoValidation,
                 ),
                 PreferenceModel(
+                    type = PreferenceType.BOOLEAN,
+                    title = FormattableString.from(R.string.settings_warning_error_logging_title),
+                    explanation = FormattableString.from(R.string.settings_warning_error_logging_explanation),
+                    key = PrefsRepo.KEY_WARNING_ERROR_LOGGING_ENABLED,
+                    defaultValue = false,
+                ),
+                PreferenceModel(
                     type = PreferenceType.CLICKABLE,
                     title = FormattableString.from(R.string.settings_subreddit_title),
                     explanation = FormattableString.from(R.string.settings_subreddit_explanation),

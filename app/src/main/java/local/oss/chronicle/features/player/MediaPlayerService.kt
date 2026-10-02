@@ -324,12 +324,10 @@ class MediaPlayerService :
         // will ANR (on Android 9.0 and above, maybe earlier). Call it SYNCHRONOUSLY with an
         // art-free notification so we never miss the window behind a blocking network image
         // fetch, then refresh with artwork asynchronously.
-        startForegroundSafely()
-        serviceScope.launch(Injector.get().unhandledExceptionHandler()) {
-            val notification = notificationBuilder.buildNotification(mediaSession.sessionToken)
-            if (notification != null) {
-                // Update the existing foreground notification with artwork.
-                startForeground(NOW_PLAYING_NOTIFICATION, notification)
+        if (startForegroundSafely()) {
+            serviceScope.launch(Injector.get().unhandledExceptionHandler()) {
+                val notification = notificationBuilder.buildNotification(mediaSession.sessionToken)
+                updateForegroundNotificationSafely(notification)
             }
         }
 
@@ -468,7 +466,7 @@ class MediaPlayerService :
                         withContext(Dispatchers.IO) {
                             sessionToken?.let {
                                 val notification = notificationBuilder.buildNotification(it)
-                                startForeground(NOW_PLAYING_NOTIFICATION, notification)
+                                updateForegroundNotificationSafely(notification)
                             }
                         }
                     }
@@ -831,12 +829,10 @@ class MediaPlayerService :
         if (ke?.keyCode != KEYCODE_MEDIA_STOP) {
             // Promote to foreground SYNCHRONOUSLY with an art-free notification to guarantee we
             // meet the OS deadline, then refresh with artwork asynchronously.
-            startForegroundSafely()
-            serviceScope.launch(Injector.get().unhandledExceptionHandler()) {
-                val notification = notificationBuilder.buildNotification(mediaSession.sessionToken)
-                if (notification != null) {
-                    // Update the existing foreground notification with artwork.
-                    startForeground(NOW_PLAYING_NOTIFICATION, notification)
+            if (startForegroundSafely()) {
+                serviceScope.launch(Injector.get().unhandledExceptionHandler()) {
+                    val notification = notificationBuilder.buildNotification(mediaSession.sessionToken)
+                    updateForegroundNotificationSafely(notification)
                 }
             }
         }
@@ -856,14 +852,26 @@ class MediaPlayerService :
      * is thrown). Any failure to start (e.g. background-start restrictions on API 31+) is caught
      * and logged rather than crashing the process.
      */
-    private fun startForegroundSafely() {
+    private fun startForegroundSafely(): Boolean {
         try {
             val notification = notificationBuilder.buildNotificationWithoutArt(mediaSession.sessionToken)
             startForeground(NOW_PLAYING_NOTIFICATION, notification)
+            return true
         } catch (e: Exception) {
             // Includes ForegroundServiceStartNotAllowedException (API 31+) and any other
             // start-time failures. Nothing actionable for the user; avoid crashing.
             Timber.e(e, "Failed to start foreground service")
+            return false
+        }
+    }
+
+    private fun updateForegroundNotificationSafely(notification: Notification?) {
+        if (notification == null) return
+
+        try {
+            startForeground(NOW_PLAYING_NOTIFICATION, notification)
+        } catch (e: Exception) {
+            Timber.w(e, "Unable to update foreground notification")
         }
     }
 

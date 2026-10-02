@@ -85,7 +85,9 @@ class PlexInterceptor(
         return try {
             chain.proceed(requestBuilder.build())
         } catch (e: java.io.IOException) {
-            Timber.w(e, "Network error in PlexInterceptor for ${interceptedUrl}")
+            if (!chain.call().isCanceled()) {
+                Timber.w(e, "Network error in PlexInterceptor")
+            }
             throw e
         }
     }
