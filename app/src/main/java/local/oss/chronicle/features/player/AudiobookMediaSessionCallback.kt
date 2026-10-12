@@ -12,7 +12,7 @@ import androidx.lifecycle.Observer
 import androidx.media3.common.Player
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.exoplayer.ExoPlayer
-import com.github.michaelbull.result.Ok
+import com.github.michaelbull.result.get
 import kotlinx.coroutines.*
 import local.oss.chronicle.BuildConfig
 import local.oss.chronicle.application.Injector
@@ -923,12 +923,13 @@ class AudiobookMediaSessionCallback
                 withContext(Dispatchers.IO) {
                     trackRepository.loadTracksForAudiobook(bookId, audiobook.libraryId)
                 }
-            if (networkTracks is Ok) {
+            val loadedNetworkTracks = networkTracks.get()
+            if (loadedNetworkTracks != null) {
                 bookRepository.updateTrackData(
                     bookId,
-                    networkTracks.value.getProgress(),
-                    networkTracks.value.getDuration(),
-                    networkTracks.value.size,
+                    loadedNetworkTracks.getProgress(),
+                    loadedNetworkTracks.getDuration(),
+                    loadedNetworkTracks.size,
                 )
                 bookRepository.syncAudiobook(audiobook, tracks)
                 playBook(bookId, extras, playWhenReady)
@@ -958,6 +959,21 @@ class AudiobookMediaSessionCallback
         private fun resumePlayFromEmpty(playWhenReady: Boolean) {
             serviceScope.launch {
                 try {
+                    // Offline resume: resolve the most-recent book up front. If it's fully
+                    // downloaded, skip the server-connection wait entirely — cached playback
+                    // needs no network, and offline the connection can never come up, so
+                    // waiting would just hit the timeout and show a spurious error.
+                    val mostRecentBook = bookRepository.getMostRecentlyPlayed()
+                    if (mostRecentBook != EMPTY_AUDIOBOOK && mostRecentBook.isCached) {
+                        Timber.i("[AndroidAuto] Resuming downloaded book ${mostRecentBook.id} offline; skipping connection wait")
+                        if (playWhenReady) {
+                            onPlayFromMediaId(mostRecentBook.id.toString(), null)
+                        } else {
+                            onPrepareFromMediaId(mostRecentBook.id.toString(), null)
+                        }
+                        return@launch
+                    }
+
                     // Wait for connection with timeout
                     withTimeout(RESUME_TIMEOUT_MILLIS) {
                         suspendCancellableCoroutine<Unit> { continuation ->

@@ -8,7 +8,7 @@ import android.text.format.DateUtils
 import android.view.Gravity
 import android.widget.Toast
 import androidx.lifecycle.*
-import com.github.michaelbull.result.Ok
+import com.github.michaelbull.result.get
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.combine
 import local.oss.chronicle.R
@@ -309,6 +309,16 @@ class AudiobookDetailsViewModel(
         Timber.i("Refreshing tracks!")
         viewModelScope.launch {
             try {
+                // Reconcile the book's cached flags against the filesystem first: a track file
+                // deleted after the startup reconcile leaves a phantom "downloaded" book whose
+                // download button prompts "Uncache?" instead of re-downloading (community bug).
+                // Correcting it here flips the button back to the downloadable state immediately.
+                try {
+                    cachedFileManager.refreshDownloadedStatusForBook(bookId)
+                } catch (e: Throwable) {
+                    Timber.e(e, "Cache-status reconcile failed for $bookId (non-fatal)")
+                }
+
                 // If we're just updating underlying track list, and there are already tracks/chapters
                 // loaded, don't replace chapter view with loading view.
                 //
@@ -326,9 +336,10 @@ class AudiobookDetailsViewModel(
                 }
 
                 val trackRequest = trackRepository.loadTracksForAudiobook(bookId, audiobook.libraryId)
-                if (trackRequest is Ok) {
+                val loadedTracks = trackRequest.get()
+                if (loadedTracks != null) {
                     trackRepository.syncTracksInBook(audiobook.id)
-                    bookRepository.syncAudiobook(audiobook, trackRequest.value)
+                    bookRepository.syncAudiobook(audiobook, loadedTracks)
                 }
                 _isLoadingTracks.value = false
             } catch (e: Throwable) {
