@@ -379,6 +379,58 @@ class CachedFileManager
         }
 
         /**
+         * Renames download files written by older app versions to the current FAT/exFAT-safe
+         * "plex_<numericId>.<ext>" format (underscore).
+         *
+         * Two legacy schemes are adopted:
+         *  - pre-v0.61.1 "<numericId>.<ext>" ("123.mp3"): TrackDatabase MIGRATION_6_7 rewrote
+         *    track ids from Int to "plex:<id>" in the DB but nothing renamed the files on disk,
+         *    so after upgrading from ≤0.60.x every downloaded book silently became 'not
+         *    downloaded' (the reconcile parsed "123.mp3" as track id "123", found no DB row,
+         *    and cleared the cached flag of "plex:123").
+         *  - v0.61.1-v0.62.x "plex:<numericId>.<ext>" ("plex:123.mp3"): the ':' is illegal on
+         *    FAT/exFAT removable storage, so downloads to an SD card sync location failed at
+         *    file-creation time. These files live on internal storage (ext4/f2fs, where ':' is
+         *    legal); they are renamed in place to the underscore scheme — no re-download.
+         *
+         * A legacy file is never renamed over an existing current-format file.
+         *
+         * @return the ids of the adopted tracks in "plex:<n>" form
+         */
+        private fun adoptLegacyDownloadFiles(cacheDir: File): List<String> {
+            val adopted = mutableListOf<String>()
+            cacheDir.listFiles()?.forEach { file ->
+                val numeric: String
+                val ext: String
+                val legacyMatch = LEGACY_CACHED_FILE_PATTERN.matchEntire(file.name)
+                val colonMatch = COLON_CACHED_FILE_PATTERN.matchEntire(file.name)
+                when {
+                    legacyMatch != null -> {
+                        numeric = legacyMatch.groupValues[1]
+                        ext = legacyMatch.groupValues[2]
+                    }
+                    colonMatch != null -> {
+                        numeric = colonMatch.groupValues[1]
+                        ext = colonMatch.groupValues[2]
+                    }
+                    else -> return@forEach
+                }
+                val target = File(cacheDir, "plex_$numeric.$ext")
+                if (target.exists()) {
+                    Timber.w("Leaving legacy file ${file.name} in place: ${target.name} already exists")
+                    return@forEach
+                }
+                if (file.renameTo(target)) {
+                    Timber.i("Adopted legacy download file ${file.name} -> ${target.name}")
+                    adopted.add("plex:$numeric")
+                } else {
+                    Timber.e("Failed to rename legacy download file ${file.name}")
+                }
+            }
+            return adopted
+        }
+
+        /**
          * Update [trackRepository] and [bookRepository] to reflect downloaded files
          *
          * Deletes files for [Audiobook]s no longer in the database and updates [Audiobook.isCached]
@@ -386,6 +438,7 @@ class CachedFileManager
          */
         override suspend fun refreshTrackDownloadedStatus() {
             val idToFileMap = HashMap<String, File>()
+            adoptLegacyDownloadFiles(prefsRepo.cachedMediaDir)
             val trackIdsFoundOnDisk =
                 prefsRepo.cachedMediaDir.listFiles(
                     FileFilter {
@@ -460,10 +513,11 @@ class CachedFileManager
          */
         override suspend fun refreshDownloadedStatusForBook(bookId: String) {
             withContext(Dispatchers.IO) {
+                val cacheDir = prefsRepo.cachedMediaDir
+                adoptLegacyDownloadFiles(cacheDir)
                 val tracks = trackRepository.getTracksForAudiobookAsync(bookId)
                 if (tracks.isEmpty()) return@withContext
 
-                val cacheDir = prefsRepo.cachedMediaDir
                 tracks.forEach { track ->
                     val fileExists = File(cacheDir, track.getCachedFileName()).exists()
                     if (track.cached != fileExists) {
@@ -518,5 +572,20 @@ class CachedFileManager
          * the persistent part in [MediaItemTrack.media]
          */
         private fun migrateCachedFiles() {
+        }
+
+        companion object {
+            /**
+             * Pre-v0.61.1 download file names: "<numericTrackId>.<ext>" (single dot), e.g.
+             * "123.mp3". See [adoptLegacyDownloadFiles].
+             */
+            private val LEGACY_CACHED_FILE_PATTERN = Regex("""(\d+)\.([^.]+)""")
+
+            /**
+             * v0.61.1-v0.62.x download file names: "plex:<numericTrackId>.<ext>", e.g.
+             * "plex:123.mp3". The ':' is illegal on FAT/exFAT; adopted to "plex_<n>.<ext>".
+             * See [adoptLegacyDownloadFiles].
+             */
+            private val COLON_CACHED_FILE_PATTERN = Regex("""plex:(\d+)\.([^.]+)""")
         }
     }
