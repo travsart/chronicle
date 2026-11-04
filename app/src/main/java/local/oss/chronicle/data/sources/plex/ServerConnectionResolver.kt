@@ -263,7 +263,7 @@ class ServerConnectionResolver
             cache[libraryId] = resolved
 
             // Self-healing: Update library in DB with resolved token for future use
-            if (selfHealNeeded && library != null && !resolvedToken.isNullOrEmpty()) {
+            if (selfHealNeeded && library != null && !library.id.startsWith("emby:") && !resolvedToken.isNullOrEmpty()) {
                 try {
                     val updatedLibrary = library.copy(authToken = resolvedToken)
                     libraryRepository.updateLibrary(updatedLibrary)

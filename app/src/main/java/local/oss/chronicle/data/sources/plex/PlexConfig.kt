@@ -304,6 +304,21 @@ class PlexConfig
             val serverConnectionResolver = Injector.get().serverConnectionResolver()
             val connection = serverConnectionResolver.resolve(libraryId)
 
+            if (libraryId.startsWith("emby:")) {
+                val baseUrl = connection.serverUrl?.trimEnd('/') ?: return Uri.EMPTY
+                val imageUrl =
+                    if (part.startsWith("http://") || part.startsWith("https://")) {
+                        part
+                    } else {
+                        "$baseUrl/${part.trimStart('/')}"
+                    }
+                val token = connection.authToken ?: return Uri.EMPTY
+                return Uri.parse(imageUrl)
+                    .buildUpon()
+                    .appendQueryParameter("api_key", token)
+                    .build()
+            }
+
             // Build the URL using the library's server
             val baseUrl = (connection.serverUrl ?: url).takeUnless { it == PLACEHOLDER_URL } ?: return Uri.EMPTY
             val fullUrl =

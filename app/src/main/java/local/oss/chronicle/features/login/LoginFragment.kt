@@ -9,6 +9,10 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
+import android.widget.EditText
+import android.widget.LinearLayout
+import android.text.InputType
+import androidx.appcompat.app.AlertDialog
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
@@ -20,6 +24,7 @@ import local.oss.chronicle.R
 import local.oss.chronicle.application.ChronicleApplication
 import local.oss.chronicle.data.local.PrefsRepo
 import local.oss.chronicle.databinding.OnboardingLoginBinding
+import local.oss.chronicle.data.sources.emby.EmbyLoginRepository
 import local.oss.chronicle.features.auth.PlexAuthState
 import timber.log.Timber
 import javax.inject.Inject
@@ -37,6 +42,9 @@ class LoginFragment : Fragment() {
 
     @Inject
     lateinit var viewModelFactory: LoginViewModel.Factory
+
+    @Inject
+    lateinit var embyLoginRepository: EmbyLoginRepository
 
     private lateinit var loginViewModel: LoginViewModel
 
@@ -75,6 +83,10 @@ class LoginFragment : Fragment() {
             startChromeCustomTabsAuth()
         }
 
+        binding.embyLogin.setOnClickListener {
+            showEmbyLoginDialog()
+        }
+
         // Manual-linking fallback: creates a NON-strong PIN (plex.tv/link only takes
         // its 4-char code — the strong OAuth PIN's 25-char code is rejected there),
         // shows that code, and opens plex.tv/link in a separate browser task so the
@@ -92,6 +104,54 @@ class LoginFragment : Fragment() {
         }
 
         return binding.root
+    }
+
+    private fun showEmbyLoginDialog() {
+        val container = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            val horizontalPadding = resources.getDimensionPixelSize(R.dimen.margin_normal)
+            setPadding(horizontalPadding, 0, horizontalPadding, 0)
+        }
+        val serverInput = EditText(requireContext()).apply {
+            hint = getString(R.string.emby_server_url_hint)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            setText("https://plex.rssreader-travsart.org:8443")
+        }
+        val usernameInput = EditText(requireContext()).apply {
+            hint = getString(R.string.emby_username_hint)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PERSON_NAME
+        }
+        val passwordInput = EditText(requireContext()).apply {
+            hint = getString(R.string.emby_password_hint)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        container.addView(serverInput)
+        container.addView(usernameInput)
+        container.addView(passwordInput)
+
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.login_with_emby)
+            .setView(container)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.connect) { _, _ ->
+                val serverUrl = serverInput.text.toString()
+                val username = usernameInput.text.toString()
+                val password = passwordInput.text.toString()
+                binding.loading.visibility = View.VISIBLE
+                viewLifecycleOwner.lifecycleScope.launch {
+                    try {
+                        embyLoginRepository.connect(serverUrl, username, password)
+                    } catch (e: Exception) {
+                        binding.loading.visibility = View.GONE
+                        Toast.makeText(
+                            requireContext(),
+                            getString(R.string.emby_login_failed, e.message ?: "Unknown error"),
+                            Toast.LENGTH_LONG,
+                        ).show()
+                    }
+                }
+            }
+            .show()
     }
 
     /**

@@ -20,6 +20,7 @@ import local.oss.chronicle.data.model.getProgress
 import local.oss.chronicle.data.sources.plex.PlexConfig
 import local.oss.chronicle.data.sources.plex.PlexLoginService
 import local.oss.chronicle.data.sources.plex.PlexPrefsRepo
+import local.oss.chronicle.data.sources.emby.EmbySyncRepository
 import local.oss.chronicle.data.sources.plex.model.Connection
 import local.oss.chronicle.data.sources.plex.model.MediaType
 import local.oss.chronicle.data.sources.plex.model.getDuration
@@ -42,6 +43,7 @@ class LibrarySyncRepository
         private val plexConfig: PlexConfig,
         private val plexLoginService: PlexLoginService,
         private val plexPrefsRepo: PlexPrefsRepo,
+        private val embySyncRepository: EmbySyncRepository,
     ) {
         private var repoJob = Job()
         private val repoScope = CoroutineScope(repoJob + Dispatchers.IO)
@@ -61,6 +63,11 @@ class LibrarySyncRepository
                 try {
                     withContext(Dispatchers.Main) {
                         _isRefreshing.value = true
+                    }
+                    val activeLibrary = libraryRepository.getActiveLibrary()
+                    if (activeLibrary?.id?.startsWith("emby:") == true) {
+                        embySyncRepository.syncLibrary(activeLibrary)
+                        return@launch
                     }
                     bookRepository.refreshDataPaginated()
                     trackRepository.refreshDataPaginated()

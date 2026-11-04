@@ -9,6 +9,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import local.oss.chronicle.data.model.PlexLibrary
 import local.oss.chronicle.data.model.ServerModel
+import local.oss.chronicle.data.sources.emby.EmbySessionState
 import local.oss.chronicle.data.sources.plex.IPlexLoginRepo.LoginState
 import local.oss.chronicle.data.sources.plex.IPlexLoginRepo.LoginState.*
 import local.oss.chronicle.data.sources.plex.PlexInterceptor.Companion.PLATFORM
@@ -95,6 +96,7 @@ class PlexLoginRepo
         private val plexLoginService: PlexLoginService,
         private val plexConfig: PlexConfig,
         private val accountManager: AccountManager,
+        private val embySessionState: EmbySessionState,
     ) : IPlexLoginRepo {
         private var _loginState = MutableLiveData<Event<LoginState>>()
         override val loginEvent: LiveData<Event<LoginState>>
@@ -254,6 +256,10 @@ class PlexLoginRepo
         }
 
         override fun determineLoginState() {
+            if (embySessionState.isEmbyActive) {
+                _loginState.postEvent(LOGGED_IN_FULLY)
+                return
+            }
             val token = plexPrefsRepo.accountAuthToken
             val user: PlexUser? = plexPrefsRepo.user
             val server: ServerModel? = plexPrefsRepo.server

@@ -8,6 +8,9 @@ enum class ProviderType {
     /** Plex Media Server */
     PLEX,
 
+    /** Emby Media Server */
+    EMBY,
+
     /** Audiobookshelf server (future implementation) */
     AUDIOBOOKSHELF,
 }

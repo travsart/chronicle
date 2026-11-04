@@ -6,6 +6,7 @@ import kotlinx.coroutines.withContext
 import local.oss.chronicle.data.model.*
 import androidx.lifecycle.map
 import local.oss.chronicle.data.sources.MediaSource
+import local.oss.chronicle.data.sources.emby.EmbyApiFactory
 import local.oss.chronicle.data.sources.plex.PlexMediaService
 import local.oss.chronicle.data.sources.plex.PlexPrefsRepo
 import local.oss.chronicle.data.sources.plex.ScopedPlexServiceFactory
@@ -172,6 +173,8 @@ class BookRepository
         private val chapterDao: ChapterDao,
         private val serverConnectionResolver: ServerConnectionResolver,
         private val scopedPlexServiceFactory: ScopedPlexServiceFactory,
+        private val embyApiFactory: EmbyApiFactory? = null,
+        private val embyLibraryRepository: LibraryRepository? = null,
     ) : IBookRepository {
         // TODO: observe prefsRepo.offlineMode?
 
@@ -406,6 +409,24 @@ class BookRepository
         override suspend fun setWatched(bookId: String) {
             withContext(Dispatchers.IO) {
                 try {
+                    if (bookId.startsWith("emby:")) {
+                        val audiobook = bookDao.getAudiobookAsync(bookId) ?: return@withContext
+                        val library = embyLibraryRepository?.getLibraryById(audiobook.libraryId) ?: return@withContext
+                        val itemId = embyItemId(bookId)
+                        if (itemId != null) {
+                            val connection = serverConnectionResolver.resolve(audiobook.libraryId)
+                            val service = requireNotNull(embyApiFactory).create(connection.serverUrl ?: return@withContext)
+                            service.markPlayed(
+                                userId = library.accountId.substringAfterLast(':'),
+                                itemId = itemId,
+                                accessToken = connection.authToken ?: return@withContext,
+                            )
+                        }
+                        bookDao.setWatched(bookId)
+                        bookDao.resetBookProgress(bookId)
+                        return@withContext
+                    }
+
                     // Extract numeric ID for Plex API call
                     val numericId = bookId.removePrefix("plex:").toIntOrNull() ?: return@withContext
 
@@ -433,6 +454,23 @@ class BookRepository
         override suspend fun setUnwatched(bookId: String) {
             withContext(Dispatchers.IO) {
                 try {
+                    if (bookId.startsWith("emby:")) {
+                        val audiobook = bookDao.getAudiobookAsync(bookId) ?: return@withContext
+                        val library = embyLibraryRepository?.getLibraryById(audiobook.libraryId) ?: return@withContext
+                        val itemId = embyItemId(bookId)
+                        if (itemId != null) {
+                            val connection = serverConnectionResolver.resolve(audiobook.libraryId)
+                            val service = requireNotNull(embyApiFactory).create(connection.serverUrl ?: return@withContext)
+                            service.markUnplayed(
+                                userId = library.accountId.substringAfterLast(':'),
+                                itemId = itemId,
+                                accessToken = connection.authToken ?: return@withContext,
+                            )
+                        }
+                        bookDao.setUnwatched(bookId)
+                        return@withContext
+                    }
+
                     // Extract numeric ID for Plex API call
                     val numericId = bookId.removePrefix("plex:").toIntOrNull() ?: return@withContext
 
@@ -506,6 +544,17 @@ class BookRepository
             tracks: List<MediaItemTrack>,
             forceNetwork: Boolean,
         ): Boolean {
+            if (audiobook.id.startsWith("emby:")) {
+                val updatedBook =
+                    audiobook.copy(
+                        progress = tracks.sumOf { it.progress },
+                        duration = tracks.sumOf { it.duration },
+                        leafCount = tracks.size.toLong(),
+                    )
+                bookDao.update(updatedBook)
+                return true
+            }
+
             Timber.i(
                 "Loading chapter data. Book ID is ${audiobook.id}, it is ${
                     if (audiobook.isCached) "cached" else "uncached"
@@ -564,6 +613,10 @@ class BookRepository
         ): Audiobook? =
             withContext(Dispatchers.IO) {
                 try {
+                    if (bookId.startsWith("emby:")) {
+                        return@withContext bookDao.getAudiobookAsync(bookId)
+                    }
+
                     // Extract numeric ID for Plex API call
                     val numericId = bookId.removePrefix("plex:").toIntOrNull() ?: return@withContext null
 
@@ -587,6 +640,15 @@ class BookRepository
         suspend fun deleteByLibraryId(libraryId: String) {
             withContext(Dispatchers.IO) {
                 bookDao.deleteByLibraryId(libraryId)
+            }
+        }
+
+        private fun embyItemId(bookId: String): String? {
+            val id = bookId.removePrefix("emby:")
+            return when {
+                id.startsWith("album:") -> null
+                id.startsWith("item:") -> id.removePrefix("item:")
+                else -> id
             }
         }
     }

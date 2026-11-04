@@ -21,10 +21,25 @@
             android:text="@string/login_with_plex"
             android:textColor="@color/textPrimary"
             app:backgroundTint="#F0A732"
+            app:layout_constraintBottom_toTopOf="@id/emby_login"
+            app:layout_constraintLeft_toLeftOf="parent"
+            app:layout_constraintRight_toRightOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintVertical_chainStyle="packed" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/emby_login"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/margin_normal"
+            android:text="@string/login_with_emby"
+            android:textColor="@color/textPrimary"
+            app:strokeColor="@color/textPrimary"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintLeft_toLeftOf="parent"
             app:layout_constraintRight_toRightOf="parent"
-            app:layout_constraintTop_toTopOf="parent" />
+            app:layout_constraintTop_toBottomOf="@id/oauth_login" />
 
         <ProgressBar
             android:id="@+id/loading"
@@ -35,7 +50,7 @@
             android:visibility="invisible"
             app:layout_constraintLeft_toLeftOf="parent"
             app:layout_constraintRight_toRightOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/oauth_login" />
+            app:layout_constraintTop_toBottomOf="@id/emby_login" />
 
         <!-- Manual-linking fallback, shown while polling so the user can finish
              linking at plex.tv/link when the OAuth deep link doesn't fire -->

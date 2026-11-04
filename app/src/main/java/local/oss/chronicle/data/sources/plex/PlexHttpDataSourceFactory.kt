@@ -224,6 +224,15 @@ class PlexHttpDataSourceFactory(
      * Must include all headers required by Plex Media Server API.
      */
     private fun buildHeaders(authToken: String): Map<String, String> {
+        if (currentLibraryId?.startsWith("emby:") == true) {
+            return buildMap {
+                if (authToken.isNotEmpty()) {
+                    put("X-Emby-Token", authToken)
+                }
+                putAll(additionalRequestProperties)
+            }
+        }
+
         val headers =
             mutableMapOf(
                 "X-Plex-Platform" to "Android",

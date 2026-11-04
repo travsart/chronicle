@@ -1,6 +1,7 @@
 package local.oss.chronicle.data.model
 
 import android.support.v4.media.MediaMetadataCompat
+import android.net.Uri
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -273,15 +274,26 @@ data class MediaItemTrack(
             Timber.d("No pre-resolved URL for track $id, using direct file path from library $libraryId")
 
             // Use library-specific server URL if available
-            val serverUrl =
+            val connection =
                 try {
                     kotlinx.coroutines.runBlocking {
-                        Injector.get().serverConnectionResolver().resolve(libraryId).serverUrl
+                        Injector.get().serverConnectionResolver().resolve(libraryId)
                     }
                 } catch (e: Exception) {
                     Timber.w(e, "Failed to resolve server for library $libraryId, using global PlexConfig")
                     null
-                } ?: Injector.get().plexConfig().url
+                }
+            val serverUrl = connection?.serverUrl ?: Injector.get().plexConfig().url
+
+            if (libraryId.startsWith("emby:")) {
+                val token = connection?.authToken
+                    ?: throw IllegalStateException("No Emby access token is available for library $libraryId")
+                return Uri.parse(buildServerUrl(serverUrl, media))
+                    .buildUpon()
+                    .appendQueryParameter("api_key", token)
+                    .build()
+                    .toString()
+            }
 
             // Build full URL with library-specific server
             buildServerUrl(serverUrl, media)

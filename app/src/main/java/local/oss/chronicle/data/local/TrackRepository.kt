@@ -14,6 +14,8 @@ import local.oss.chronicle.data.sources.plex.PlexMediaService
 import local.oss.chronicle.data.sources.plex.PlexPrefsRepo
 import local.oss.chronicle.data.sources.plex.ScopedPlexServiceFactory
 import local.oss.chronicle.data.sources.plex.ServerConnectionResolver
+import local.oss.chronicle.data.sources.emby.EmbyApiFactory
+import local.oss.chronicle.data.sources.emby.EmbySyncRepository
 import local.oss.chronicle.data.sources.plex.model.MediaType
 import local.oss.chronicle.data.sources.plex.model.asTrackList
 import timber.log.Timber
@@ -153,6 +155,8 @@ class TrackRepository
         private val scopedPlexServiceFactory: ScopedPlexServiceFactory,
         private val serverConnectionResolver: ServerConnectionResolver,
         private val bookRepository: IBookRepository,
+        private val embyApiFactory: EmbyApiFactory? = null,
+        private val embyLibraryRepository: LibraryRepository? = null,
     ) : ITrackRepository {
         @Throws(Throwable::class)
         override suspend fun refreshData() {
@@ -209,6 +213,10 @@ class TrackRepository
             libraryId: String,
         ): List<MediaItemTrack> {
             return withContext(Dispatchers.IO) {
+                if (libraryId.startsWith("emby:")) {
+                    return@withContext fetchEmbyTracksForBook(bookId, libraryId)
+                }
+
                 // Extract numeric ID from "plex:{id}" format
                 val numericId = bookId.removePrefix("plex:").toIntOrNull() ?: return@withContext emptyList()
 
@@ -235,6 +243,45 @@ class TrackRepository
                     Timber.e(t, "Failed to fetch network tracks for book $bookId (library $libraryId)")
                     emptyList()
                 }
+            }
+        }
+
+        private suspend fun fetchEmbyTracksForBook(
+            bookId: String,
+            libraryId: String,
+        ): List<MediaItemTrack> {
+            return try {
+                val library =
+                    requireNotNull(embyLibraryRepository) {
+                        "Emby library repository is not configured"
+                    }.getLibraryById(libraryId) ?: return emptyList()
+                val connection = serverConnectionResolver.resolve(libraryId)
+                val service = requireNotNull(embyApiFactory) { "Emby API is not configured" }
+                    .create(connection.serverUrl ?: return emptyList())
+                val userId = library.accountId.substringAfterLast(':')
+                val viewId = library.id.substringAfterLast(':')
+                val items = mutableListOf<local.oss.chronicle.data.sources.emby.EmbyItem>()
+                var startIndex = 0
+                var totalRecords: Int
+                do {
+                    val page =
+                        service.getAudioItems(
+                            userId = userId,
+                            parentId = viewId,
+                            startIndex = startIndex,
+                            accessToken = connection.authToken ?: return emptyList(),
+                        )
+                    items.addAll(page.items)
+                    totalRecords = page.totalRecordCount
+                    startIndex += page.items.size
+                } while (page.items.isNotEmpty() && startIndex < totalRecords)
+
+                items.mapIndexed { index, item ->
+                    EmbySyncRepository.toTrack(item, libraryId, index)
+                }.filter { it.parentKey == bookId }
+            } catch (t: Throwable) {
+                Timber.e(t, "Failed to fetch Emby tracks for book $bookId")
+                emptyList()
             }
         }
 
@@ -289,6 +336,18 @@ class TrackRepository
             return withContext(Dispatchers.IO) {
                 val localTracks = trackDao.getAllTracksAsync()
                 try {
+                    if (bookId.startsWith("emby:")) {
+                        val networkTracks = fetchNetworkTracksForBook(bookId, libraryId)
+                        val embyMergedTracks =
+                            mergeNetworkTracks(
+                                networkTracks = networkTracks,
+                                localTracks = localTracks,
+                                forcePreferNetwork = forceUseNetwork,
+                            )
+                        trackDao.insertAll(embyMergedTracks)
+                        return@withContext Ok(embyMergedTracks)
+                    }
+
                     // Extract numeric ID from "plex:{id}" format
                     val numericId = bookId.removePrefix("plex:").toIntOrNull() ?: return@withContext Err(IllegalArgumentException("Invalid book ID format: $bookId"))
 

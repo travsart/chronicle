@@ -4,6 +4,8 @@ import local.oss.chronicle.data.local.LibraryRepository
 import local.oss.chronicle.data.model.Audiobook
 import local.oss.chronicle.data.model.MediaItemTrack
 import local.oss.chronicle.data.model.ServerConnection
+import local.oss.chronicle.data.sources.emby.EmbyApiFactory
+import local.oss.chronicle.data.sources.emby.EmbyPlaybackRequest
 import local.oss.chronicle.data.sources.plex.model.getDuration
 import local.oss.chronicle.data.sources.plex.model.toPlayQueueItemMap
 import local.oss.chronicle.features.player.MediaPlayerService.Companion.PLEX_STATE_PAUSED
@@ -19,6 +21,7 @@ import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import java.util.concurrent.ConcurrentHashMap
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -43,6 +46,7 @@ class PlexProgressReporter
         private val serverConnectionResolver: ServerConnectionResolver,
         private val libraryRepository: LibraryRepository,
         private val scopedPlexServiceFactory: ScopedPlexServiceFactory,
+        private val embyApiFactory: EmbyApiFactory? = null,
     ) {
         companion object {
             /**
@@ -71,6 +75,7 @@ class PlexProgressReporter
          * worker threads and main thread.
          */
         private val playQueueItemCache = ConcurrentHashMap<String, Long>()
+        private val embyPlaySessionCache = ConcurrentHashMap<String, String>()
 
         /**
          * Clears the play queue item cache.
@@ -78,6 +83,7 @@ class PlexProgressReporter
          */
         fun clearPlayQueueCache() {
             playQueueItemCache.clear()
+            embyPlaySessionCache.clear()
             Timber.d("[PlayQueue] Cleared play queue item cache")
         }
 
@@ -101,6 +107,11 @@ class PlexProgressReporter
             bookProgress: Long,
             playbackState: String,
         ) {
+            if (book.libraryId.startsWith("emby:")) {
+                reportEmbyProgress(connection, track, book, tracks, trackProgress, playbackState)
+                return
+            }
+
             // Create request-scoped PlexService with library-specific base URL
             val service = scopedPlexServiceFactory.getOrCreateService(connection)
 
@@ -226,6 +237,22 @@ class PlexProgressReporter
             libraryId: String,
         ) {
             try {
+                if (libraryId.startsWith("emby:")) {
+                    val library = libraryRepository.getLibraryById(libraryId) ?: return
+                    val connection = serverConnectionResolver.resolve(libraryId)
+                    val serverUrl = connection.serverUrl ?: return
+                    val token = connection.authToken ?: return
+                    val sessionId = UUID.randomUUID().toString()
+                    embyPlaySessionCache["$libraryId:$bookId"] = sessionId
+                    val itemId = embyItemId(bookId)
+                    require(itemId != null) { "Emby book ID is not a server item ID" }
+                    embyApiFactory?.create(serverUrl)?.reportPlaybackStarted(
+                        accessToken = token,
+                        request = EmbyPlaybackRequest(itemId = itemId, positionTicks = 0L, playSessionId = sessionId),
+                    )
+                    return
+                }
+
                 Timber.d("[PlayQueue] startMediaSession() called - bookId=$bookId, libraryId=$libraryId")
 
                 // Clear previous play queue cache when starting new session
@@ -305,6 +332,60 @@ class PlexProgressReporter
             } catch (e: Exception) {
                 // This is non-critical - log but never throw
                 Timber.e(e, "[PlayQueue] Failed to start media session for book $bookId: ${e.message}")
+            }
+        }
+
+        private suspend fun reportEmbyProgress(
+            connection: ServerConnection,
+            track: MediaItemTrack,
+            book: Audiobook,
+            tracks: List<MediaItemTrack>,
+            trackProgress: Long,
+            playbackState: String,
+        ) {
+            val serverUrl = connection.serverUrl ?: return
+            val token = connection.authToken ?: return
+            val library = libraryRepository.getLibraryById(book.libraryId) ?: return
+            val userId = library.accountId.substringAfterLast(':')
+            val itemId = track.id.removePrefix("emby:")
+            val sessionKey = "${book.libraryId}:${book.id}"
+            val sessionId = embyPlaySessionCache.getOrPut(sessionKey) { UUID.randomUUID().toString() }
+            val request =
+                EmbyPlaybackRequest(
+                    itemId = itemId,
+                    positionTicks = trackProgress * 10_000L,
+                    playSessionId = sessionId,
+                    isPaused = playbackState == PLEX_STATE_PAUSED,
+                    eventName =
+                        when (playbackState) {
+                            PLEX_STATE_PAUSED -> "Pause"
+                            PLEX_STATE_STOPPED -> null
+                            else -> "TimeUpdate"
+                        },
+                )
+            val service = requireNotNull(embyApiFactory) { "Emby API is not configured" }.create(serverUrl)
+            if (playbackState == PLEX_STATE_STOPPED) {
+                service.reportPlaybackStopped(token, request)
+                embyPlaySessionCache.remove(sessionKey)
+            } else {
+                service.reportPlaybackProgress(token, request)
+            }
+
+            if (trackProgress > track.duration - 1000L) {
+                service.markPlayed(userId, itemId, token)
+            }
+            val bookItemId = embyItemId(book.id)
+            if (bookItemId != null && isBookCompleted(bookProgress = trackProgress, bookDuration = tracks.getDuration(), playbackState = playbackState)) {
+                service.markPlayed(userId, bookItemId, token)
+            }
+        }
+
+        private fun embyItemId(bookId: String): String? {
+            val id = bookId.removePrefix("emby:")
+            return when {
+                id.startsWith("album:") -> null
+                id.startsWith("item:") -> id.removePrefix("item:")
+                else -> id
             }
         }
 

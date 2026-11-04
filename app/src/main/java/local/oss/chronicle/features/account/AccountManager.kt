@@ -9,6 +9,7 @@ import local.oss.chronicle.data.local.TrackRepository
 import local.oss.chronicle.data.model.Account
 import local.oss.chronicle.data.model.Library
 import local.oss.chronicle.data.model.ProviderType
+import local.oss.chronicle.data.sources.emby.EmbySessionState
 import local.oss.chronicle.data.sources.plex.model.Connection
 import java.util.UUID
 import javax.inject.Inject
@@ -28,6 +29,7 @@ class AccountManager
         private val libraryRepository: LibraryRepository,
         private val activeLibraryProvider: ActiveLibraryProvider,
         private val credentialManager: CredentialManager,
+        private val embySessionState: EmbySessionState,
         private val bookRepository: BookRepository,
         private val trackRepository: TrackRepository,
         private val serverConnectionResolver: local.oss.chronicle.data.sources.plex.ServerConnectionResolver,
@@ -66,6 +68,7 @@ class AccountManager
 
             // Save account to database
             accountRepository.addAccount(account)
+            embySessionState.isEmbyActive = false
 
             return account
         }
@@ -151,10 +154,39 @@ class AccountManager
             // Save library
             libraryRepository.addLibraries(listOf(library))
 
+            embySessionState.isEmbyActive = false
+
             // Set as active library
             activeLibraryProvider.switchToLibrary(library.id)
 
             return Pair(account, library)
+        }
+
+        suspend fun addEmbyAccountWithLibraries(
+            accountId: String,
+            userName: String,
+            avatarUrl: String?,
+            accessToken: String,
+            libraries: List<Library>,
+            activeLibraryId: String,
+        ) {
+            val now = System.currentTimeMillis()
+            val account =
+                Account(
+                    id = accountId,
+                    providerType = ProviderType.EMBY,
+                    displayName = userName.ifBlank { "Emby User" },
+                    avatarUrl = avatarUrl,
+                    credentials = "",
+                    createdAt = now,
+                    lastUsedAt = now,
+                )
+
+            credentialManager.storeCredentials(accountId, accessToken)
+            accountRepository.addAccount(account)
+            libraryRepository.addLibraries(libraries)
+            activeLibraryProvider.switchToLibrary(activeLibraryId)
+            embySessionState.isEmbyActive = true
         }
 
         /**
@@ -182,6 +214,7 @@ class AccountManager
             // If active library was in this account, clear it
             if (activeLibraryProvider.currentLibrary.value?.accountId == accountId) {
                 activeLibraryProvider.clearLibrary()
+                embySessionState.isEmbyActive = false
             }
         }
 
@@ -236,6 +269,8 @@ class AccountManager
 
             // Update account last used
             accountRepository.updateLastUsed(library.accountId, System.currentTimeMillis())
+            val account = accountRepository.getAccountById(library.accountId)
+            embySessionState.isEmbyActive = account?.providerType == ProviderType.EMBY
 
             // Set as active library
             activeLibraryProvider.switchToLibrary(libraryId)
@@ -295,6 +330,7 @@ class AccountManager
             val prefix =
                 when (providerType) {
                     ProviderType.PLEX -> "plex"
+                    ProviderType.EMBY -> "emby"
                     ProviderType.AUDIOBOOKSHELF -> "abs"
                 }
             return "$prefix:account:${UUID.randomUUID()}"

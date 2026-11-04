@@ -16,6 +16,12 @@
 
     <!-- Login page -->
     <string name="login_with_plex">Login with Plex</string>
+    <string name="login_with_emby">Connect to Emby</string>
+    <string name="emby_server_url_hint">Emby server URL</string>
+    <string name="emby_username_hint">Emby username</string>
+    <string name="emby_password_hint">Emby password</string>
+    <string name="emby_login_failed">Could not connect to Emby: %1$s</string>
+    <string name="connect">Connect</string>
     <string name="plex_login_title">Sign in with Plex</string>
     <string name="close">Close</string>
     <string name="title_activity_login">Sign in</string>
