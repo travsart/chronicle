@@ -11,6 +11,7 @@ import local.oss.chronicle.data.local.TrackRepository
 import local.oss.chronicle.data.model.Account
 import local.oss.chronicle.data.model.Library
 import local.oss.chronicle.data.model.ProviderType
+import local.oss.chronicle.data.sources.emby.EmbySessionState
 import local.oss.chronicle.data.sources.plex.ServerConnectionResolver
 import org.junit.Before
 import org.junit.Test
@@ -26,6 +27,7 @@ class AccountManagerTest {
     private lateinit var libraryRepository: LibraryRepository
     private lateinit var activeLibraryProvider: ActiveLibraryProvider
     private lateinit var credentialManager: CredentialManager
+    private lateinit var embySessionState: EmbySessionState
     private lateinit var bookRepository: BookRepository
     private lateinit var trackRepository: TrackRepository
     private lateinit var serverConnectionResolver: ServerConnectionResolver
@@ -37,6 +39,7 @@ class AccountManagerTest {
         libraryRepository = mock()
         activeLibraryProvider = mock()
         credentialManager = mock()
+        embySessionState = mock()
         bookRepository = mock()
         trackRepository = mock()
         serverConnectionResolver = mock()
@@ -47,6 +50,7 @@ class AccountManagerTest {
                 libraryRepository,
                 activeLibraryProvider,
                 credentialManager,
+                embySessionState,
                 bookRepository,
                 trackRepository,
                 serverConnectionResolver,

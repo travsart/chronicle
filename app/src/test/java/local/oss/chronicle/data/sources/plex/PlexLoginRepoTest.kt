@@ -49,6 +49,7 @@ class PlexLoginRepoTest {
                 plexLoginService = plexLoginService,
                 plexConfig = plexConfig,
                 accountManager = accountManager,
+                embySessionState = mockk(relaxed = true),
             )
     }
 

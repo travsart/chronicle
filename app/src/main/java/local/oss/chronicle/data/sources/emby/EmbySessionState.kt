@@ -7,11 +7,14 @@ import javax.inject.Singleton
 @Singleton
 class EmbySessionState
     @Inject
-    constructor(private val preferences: SharedPreferences) {
+    constructor(
+        private val preferences: SharedPreferences,
+    ) {
         var isEmbyActive: Boolean
             get() = preferences.getString(ACTIVE_PROVIDER_KEY, PLEX_PROVIDER) == EMBY_PROVIDER
             set(value) {
-                preferences.edit()
+                preferences
+                    .edit()
                     .putString(ACTIVE_PROVIDER_KEY, if (value) EMBY_PROVIDER else PLEX_PROVIDER)
                     .apply()
             }

@@ -108,7 +108,7 @@ class PlexProgressReporter
             playbackState: String,
         ) {
             if (book.libraryId.startsWith("emby:")) {
-                reportEmbyProgress(connection, track, book, tracks, trackProgress, playbackState)
+                reportEmbyProgress(connection, track, book, tracks, trackProgress, bookProgress, playbackState)
                 return
             }
 
@@ -341,6 +341,7 @@ class PlexProgressReporter
             book: Audiobook,
             tracks: List<MediaItemTrack>,
             trackProgress: Long,
+            bookProgress: Long,
             playbackState: String,
         ) {
             val serverUrl = connection.serverUrl ?: return
@@ -375,7 +376,7 @@ class PlexProgressReporter
                 service.markPlayed(userId, itemId, token)
             }
             val bookItemId = embyItemId(book.id)
-            if (bookItemId != null && isBookCompleted(bookProgress = trackProgress, bookDuration = tracks.getDuration(), playbackState = playbackState)) {
+            if (bookItemId != null && isBookCompleted(bookProgress, tracks.getDuration(), playbackState)) {
                 service.markPlayed(userId, bookItemId, token)
             }
         }

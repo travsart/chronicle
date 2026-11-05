@@ -9,6 +9,7 @@ import local.oss.chronicle.data.account.AccountTestFixtures
 import local.oss.chronicle.data.model.Audiobook
 import local.oss.chronicle.data.model.MediaItemTrack
 import local.oss.chronicle.data.model.ProviderType
+import local.oss.chronicle.data.sources.emby.EmbySyncRepository
 import local.oss.chronicle.data.sources.plex.PlexConfig
 import local.oss.chronicle.data.sources.plex.PlexLoginService
 import local.oss.chronicle.data.sources.plex.PlexMediaSource
@@ -64,6 +65,9 @@ class LibrarySyncRepositoryTest {
     @Mock
     private lateinit var mockPlexPrefsRepo: PlexPrefsRepo
 
+    @Mock
+    private lateinit var mockEmbySyncRepository: EmbySyncRepository
+
     private lateinit var repository: LibrarySyncRepository
 
     @Before
@@ -79,6 +83,7 @@ class LibrarySyncRepositoryTest {
                 plexConfig = mockPlexConfig,
                 plexLoginService = mockPlexLoginService,
                 plexPrefsRepo = mockPlexPrefsRepo,
+                embySyncRepository = mockEmbySyncRepository,
             )
 
         // Setup default behavior for book and track repositories

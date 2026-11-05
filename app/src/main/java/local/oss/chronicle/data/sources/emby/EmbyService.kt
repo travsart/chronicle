@@ -19,7 +19,7 @@ import javax.inject.Inject
 interface EmbyService {
     @POST("Users/AuthenticateByName")
     suspend fun authenticate(
-        @Header("X-Emby-Authorization") authorization: String,
+        @Header("Authorization") authorization: String,
         @Body request: EmbyAuthenticationRequest,
     ): EmbyAuthenticationResponse
 
@@ -166,10 +166,13 @@ data class EmbyView(
 
 class EmbyApiFactory
     @Inject
-    constructor(private val moshi: Moshi) {
+    constructor(
+        private val moshi: Moshi,
+    ) {
         fun create(serverUrl: String): EmbyService {
             val baseUrl = normalizeServerUrl(serverUrl)
-            return Retrofit.Builder()
+            return Retrofit
+                .Builder()
                 .baseUrl(baseUrl)
                 .client(OkHttpClient.Builder().build())
                 .addConverterFactory(MoshiConverterFactory.create(moshi))
@@ -179,8 +182,10 @@ class EmbyApiFactory
 
         companion object {
             fun normalizeServerUrl(serverUrl: String): String {
-                val parsed = serverUrl.trim().toHttpUrlOrNull()
-                    ?: throw IllegalArgumentException("Enter a valid server URL")
+                val parsed =
+                    serverUrl.trim()
+                        .toHttpUrlOrNull()
+                        ?: throw IllegalArgumentException("Enter a valid server URL")
                 require(parsed.username.isEmpty() && parsed.password.isEmpty()) {
                     "Server URL must not contain credentials"
                 }
@@ -190,7 +195,8 @@ class EmbyApiFactory
 
                 val path = parsed.encodedPath.trimEnd('/')
                 val servicePath = if (path.endsWith("/emby")) path else "$path/emby"
-                return parsed.newBuilder()
+                return parsed
+                    .newBuilder()
                     .encodedPath("$servicePath/")
                     .query(null)
                     .fragment(null)

@@ -25,53 +25,64 @@ class EmbySyncRepository
         private val bookDao: BookDao,
         private val trackDao: TrackDao,
     ) {
-        suspend fun syncLibrary(library: Library) = withContext(Dispatchers.IO) {
-            val account = accountRepository.getAccountById(library.accountId)
-                ?: throw IllegalStateException("Emby account not found")
-            val accessToken = credentialManager.getCredentials(account.id)
-                ?: throw IllegalStateException("Emby credentials are missing")
-            val userId = account.id.substringAfterLast(':')
-            val viewId = library.id.substringAfterLast(':')
-            val service = apiFactory.create(library.serverUrl ?: throw IllegalStateException("Emby server URL is missing"))
+        suspend fun syncLibrary(library: Library) =
+            withContext(Dispatchers.IO) {
+                val account =
+                    accountRepository.getAccountById(library.accountId)
+                        ?: throw IllegalStateException("Emby account not found")
+                val accessToken =
+                    credentialManager.getCredentials(account.id)
+                        ?: throw IllegalStateException("Emby credentials are missing")
+                val userId = account.id.substringAfterLast(':')
+                val viewId = library.id.substringAfterLast(':')
+                val serverUrl = library.serverUrl ?: throw IllegalStateException("Emby server URL is missing")
+                val service = apiFactory.create(serverUrl)
 
-            val items = mutableListOf<EmbyItem>()
-            var startIndex = 0
-            var totalRecords: Int
-            do {
-                val page =
-                    service.getAudioItems(
-                        userId = userId,
-                        parentId = viewId,
-                        startIndex = startIndex,
-                        accessToken = accessToken,
-                    )
-                items.addAll(page.items)
-                totalRecords = page.totalRecordCount
-                startIndex += page.items.size
-            } while (page.items.isNotEmpty() && startIndex < totalRecords)
+                val items = mutableListOf<EmbyItem>()
+                var startIndex = 0
+                var totalRecords: Int
+                do {
+                    val page =
+                        service.getAudioItems(
+                            userId = userId,
+                            parentId = viewId,
+                            startIndex = startIndex,
+                            accessToken = accessToken,
+                        )
+                    items.addAll(page.items)
+                    totalRecords = page.totalRecordCount
+                    startIndex += page.items.size
+                } while (page.items.isNotEmpty() && startIndex < totalRecords)
 
-            val localBooks = bookDao.getAudiobooks().filter { it.libraryId == library.id }.associateBy { it.id }
-            val localTracks = trackDao.getAllTracksAsync().filter { it.libraryId == library.id }.associateBy { it.id }
-            val networkTracks = items.mapIndexed { index, item -> toTrack(item, library.id, index) }
-            val tracksByBook = networkTracks.groupBy { it.parentKey }
-            val networkBooks =
-                tracksByBook.map { (bookId, tracks) ->
-                    val representative = items.first { "emby:${it.id}" == tracks.first().id }
-                    val networkBook = representative.toAudiobook(bookId, library.id, tracks)
-                    localBooks[bookId]?.let { Audiobook.merge(networkBook, it) } ?: networkBook
-                }
-            val mergedTracks =
-                networkTracks.map { track ->
-                    localTracks[track.id]?.let { MediaItemTrack.merge(track, it) } ?: track
-                }
+                val localBooks =
+                    bookDao.getAudiobooks()
+                        .filter { it.libraryId == library.id }
+                        .associateBy { it.id }
+                val localTracks =
+                    trackDao.getAllTracksAsync()
+                        .filter { it.libraryId == library.id }
+                        .associateBy { it.id }
+                val networkTracks =
+                    items.mapIndexed { index, item -> toTrack(item, library.id, index) }
+                val tracksByBook = networkTracks.groupBy { it.parentKey }
+                val networkBooks =
+                    tracksByBook.map { (bookId, tracks) ->
+                        val representative = items.first { "emby:${it.id}" == tracks.first().id }
+                        val networkBook = representative.toAudiobook(bookId, library.id, tracks)
+                        localBooks[bookId]?.let { Audiobook.merge(networkBook, it) } ?: networkBook
+                    }
+                val mergedTracks =
+                    networkTracks.map { track ->
+                        localTracks[track.id]?.let { MediaItemTrack.merge(track, it) } ?: track
+                    }
 
-            bookDao.deleteByLibraryId(library.id)
-            bookDao.insertAll(networkBooks)
-            trackDao.deleteByLibraryId(library.id)
-            trackDao.insertAll(mergedTracks)
-            libraryRepository.updateSyncTimestamp(library.id, System.currentTimeMillis())
-            libraryRepository.updateItemCount(library.id, networkBooks.size)
-        }
+                bookDao.deleteByLibraryId(library.id)
+                bookDao.insertAll(networkBooks)
+                trackDao.deleteByLibraryId(library.id)
+                trackDao.insertAll(mergedTracks)
+                libraryRepository.updateSyncTimestamp(library.id, System.currentTimeMillis())
+                libraryRepository.updateItemCount(library.id, networkBooks.size)
+            }
 
         companion object {
             const val MEDIA_SOURCE_ID = 1L

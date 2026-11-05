@@ -64,9 +64,7 @@ class EmbyLoginRepository
             accountManager.addEmbyAccountWithLibraries(
                 accountId = accountId,
                 userName = response.user.name,
-                avatarUrl = response.user.primaryImageTag?.let {
-                    "$normalizedUrl/Users/${response.user.id}/Images/Primary?tag=$it"
-                },
+                avatarUrl = null,
                 accessToken = response.accessToken,
                 libraries = libraries,
                 activeLibraryId = preferredLibrary.id,
