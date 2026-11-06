@@ -27,7 +27,7 @@ class EmbyLoginRepository
             val normalizedUrl = EmbyApiFactory.normalizeServerUrl(serverUrl)
             val service = apiFactory.create(normalizedUrl)
             val authorization =
-                "MediaBrowser Client=\"Chronicle\", Device=\"Android\", " +
+                "Emby Client=\"Chronicle\", Device=\"Android\", " +
                     "DeviceId=\"${UUID.randomUUID()}\", Version=\"1.0\""
             val response =
                 service.authenticate(

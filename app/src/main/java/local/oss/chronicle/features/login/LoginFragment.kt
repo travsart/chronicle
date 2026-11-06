@@ -5,26 +5,30 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.text.Editable
+import android.text.InputType
+import android.text.TextWatcher
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Toast
 import android.widget.EditText
 import android.widget.LinearLayout
-import android.text.InputType
+import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.browser.customtabs.CustomTabsIntent
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.launch
 import local.oss.chronicle.R
 import local.oss.chronicle.application.ChronicleApplication
 import local.oss.chronicle.data.local.PrefsRepo
-import local.oss.chronicle.databinding.OnboardingLoginBinding
 import local.oss.chronicle.data.sources.emby.EmbyLoginRepository
+import local.oss.chronicle.databinding.OnboardingLoginBinding
 import local.oss.chronicle.features.auth.PlexAuthState
 import timber.log.Timber
 import javax.inject.Inject
@@ -107,51 +111,100 @@ class LoginFragment : Fragment() {
     }
 
     private fun showEmbyLoginDialog() {
-        val container = LinearLayout(requireContext()).apply {
-            orientation = LinearLayout.VERTICAL
-            val horizontalPadding = resources.getDimensionPixelSize(R.dimen.margin_normal)
-            setPadding(horizontalPadding, 0, horizontalPadding, 0)
-        }
-        val serverInput = EditText(requireContext()).apply {
-            hint = getString(R.string.emby_server_url_hint)
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
-            setText("https://plex.rssreader-travsart.org:8443")
-        }
-        val usernameInput = EditText(requireContext()).apply {
-            hint = getString(R.string.emby_username_hint)
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PERSON_NAME
-        }
-        val passwordInput = EditText(requireContext()).apply {
-            hint = getString(R.string.emby_password_hint)
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-        }
+        val container =
+            LinearLayout(requireContext()).apply {
+                orientation = LinearLayout.VERTICAL
+                val horizontalPadding = resources.getDimensionPixelSize(R.dimen.margin_normal)
+                setPadding(horizontalPadding, 0, horizontalPadding, 0)
+            }
+        val serverInput =
+            EditText(requireContext()).apply {
+                hint = getString(R.string.emby_server_url_hint)
+                inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+                setText("https://plex.rssreader-travsart.org:8443")
+            }
+        val usernameInput =
+            EditText(requireContext()).apply {
+                hint = getString(R.string.emby_username_hint)
+                inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PERSON_NAME
+            }
+        val passwordInput =
+            EditText(requireContext()).apply {
+                hint = getString(R.string.emby_password_hint)
+                inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            }
         container.addView(serverInput)
         container.addView(usernameInput)
         container.addView(passwordInput)
 
-        AlertDialog.Builder(requireContext())
-            .setTitle(R.string.login_with_emby)
-            .setView(container)
-            .setNegativeButton(android.R.string.cancel, null)
-            .setPositiveButton(R.string.connect) { _, _ ->
-                val serverUrl = serverInput.text.toString()
-                val username = usernameInput.text.toString()
-                val password = passwordInput.text.toString()
-                binding.loading.visibility = View.VISIBLE
-                viewLifecycleOwner.lifecycleScope.launch {
-                    try {
-                        embyLoginRepository.connect(serverUrl, username, password)
-                    } catch (e: Exception) {
-                        binding.loading.visibility = View.GONE
-                        Toast.makeText(
-                            requireContext(),
-                            getString(R.string.emby_login_failed, e.message ?: "Unknown error"),
-                            Toast.LENGTH_LONG,
-                        ).show()
+        val dialogBuilder =
+            MaterialAlertDialogBuilder(requireContext())
+                .setTitle(R.string.login_with_emby)
+                .setView(container)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(R.string.connect) { _, _ ->
+                    val serverUrl = serverInput.text.toString()
+                    val username = usernameInput.text.toString()
+                    val password = passwordInput.text.toString()
+                    binding.loading.visibility = View.VISIBLE
+                    viewLifecycleOwner.lifecycleScope.launch {
+                        try {
+                            embyLoginRepository.connect(serverUrl, username, password)
+                        } catch (e: Exception) {
+                            binding.loading.visibility = View.GONE
+                            Timber.e(e, "Emby connection failed")
+                            val errorToast =
+                                Toast.makeText(
+                                    requireContext(),
+                                    getString(R.string.emby_login_failed, e.message ?: "Unknown error"),
+                                    Toast.LENGTH_LONG,
+                                )
+                            errorToast.show()
+                        }
                     }
                 }
+        val dialog = dialogBuilder.show()
+
+        val connectButton = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+        val cancelButton = dialog.getButton(AlertDialog.BUTTON_NEGATIVE)
+        cancelButton.setTextColor(ContextCompat.getColor(requireContext(), R.color.colorAccent))
+
+        fun updateConnectButton() {
+            val isReady =
+                serverInput.text.isNotBlank() &&
+                    usernameInput.text.isNotBlank() &&
+                    passwordInput.text.isNotBlank()
+            connectButton.isEnabled = isReady
+            connectButton.setTextColor(
+                ContextCompat.getColor(
+                    requireContext(),
+                    if (isReady) R.color.colorAccent else R.color.textSecondary,
+                ),
+            )
+        }
+
+        val textWatcher =
+            object : TextWatcher {
+                override fun beforeTextChanged(
+                    text: CharSequence?,
+                    start: Int,
+                    count: Int,
+                    after: Int,
+                ) = Unit
+
+                override fun onTextChanged(
+                    text: CharSequence?,
+                    start: Int,
+                    before: Int,
+                    count: Int,
+                ) = updateConnectButton()
+
+                override fun afterTextChanged(editable: Editable?) = Unit
             }
-            .show()
+        serverInput.addTextChangedListener(textWatcher)
+        usernameInput.addTextChangedListener(textWatcher)
+        passwordInput.addTextChangedListener(textWatcher)
+        updateConnectButton()
     }
 
     /**

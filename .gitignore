@@ -53,3 +53,6 @@ ehthumbs.db
 Icon?
 Thumbs.db
 warning-error-logs.log
+*.log
+.gitignore
+*.salive
