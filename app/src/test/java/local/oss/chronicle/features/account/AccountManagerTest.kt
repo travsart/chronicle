@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import local.oss.chronicle.data.local.AccountRepository
 import local.oss.chronicle.data.local.BookRepository
+import local.oss.chronicle.data.local.LibrarySyncRepository
 import local.oss.chronicle.data.local.LibraryRepository
 import local.oss.chronicle.data.local.TrackRepository
 import local.oss.chronicle.data.model.Account
@@ -28,6 +29,7 @@ class AccountManagerTest {
     private lateinit var activeLibraryProvider: ActiveLibraryProvider
     private lateinit var credentialManager: CredentialManager
     private lateinit var embySessionState: EmbySessionState
+    private lateinit var librarySyncRepository: LibrarySyncRepository
     private lateinit var bookRepository: BookRepository
     private lateinit var trackRepository: TrackRepository
     private lateinit var serverConnectionResolver: ServerConnectionResolver
@@ -40,6 +42,7 @@ class AccountManagerTest {
         activeLibraryProvider = mock()
         credentialManager = mock()
         embySessionState = mock()
+        librarySyncRepository = mock()
         bookRepository = mock()
         trackRepository = mock()
         serverConnectionResolver = mock()
@@ -51,6 +54,7 @@ class AccountManagerTest {
                 activeLibraryProvider,
                 credentialManager,
                 embySessionState,
+                librarySyncRepository,
                 bookRepository,
                 trackRepository,
                 serverConnectionResolver,
@@ -155,6 +159,43 @@ class AccountManagerTest {
             // Then
             verify(accountRepository).updateLastUsed(eq(accountId), any())
             verify(activeLibraryProvider).switchToLibrary(libraryId)
+        }
+
+    @Test
+    fun switchToEmbyLibrary_refreshesItsCatalog(): Unit =
+        runBlocking {
+            val libraryId = "emby:library:view-id"
+            val accountId = "emby:account:server:user"
+            val library =
+                Library(
+                    id = libraryId,
+                    accountId = accountId,
+                    serverId = "server",
+                    serverName = "Emby Server",
+                    name = "Audiobooks",
+                    type = "books",
+                    lastSyncedAt = null,
+                    itemCount = 0,
+                    isActive = false,
+                )
+            val account =
+                Account(
+                    id = accountId,
+                    providerType = ProviderType.EMBY,
+                    displayName = "Test User",
+                    avatarUrl = null,
+                    credentials = "",
+                    createdAt = 0L,
+                    lastUsedAt = 0L,
+                )
+            whenever(libraryRepository.getLibraryById(libraryId)).thenReturn(library)
+            whenever(accountRepository.getAccountById(accountId)).thenReturn(account)
+            whenever(embySessionState.isEmbyActive).thenReturn(true)
+
+            accountManager.switchToLibrary(libraryId)
+
+            verify(activeLibraryProvider).switchToLibrary(libraryId)
+            verify(librarySyncRepository).refreshLibrary()
         }
 
     @Test

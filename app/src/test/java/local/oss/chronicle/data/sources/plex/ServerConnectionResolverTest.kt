@@ -395,6 +395,38 @@ class ServerConnectionResolverTest {
         }
 
     @Test
+    fun `resolve uses raw encrypted credentials for Emby library`() =
+        runTest {
+            val libraryId = "emby:library:7"
+            val accountId = "emby:account:server:user"
+            val serverUrl = "https://emby.example/emby/"
+            val accessToken = "emby-access-token"
+            val library =
+                Library(
+                    id = libraryId,
+                    accountId = accountId,
+                    serverId = "server",
+                    serverName = "Emby Server",
+                    name = "Audiobooks",
+                    type = "books",
+                    lastSyncedAt = null,
+                    itemCount = 0,
+                    isActive = true,
+                    serverUrl = serverUrl,
+                )
+            whenever(mockLibraryRepository.getLibraryById(libraryId)).thenReturn(library)
+            whenever(mockLibraryRepository.getServerConnection(libraryId))
+                .thenReturn(ServerConnection(serverUrl, null))
+            whenever(mockCredentialManager.getCredentials(accountId)).thenReturn(accessToken)
+
+            val result = resolver.resolve(libraryId)
+
+            assertThat(result.serverUrl).isEqualTo(serverUrl)
+            assertThat(result.authToken).isEqualTo(accessToken)
+            verify(mockCredentialManager).getCredentials(accountId)
+        }
+
+    @Test
     fun `resolve handles malformed credentials JSON gracefully`() =
         runTest {
             // Given: Library has no authToken and Account has invalid JSON

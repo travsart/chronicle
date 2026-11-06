@@ -10,6 +10,7 @@ import local.oss.chronicle.data.model.Audiobook
 import local.oss.chronicle.data.model.Library
 import local.oss.chronicle.data.model.MediaItemTrack
 import local.oss.chronicle.features.account.CredentialManager
+import timber.log.Timber
 import java.time.Instant
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -53,6 +54,11 @@ class EmbySyncRepository
                     totalRecords = page.totalRecordCount
                     startIndex += page.items.size
                 } while (page.items.isNotEmpty() && startIndex < totalRecords)
+
+                Timber.i(
+                    "Emby returned ${items.size} audio items for library '${library.name}' " +
+                        "(reported total: $totalRecords)",
+                )
 
                 val localBooks =
                     bookDao.getAudiobooks()

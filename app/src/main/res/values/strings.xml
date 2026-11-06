@@ -1,6 +1,6 @@
 <resources>
     <!-- Main activity/shared strings -->
-    <string name="app_name">Chronicle Epilogue - Audiobook Player for Plex</string>
+    <string name="app_name">Chronicle Epilogue - Audiobook Player for Plex/Emby</string>
     <string name="attribution_media_playback">Media playback and library synchronization</string>
     <string name="available_offline">Available offline</string>
     <string name="disable_offline_mode">Disable offline mode</string>
@@ -344,10 +344,10 @@
 
     <!-- Account Management -->
     <string name="accounts_title">Accounts &amp; Libraries</string>
-    <string name="no_accounts_message">No accounts connected.\nAdd a Plex account to get started.</string>
+    <string name="no_accounts_message">No accounts connected.\nAdd a Plex\Emby account to get started.</string>
     <string name="add_account">Add account</string>
     <string name="manage_accounts">Manage Accounts</string>
-    <string name="manage_accounts_summary">Add or remove Plex accounts</string>
+    <string name="manage_accounts_summary">Add or remove Plex\Emby accounts</string>
     <string name="switch_library">Switch Library</string>
     <string name="remove_account_title">Remove Account?</string>
     <string name="remove_account_message">This will delete the account and all associated data (books, progress, downloads). This cannot be undone.</string>

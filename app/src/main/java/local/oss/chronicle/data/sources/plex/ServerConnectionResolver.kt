@@ -168,7 +168,7 @@ class ServerConnectionResolver
             // Check cache first (skipped when effectiveForce)
             if (!effectiveForce) {
                 cache[libraryId]?.let { cached ->
-                    if (cached.serverUrl != null && cached.authToken != null) {
+                    if (cached.serverUrl != null && !cached.authToken.isNullOrEmpty()) {
                         Timber.v("Cache hit for libraryId=$libraryId: serverUrl=${cached.serverUrl}")
                         return cached
                     }
@@ -206,7 +206,12 @@ class ServerConnectionResolver
                         }
 
                     if (!credentialsJson.isNullOrEmpty()) {
-                        val userToken = extractUserToken(credentialsJson)
+                        val userToken =
+                            if (library.id.startsWith("emby:")) {
+                                credentialsJson
+                            } else {
+                                extractUserToken(credentialsJson)
+                            }
                         if (userToken.isNotEmpty()) {
                             resolvedToken = userToken
                             usedFallback = true
@@ -217,7 +222,7 @@ class ServerConnectionResolver
                 }
 
                 // Fallback 2: Use global PlexPrefsRepo (last resort) if still no token
-                if (resolvedToken.isNullOrEmpty()) {
+                if (resolvedToken.isNullOrEmpty() && library?.id?.startsWith("emby:") != true) {
                     resolvedToken = plexPrefsRepo.server?.accessToken
                         ?: plexPrefsRepo.user?.authToken
                         ?: plexPrefsRepo.accountAuthToken

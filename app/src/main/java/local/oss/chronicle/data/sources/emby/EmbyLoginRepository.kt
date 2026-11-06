@@ -1,11 +1,13 @@
 package local.oss.chronicle.data.sources.emby
 
 import local.oss.chronicle.data.model.Library
+import local.oss.chronicle.data.local.LibrarySyncRepository
 import local.oss.chronicle.data.sources.plex.IPlexLoginRepo
 import local.oss.chronicle.features.account.AccountManager
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
+import timber.log.Timber
 
 @Singleton
 class EmbyLoginRepository
@@ -13,6 +15,7 @@ class EmbyLoginRepository
     constructor(
         private val apiFactory: EmbyApiFactory,
         private val accountManager: AccountManager,
+        private val librarySyncRepository: LibrarySyncRepository,
         private val sessionState: EmbySessionState,
         private val plexLoginRepo: IPlexLoginRepo,
     ) {
@@ -71,5 +74,7 @@ class EmbyLoginRepository
             )
             sessionState.isEmbyActive = true
             plexLoginRepo.determineLoginState()
+            Timber.i("Starting initial Emby library refresh for ${preferredLibrary.name}")
+            librarySyncRepository.refreshLibrary()
         }
     }

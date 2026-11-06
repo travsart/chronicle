@@ -357,7 +357,7 @@ class AudiobookDetailsViewModel(
         when (cacheStatus.value) {
             NOT_CACHED -> {
                 Timber.i("Caching tracks for \"${audiobook.value?.title}\"")
-                if (plexConfig.isConnected.value != true) {
+                if (!isServerConnectedForBook()) {
                     showUserMessage(FormattableString.from(R.string.unable_to_cache_audiobook))
                 } else {
                     cachedFileManager.downloadTracks(inputAudiobook.id, inputAudiobook.title)
@@ -407,7 +407,7 @@ class AudiobookDetailsViewModel(
     }
 
     fun pausePlayButtonClicked() {
-        if (plexConfig.isConnected.value != true && audiobook.value?.isCached == false) {
+        if (!isServerConnectedForBook() && audiobook.value?.isCached == false) {
             showUserMessage(FormattableString.from(R.string.cannot_play_media_no_server))
             return
         }
@@ -654,7 +654,7 @@ class AudiobookDetailsViewModel(
                 return@launch
             } else {
                 Timber.i("Refreshing track data!!!")
-                if (plexConfig.isConnected.value != true) {
+                if (!isServerConnectedForBook()) {
                     showUserMessage(FormattableString.from(R.string.cannot_sync_no_server))
                     return@launch
                 }
@@ -676,4 +676,7 @@ class AudiobookDetailsViewModel(
             }
         }
     }
+
+    private fun isServerConnectedForBook(): Boolean =
+        inputAudiobook.id.startsWith("emby:") || plexConfig.isConnected.value == true
 }

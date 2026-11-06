@@ -4,6 +4,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import local.oss.chronicle.data.local.AccountRepository
 import local.oss.chronicle.data.local.BookRepository
+import local.oss.chronicle.data.local.LibrarySyncRepository
 import local.oss.chronicle.data.local.LibraryRepository
 import local.oss.chronicle.data.local.TrackRepository
 import local.oss.chronicle.data.model.Account
@@ -30,6 +31,7 @@ class AccountManager
         private val activeLibraryProvider: ActiveLibraryProvider,
         private val credentialManager: CredentialManager,
         private val embySessionState: EmbySessionState,
+        private val librarySyncRepository: LibrarySyncRepository,
         private val bookRepository: BookRepository,
         private val trackRepository: TrackRepository,
         private val serverConnectionResolver: local.oss.chronicle.data.sources.plex.ServerConnectionResolver,
@@ -274,6 +276,9 @@ class AccountManager
 
             // Set as active library
             activeLibraryProvider.switchToLibrary(libraryId)
+            if (embySessionState.isEmbyActive) {
+                librarySyncRepository.refreshLibrary()
+            }
         }
 
         /**
