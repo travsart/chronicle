@@ -109,7 +109,7 @@ class EmbySyncRepository
                         ?: "item:$id"
                 val bookId = "emby:$albumKey"
                 val imageItemId = primaryImageItemId ?: albumId ?: id
-                val imageTag = primaryImageTag?.let { "?tag=$it" }.orEmpty()
+                val imageTag = (primaryImageTag ?: albumPrimaryImageTag)?.let { "?tag=$it" }.orEmpty()
                 return MediaItemTrack(
                     id = "emby:$id",
                     parentKey = bookId,

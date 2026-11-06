@@ -47,10 +47,28 @@ class PlexInterceptor(
     }
 
     override fun intercept(chain: Interceptor.Chain): Response {
-        val interceptedUrl = chain.request().url.toString().replace(PLACEHOLDER_URL, plexConfig.url)
+        val request = chain.request()
+        val requestUrl = request.url
+        if (requestUrl.encodedPath.contains("/emby/")) {
+            val embyToken = requestUrl.queryParameter("api_key")
+            val cleanUrl = requestUrl.newBuilder().removeAllQueryParameters("api_key").build()
+            val embyRequestBuilder =
+                request.newBuilder()
+                    .url(cleanUrl)
+                    .header("Accept", "application/json")
+            request.headers.names()
+                .filter { it.startsWith("X-Plex-", ignoreCase = true) }
+                .forEach(embyRequestBuilder::removeHeader)
+            if (!embyToken.isNullOrEmpty()) {
+                embyRequestBuilder.header("X-Emby-Token", embyToken)
+            }
+            return chain.proceed(embyRequestBuilder.build())
+        }
+
+        val interceptedUrl = request.url.toString().replace(PLACEHOLDER_URL, plexConfig.url)
 
         val requestBuilder =
-            chain.request().newBuilder()
+            request.newBuilder()
                 .header("Accept", "application/json")
                 .header("X-Plex-Platform", PLATFORM)
                 .header("X-Plex-Provides", "player")
@@ -67,7 +85,7 @@ class PlexInterceptor(
 
         // Check if URL already contains X-Plex-Token as query parameter
         // If so, don't add it as a header to avoid auth conflicts
-        val urlHasToken = chain.request().url.queryParameter("X-Plex-Token") != null
+        val urlHasToken = request.url.queryParameter("X-Plex-Token") != null
 
         if (!urlHasToken) {
             val userToken = plexPrefsRepo.user?.authToken

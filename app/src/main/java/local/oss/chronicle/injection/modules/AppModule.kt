@@ -153,15 +153,20 @@ class AppModule(private val app: Application) {
 
     @Provides
     @Singleton
-    fun loggingInterceptor() =
-        if (LOG_NETWORK_REQUESTS) {
+    fun loggingInterceptor(): HttpLoggingInterceptor {
+        val interceptor =
+            if (LOG_NETWORK_REQUESTS) {
             HttpLoggingInterceptor { message ->
                 // Log at DEBUG level instead of INFO to reduce log verbosity
                 Timber.d(message)
             }.setLevel(HttpLoggingInterceptor.Level.BODY)
-        } else {
-            HttpLoggingInterceptor().setLevel(HttpLoggingInterceptor.Level.NONE)
-        }
+            } else {
+                HttpLoggingInterceptor().setLevel(HttpLoggingInterceptor.Level.NONE)
+            }
+        interceptor.redactHeader("X-Emby-Token")
+        interceptor.redactHeader("X-Plex-Token")
+        return interceptor
+    }
 
     @Provides
     @Singleton

@@ -1,7 +1,6 @@
 package local.oss.chronicle.data.model
 
 import android.support.v4.media.MediaMetadataCompat
-import android.net.Uri
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -287,12 +286,10 @@ data class MediaItemTrack(
 
             if (libraryId.startsWith("emby:")) {
                 val token = connection?.authToken
-                    ?: throw IllegalStateException("No Emby access token is available for library $libraryId")
-                return Uri.parse(buildServerUrl(serverUrl, media))
-                    .buildUpon()
-                    .appendQueryParameter("api_key", token)
-                    .build()
-                    .toString()
+                if (token.isNullOrEmpty()) {
+                    throw IllegalStateException("No Emby access token is available for library $libraryId")
+                }
+                return buildServerUrl(serverUrl, media)
             }
 
             // Build full URL with library-specific server

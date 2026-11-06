@@ -32,6 +32,7 @@ class EmbyApiFactoryTest {
                         album = "A Book",
                         albumId = "album-id",
                         albumArtist = "An Author",
+                        albumPrimaryImageTag = "cover-tag",
                         runTimeTicks = 12_000_000L,
                         userData = EmbyUserData(playbackPositionTicks = 4_500_000L),
                     ),
@@ -45,5 +46,6 @@ class EmbyApiFactoryTest {
         assertThat(track.duration).isEqualTo(1_200L)
         assertThat(track.progress).isEqualTo(450L)
         assertThat(track.media).isEqualTo("Audio/track-id/stream?static=true")
+        assertThat(track.thumb).isEqualTo("Items/album-id/Images/Primary?tag=cover-tag")
     }
 }

@@ -6,8 +6,10 @@ import local.oss.chronicle.data.model.MediaItemTrack
 import local.oss.chronicle.data.model.ServerConnection
 import local.oss.chronicle.data.sources.emby.EmbyApiFactory
 import local.oss.chronicle.data.sources.emby.EmbyPlaybackRequest
+import local.oss.chronicle.data.sources.emby.EmbyUserPlaybackProgress
 import local.oss.chronicle.data.sources.plex.model.getDuration
 import local.oss.chronicle.data.sources.plex.model.toPlayQueueItemMap
+import local.oss.chronicle.features.player.MediaPlayerService.Companion.PLEX_STATE_PLAYING
 import local.oss.chronicle.features.player.MediaPlayerService.Companion.PLEX_STATE_PAUSED
 import local.oss.chronicle.features.player.MediaPlayerService.Companion.PLEX_STATE_STOPPED
 import local.oss.chronicle.features.player.ProgressUpdater.Companion.BOOK_FINISHED_END_OFFSET_MILLIS
@@ -235,21 +237,28 @@ class PlexProgressReporter
         suspend fun startMediaSession(
             bookId: String,
             libraryId: String,
+            trackId: String? = null,
         ) {
             try {
                 if (libraryId.startsWith("emby:")) {
-                    val library = libraryRepository.getLibraryById(libraryId) ?: return
+                    clearPlayQueueCache()
                     val connection = serverConnectionResolver.resolve(libraryId)
                     val serverUrl = connection.serverUrl ?: return
                     val token = connection.authToken ?: return
+                    val itemId = trackId?.removePrefix("emby:") ?: embyItemId(bookId) ?: return
                     val sessionId = UUID.randomUUID().toString()
                     embyPlaySessionCache["$libraryId:$bookId"] = sessionId
-                    val itemId = embyItemId(bookId)
-                    require(itemId != null) { "Emby book ID is not a server item ID" }
-                    embyApiFactory?.create(serverUrl)?.reportPlaybackStarted(
+                    requireNotNull(embyApiFactory).create(serverUrl).reportPlaybackStarted(
                         accessToken = token,
-                        request = EmbyPlaybackRequest(itemId = itemId, positionTicks = 0L, playSessionId = sessionId),
+                        request =
+                            EmbyPlaybackRequest(
+                                itemId = itemId,
+                                positionTicks = 0L,
+                                playSessionId = sessionId,
+                                mediaSourceId = itemId,
+                            ),
                     )
+                    Timber.i("Started Emby playback session for track $itemId in library $libraryId")
                     return
                 }
 
@@ -356,6 +365,7 @@ class PlexProgressReporter
                     itemId = itemId,
                     positionTicks = trackProgress * 10_000L,
                     playSessionId = sessionId,
+                    mediaSourceId = itemId,
                     isPaused = playbackState == PLEX_STATE_PAUSED,
                     eventName =
                         when (playbackState) {
@@ -365,12 +375,32 @@ class PlexProgressReporter
                         },
                 )
             val service = requireNotNull(embyApiFactory) { "Emby API is not configured" }.create(serverUrl)
+            service.reportUserPlaybackProgress(
+                userId = userId,
+                itemId = itemId,
+                mediaSourceId = itemId,
+                positionTicks = trackProgress * 10_000L,
+                isPaused = playbackState != PLEX_STATE_PLAYING,
+                playSessionId = sessionId,
+                accessToken = token,
+                progress =
+                    EmbyUserPlaybackProgress(
+                        eventName =
+                            when (playbackState) {
+                                PLEX_STATE_PAUSED -> "Pause"
+                                PLEX_STATE_STOPPED -> "StateChange"
+                                else -> "TimeUpdate"
+                            },
+                    ),
+            )
             if (playbackState == PLEX_STATE_STOPPED) {
                 service.reportPlaybackStopped(token, request)
+                service.reportUserPlaybackStopped(userId, itemId, token)
                 embyPlaySessionCache.remove(sessionKey)
             } else {
                 service.reportPlaybackProgress(token, request)
             }
+            Timber.i("Reported Emby playback state '$playbackState' for track $itemId")
 
             if (trackProgress > track.duration - 1000L) {
                 service.markPlayed(userId, itemId, token)

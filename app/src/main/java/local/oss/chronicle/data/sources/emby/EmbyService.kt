@@ -59,6 +59,25 @@ interface EmbyService {
         @Body request: EmbyPlaybackRequest,
     )
 
+    @POST("Users/{userId}/PlayingItems/{itemId}/Progress")
+    suspend fun reportUserPlaybackProgress(
+        @Path("userId") userId: String,
+        @Path("itemId") itemId: String,
+        @Query("MediaSourceId") mediaSourceId: String,
+        @Query("PositionTicks") positionTicks: Long,
+        @Query("IsPaused") isPaused: Boolean,
+        @Query("PlaySessionId") playSessionId: String,
+        @Header("X-Emby-Token") accessToken: String,
+        @Body progress: EmbyUserPlaybackProgress,
+    )
+
+    @DELETE("Users/{userId}/PlayingItems/{itemId}")
+    suspend fun reportUserPlaybackStopped(
+        @Path("userId") userId: String,
+        @Path("itemId") itemId: String,
+        @Header("X-Emby-Token") accessToken: String,
+    )
+
     @POST("Sessions/Playing/Stopped")
     suspend fun reportPlaybackStopped(
         @Header("X-Emby-Token") accessToken: String,
@@ -127,6 +146,7 @@ data class EmbyItem(
     @Json(name = "ParentIndexNumber") val parentIndexNumber: Int? = null,
     @Json(name = "PrimaryImageTag") val primaryImageTag: String? = null,
     @Json(name = "PrimaryImageItemId") val primaryImageItemId: String? = null,
+    @Json(name = "AlbumPrimaryImageTag") val albumPrimaryImageTag: String? = null,
     @Json(name = "UserData") val userData: EmbyUserData? = null,
 )
 
@@ -143,12 +163,18 @@ data class EmbyPlaybackRequest(
     @Json(name = "ItemId") val itemId: String,
     @Json(name = "PositionTicks") val positionTicks: Long,
     @Json(name = "PlaySessionId") val playSessionId: String,
+    @Json(name = "MediaSourceId") val mediaSourceId: String = itemId,
     @Json(name = "PlayMethod") val playMethod: String = "DirectPlay",
     @Json(name = "QueueableMediaTypes") val queueableMediaTypes: List<String> = listOf("Audio"),
     @Json(name = "CanSeek") val canSeek: Boolean = true,
     @Json(name = "IsPaused") val isPaused: Boolean = false,
     @Json(name = "IsMuted") val isMuted: Boolean = false,
     @Json(name = "EventName") val eventName: String? = null,
+)
+
+@JsonClass(generateAdapter = false)
+data class EmbyUserPlaybackProgress(
+    @Json(name = "EventName") val eventName: String,
 )
 
 @JsonClass(generateAdapter = false)

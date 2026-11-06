@@ -93,13 +93,14 @@ private fun loadWithGlobalConfig(
  * connecting the user to the server
  */
 class UrlQueryCacheKey(private val url: Uri?) : CacheKey {
+    private val cacheQuery = sanitizedQuery(url)
+
     override fun containsUri(uri: Uri): Boolean {
-        Timber.i("Checking cache for image")
-        return uri.query?.contains(url?.query ?: "") ?: false
+        return sanitizedQuery(uri)?.contains(cacheQuery.orEmpty()) ?: false
     }
 
     // Seems to be primarily used for debugging
-    override fun getUriString() = url?.query ?: ""
+    override fun getUriString() = cacheQuery.orEmpty()
 
     override fun isResourceIdForDebugging() = false
 
@@ -109,18 +110,28 @@ class UrlQueryCacheKey(private val url: Uri?) : CacheKey {
 
         other as UrlQueryCacheKey
 
-        val isEquals = url?.query == other.url?.query
-        Timber.i("Checking for equality: ${this.url?.query}, ${other.url?.query}, $isEquals")
-
-        return isEquals
+        return cacheQuery == other.cacheQuery
     }
 
     override fun hashCode(): Int {
-        return url?.query?.hashCode() ?: 0
+        return cacheQuery?.hashCode() ?: 0
     }
 
     override fun toString(): String {
-        return url?.query.toString()
+        return cacheQuery.orEmpty()
+    }
+
+    private companion object {
+        fun sanitizedQuery(uri: Uri?): String? {
+            if (uri == null) return null
+            return uri.queryParameterNames
+                .filterNot { name ->
+                    name.equals("api_key", ignoreCase = true) || name.equals("X-Plex-Token", ignoreCase = true)
+                }
+                .sorted()
+                .flatMap { name -> uri.getQueryParameters(name).map { value -> "${Uri.encode(name)}=${Uri.encode(value)}" } }
+                .joinToString("&")
+        }
     }
 }
 

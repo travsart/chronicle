@@ -934,6 +934,7 @@ class AudiobookMediaSessionCallback
                 plexProgressReporter.startMediaSession(
                     bookId = book.id,
                     libraryId = book.libraryId,
+                    trackId = startingTrack.id,
                 )
 
                 Timber.d("[VoiceCommandTrace] playBook EXIT - success")

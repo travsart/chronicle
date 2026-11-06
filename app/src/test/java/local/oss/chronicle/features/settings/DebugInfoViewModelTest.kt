@@ -54,7 +54,7 @@ class DebugInfoViewModelTest {
                 every { user } returns PlexUser(id = 1L, username = "user", authToken = userToken)
                 every { server } returns serverModel
             }
-        plexConfig = PlexConfig(plexPrefsRepo, mockk(relaxed = true), mockk(relaxed = true))
+        plexConfig = PlexConfig(plexPrefsRepo, mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true))
         plexConfig.url = "https://192-168-1-100.plex.direct:32400?X-Plex-Token=$serverToken"
         plexMediaService = mockk(relaxed = true)
     }

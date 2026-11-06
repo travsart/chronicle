@@ -14,6 +14,7 @@ import local.oss.chronicle.data.sources.plex.PlexConfig.ConnectionResult.Failure
 import local.oss.chronicle.data.sources.plex.PlexConfig.ConnectionResult.Success
 import local.oss.chronicle.data.sources.plex.PlexConfig.ConnectionState.*
 import local.oss.chronicle.data.sources.plex.model.Connection
+import local.oss.chronicle.data.sources.emby.EmbySessionState
 import local.oss.chronicle.util.NetworkMonitor
 import local.oss.chronicle.util.NetworkState
 import local.oss.chronicle.util.RetryConfig
@@ -47,6 +48,7 @@ class PlexConfig
         private val plexPrefsRepo: PlexPrefsRepo,
         private val scopedPlexServiceFactoryProvider: Provider<ScopedPlexServiceFactory>,
         private val networkMonitor: NetworkMonitor,
+        private val embySessionState: EmbySessionState,
     ) {
         companion object {
             /**
@@ -425,6 +427,7 @@ class PlexConfig
         /** Clear server data from [plexPrefsRepo] and [url] managed by [PlexConfig] */
         fun clear() {
             plexPrefsRepo.clear()
+            embySessionState.isEmbyActive = false
             _connectionState.postValue(NOT_CONNECTED)
             url = PLACEHOLDER_URL
             connectionSet.clear()
