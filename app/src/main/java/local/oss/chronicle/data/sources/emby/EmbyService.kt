@@ -40,7 +40,7 @@ interface EmbyService {
         @Query("ParentId") parentId: String,
         @Query("Recursive") recursive: Boolean = true,
         @Query("MediaTypes") mediaTypes: String = "Audio",
-        @Query("Fields") fields: String = "Genres,Overview,SortName,MediaSources",
+        @Query("Fields") fields: String = "Genres,Overview,SortName,MediaSources,ImageTags,ParentId,ParentPrimaryImageItemId,ParentPrimaryImageTag",
         @Query("EnableUserData") enableUserData: Boolean = true,
         @Query("StartIndex") startIndex: Int = 0,
         @Query("Limit") limit: Int = 200,
@@ -147,6 +147,9 @@ data class EmbyItem(
     @Json(name = "PrimaryImageTag") val primaryImageTag: String? = null,
     @Json(name = "PrimaryImageItemId") val primaryImageItemId: String? = null,
     @Json(name = "AlbumPrimaryImageTag") val albumPrimaryImageTag: String? = null,
+    @Json(name = "ParentPrimaryImageItemId") val parentPrimaryImageItemId: String? = null,
+    @Json(name = "ParentPrimaryImageTag") val parentPrimaryImageTag: String? = null,
+    @Json(name = "ImageTags") val imageTags: Map<String, String> = emptyMap(),
     @Json(name = "UserData") val userData: EmbyUserData? = null,
 )
 

@@ -71,15 +71,25 @@ class EmbySyncRepository
                 val networkTracks =
                     items.mapIndexed { index, item -> toTrack(item, library.id, index) }
                 val tracksByBook = networkTracks.groupBy { it.parentKey }
-                val networkBooks =
-                    tracksByBook.map { (bookId, tracks) ->
-                        val representative = items.first { "emby:${it.id}" == tracks.first().id }
-                        val networkBook = representative.toAudiobook(bookId, library.id, tracks)
-                        localBooks[bookId]?.let { Audiobook.merge(networkBook, it) } ?: networkBook
-                    }
                 val mergedTracks =
                     networkTracks.map { track ->
                         localTracks[track.id]?.let { MediaItemTrack.merge(track, it) } ?: track
+                    }
+                val mergedTracksByBook = mergedTracks.groupBy { it.parentKey }
+                val itemsById = items.associateBy { "emby:${it.id}" }
+                val networkBooks =
+                    tracksByBook.map { (bookId, tracks) ->
+                        val representative = itemsById.getValue(tracks.first().id)
+                        val networkBook = representative.toAudiobook(bookId, library.id, tracks)
+                        val merged = localBooks[bookId]?.let { Audiobook.merge(networkBook, it) } ?: networkBook
+                        // Audiobook.merge keeps the local book progress even when the server copy is
+                        // newer. Derive it from the merged tracks instead, which already apply the
+                        // per-track server/local conflict rule, so book and track progress agree.
+                        val bookTracks = mergedTracksByBook[bookId].orEmpty()
+                        merged.copy(
+                            progress = bookTracks.sumOf { it.progress },
+                            lastViewedAt = maxOf(merged.lastViewedAt, bookTracks.maxOfOrNull { it.lastViewedAt } ?: 0L),
+                        )
                     }
 
                 bookDao.deleteByLibraryId(library.id)
@@ -108,14 +118,13 @@ class EmbySyncRepository
                         ?: album?.takeIf { it.isNotBlank() }?.let { "album:${it.lowercase()}|${albumArtist.orEmpty().lowercase()}" }
                         ?: "item:$id"
                 val bookId = "emby:$albumKey"
-                val imageItemId = primaryImageItemId ?: albumId ?: id
-                val imageTag = (primaryImageTag ?: albumPrimaryImageTag)?.let { "?tag=$it" }.orEmpty()
+                val imagePath = primaryImagePath()
                 return MediaItemTrack(
                     id = "emby:$id",
                     parentKey = bookId,
                     libraryId = libraryId,
                     title = name,
-                    thumb = "Items/$imageItemId/Images/Primary$imageTag",
+                    thumb = imagePath,
                     index = indexNumber ?: fallbackIndex + 1,
                     discNumber = parentIndexNumber ?: 1,
                     duration = (runTimeTicks ?: 0L) / 10_000L,
@@ -123,7 +132,7 @@ class EmbySyncRepository
                     album = album ?: name,
                     artist = albumArtist ?: artists.firstOrNull().orEmpty(),
                     genre = genres.joinToString(", "),
-                    artwork = "Items/$imageItemId/Images/Primary$imageTag",
+                    artwork = imagePath,
                     viewCount = userData?.playCount?.toLong() ?: 0L,
                     progress = (userData?.playbackPositionTicks ?: 0L) / 10_000L,
                     lastViewedAt = userData?.lastPlayedDate.toEpochMillis(),
@@ -131,6 +140,25 @@ class EmbySyncRepository
                     size = size ?: 0L,
                     source = MEDIA_SOURCE_ID,
                 )
+            }
+
+            /**
+             * Returns the relative Primary image path for this item, or "" when Emby reports no
+             * image anywhere we can reach. Requesting an image without a tag returns 404 and was
+             * retried on every bind, so an empty path (which resolves to no URI) is used instead.
+             * Order: the track's own image, the album's image, then the parent folder's image.
+             */
+            internal fun EmbyItem.primaryImagePath(): String {
+                val ownTag = primaryImageTag ?: imageTags["Primary"]
+                val (ownerId, tag) =
+                    when {
+                        ownTag != null -> (primaryImageItemId ?: id) to ownTag
+                        albumPrimaryImageTag != null && albumId != null -> albumId to albumPrimaryImageTag
+                        parentPrimaryImageTag != null && parentPrimaryImageItemId != null ->
+                            parentPrimaryImageItemId to parentPrimaryImageTag
+                        else -> return ""
+                    }
+                return "Items/$ownerId/Images/Primary?tag=$tag"
             }
 
             private fun EmbyItem.toAudiobook(
@@ -144,7 +172,7 @@ class EmbySyncRepository
                 title = album ?: name,
                 titleSort = sortName ?: album ?: name,
                 author = albumArtist ?: artists.firstOrNull().orEmpty(),
-                thumb = tracks.firstNotNullOfOrNull { it.thumb } ?: "",
+                thumb = tracks.firstOrNull { !it.thumb.isNullOrBlank() }?.thumb.orEmpty(),
                 genre = genres.joinToString(", "),
                 summary = overview.orEmpty(),
                 year = productionYear ?: 0,

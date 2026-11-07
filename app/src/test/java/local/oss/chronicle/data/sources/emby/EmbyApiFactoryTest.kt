@@ -48,4 +48,36 @@ class EmbyApiFactoryTest {
         assertThat(track.media).isEqualTo("Audio/track-id/stream?static=true")
         assertThat(track.thumb).isEqualTo("Items/album-id/Images/Primary?tag=cover-tag")
     }
+
+    @Test
+    fun `toTrack leaves thumb empty when Emby reports no image`() {
+        val track =
+            EmbySyncRepository.toTrack(
+                item = EmbyItem(id = "track-id", name = "Chapter One", albumId = "album-id"),
+                libraryId = "emby:library:view-id",
+                fallbackIndex = 0,
+            )
+
+        assertThat(track.thumb).isEmpty()
+        assertThat(track.artwork).isEmpty()
+    }
+
+    @Test
+    fun `toTrack falls back to the parent image`() {
+        val track =
+            EmbySyncRepository.toTrack(
+                item =
+                    EmbyItem(
+                        id = "track-id",
+                        name = "Chapter One",
+                        albumId = "album-id",
+                        parentPrimaryImageItemId = "folder-id",
+                        parentPrimaryImageTag = "folder-tag",
+                    ),
+                libraryId = "emby:library:view-id",
+                fallbackIndex = 0,
+            )
+
+        assertThat(track.thumb).isEqualTo("Items/folder-id/Images/Primary?tag=folder-tag")
+    }
 }

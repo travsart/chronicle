@@ -359,7 +359,27 @@ class PlexProgressReporter
             val userId = library.accountId.substringAfterLast(':')
             val itemId = track.id.removePrefix("emby:")
             val sessionKey = "${book.libraryId}:${book.id}"
-            val sessionId = embyPlaySessionCache.getOrPut(sessionKey) { UUID.randomUUID().toString() }
+            val sessionId =
+                embyPlaySessionCache[sessionKey]
+                    ?: UUID.randomUUID().toString().also {
+                        Timber.w(
+                            "No Emby play session for $sessionKey (startMediaSession missing or failed); " +
+                                "creating one and starting it before reporting progress",
+                        )
+                        embyPlaySessionCache[sessionKey] = it
+                        requireNotNull(embyApiFactory) { "Emby API is not configured" }
+                            .create(serverUrl)
+                            .reportPlaybackStarted(
+                                accessToken = token,
+                                request =
+                                    EmbyPlaybackRequest(
+                                        itemId = itemId,
+                                        positionTicks = trackProgress * 10_000L,
+                                        playSessionId = it,
+                                        mediaSourceId = itemId,
+                                    ),
+                            )
+                    }
             val request =
                 EmbyPlaybackRequest(
                     itemId = itemId,
