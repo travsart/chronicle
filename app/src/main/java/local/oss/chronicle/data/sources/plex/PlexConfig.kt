@@ -365,6 +365,21 @@ class PlexConfig
         private var prevConnectToServerJob: CompletableJob? = null
 
         /**
+         * The global Plex connection ([url]) only exists for Plex accounts. When an Emby account is
+         * active there are no Plex servers to probe, so probing just produced "Failed for unknown
+         * reason" errors and left the connection state stuck on CONNECTION_FAILED. Emby servers are
+         * resolved per library by [ServerConnectionResolver], so report the session as connected
+         * and skip the Plex probe.
+         */
+        private fun skipPlexConnectionForEmby(): Boolean {
+            if (!embySessionState.isEmbyActive) return false
+            prevConnectToServerJob?.cancel("Emby session active; Plex connection not needed")
+            Timber.i("Emby session active; skipping Plex server connection")
+            _connectionState.postValue(CONNECTED)
+            return true
+        }
+
+        /**
          * Connects to the server without retry.
          *
          * @deprecated Use connectToServerWithRetry() for better network resilience
@@ -375,6 +390,7 @@ class PlexConfig
         )
         @InternalCoroutinesApi
         fun connectToServer(plexMediaService: PlexMediaService) {
+            if (skipPlexConnectionForEmby()) return
             prevConnectToServerJob?.cancel("Killing previous connection attempt")
             _connectionState.postValue(CONNECTING)
             prevConnectToServerJob =
@@ -402,6 +418,7 @@ class PlexConfig
          */
         @InternalCoroutinesApi
         fun connectToServerWithRetryAndState(plexMediaService: PlexMediaService) {
+            if (skipPlexConnectionForEmby()) return
             prevConnectToServerJob?.cancel("Killing previous connection attempt")
             // postValue is safe to call from any thread; on the main thread it behaves
             // identically to setValue because LiveData coalesces updates on the main looper.
